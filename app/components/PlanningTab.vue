@@ -95,7 +95,8 @@ async function save(date: string) {
   saving[date] = true
   try {
     await planning.savePlan(date, drafts[date]!)
-    delete drafts[date]
+    // Don't delete the draft — keeping the same reactive object prevents the
+    // input from remounting and stealing/losing focus on blur.
   }
   finally {
     saving[date] = false
