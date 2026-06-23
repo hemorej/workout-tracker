@@ -131,16 +131,48 @@ export const workouts = pgTable(
 )
 
 // ---------------------------------------------------------------------------
+// planned_workouts
+// ---------------------------------------------------------------------------
+
+export const plannedWorkouts = pgTable(
+  'planned_workouts',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    date: date('date').notNull(),
+    name: text('name'),
+    /** Training zone: 'zone2' | 'zone4' | 'zone5' | 'zone6' */
+    type: text('type'),
+    tss: integer('tss'),
+    durationMinutes: integer('duration_minutes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('planned_workouts_user_id_date_idx').on(table.userId, table.date),
+  ],
+)
+
+// ---------------------------------------------------------------------------
 // Relations (used by Drizzle's relational query API)
 // ---------------------------------------------------------------------------
 
 export const usersRelations = relations(users, ({ many }) => ({
   workouts: many(workouts),
+  plannedWorkouts: many(plannedWorkouts),
 }))
 
 export const workoutsRelations = relations(workouts, ({ one }) => ({
   user: one(users, {
     fields: [workouts.userId],
+    references: [users.id],
+  }),
+}))
+
+export const plannedWorkoutsRelations = relations(plannedWorkouts, ({ one }) => ({
+  user: one(users, {
+    fields: [plannedWorkouts.userId],
     references: [users.id],
   }),
 }))
@@ -152,7 +184,9 @@ export const workoutsRelations = relations(workouts, ({ one }) => ({
 /** Full row type as returned from the database */
 export type User = typeof users.$inferSelect
 export type Workout = typeof workouts.$inferSelect
+export type PlannedWorkout = typeof plannedWorkouts.$inferSelect
 
 /** Insert types (id and createdAt are optional / auto-generated) */
 export type NewUser = typeof users.$inferInsert
 export type NewWorkout = typeof workouts.$inferInsert
+export type NewPlannedWorkout = typeof plannedWorkouts.$inferInsert

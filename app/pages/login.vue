@@ -89,7 +89,7 @@ async function handleRegister() {
     </div>
 
     <!-- Tab switcher — plain text links, no pill/button styling -->
-    <div class="flex gap-6 mb-8 border-b border-stone-100 w-full max-w-sm justify-center pb-0">
+    <div class="flex gap-6 mb-8 border-b border-stone-100 w-full max-w-xs justify-center pb-0">
       <button
         v-for="tab in [{ label: 'Sign in', value: 'login' }, { label: 'Create account', value: 'register' }]"
         :key="tab.value"
@@ -108,7 +108,7 @@ async function handleRegister() {
     <form
       v-if="activeTab === 'login'"
       @submit.prevent="handleLogin"
-      class="w-full max-w-sm space-y-5"
+      class="w-full max-w-xs space-y-5"
     >
       <UFormField label="Email" name="email">
         <UInput
@@ -118,7 +118,7 @@ async function handleRegister() {
           autocomplete="email"
           required
           class="w-full"
-          size="lg"
+          size="xl"
         />
       </UFormField>
 
@@ -130,7 +130,7 @@ async function handleRegister() {
           autocomplete="current-password"
           required
           class="w-full"
-          size="lg"
+          size="xl"
         />
       </UFormField>
 
@@ -149,7 +149,7 @@ async function handleRegister() {
     <form
       v-else
       @submit.prevent="handleRegister"
-      class="w-full max-w-sm space-y-5"
+      class="w-full max-w-xs space-y-5"
     >
       <UFormField label="Email" name="email">
         <UInput
@@ -159,7 +159,7 @@ async function handleRegister() {
           autocomplete="email"
           required
           class="w-full"
-          size="lg"
+          size="xl"
         />
       </UFormField>
 
@@ -170,7 +170,7 @@ async function handleRegister() {
           autocomplete="username"
           required
           class="w-full"
-          size="lg"
+          size="xl"
         />
       </UFormField>
 
@@ -182,7 +182,7 @@ async function handleRegister() {
           autocomplete="new-password"
           required
           class="w-full"
-          size="lg"
+          size="xl"
         />
       </UFormField>
 
@@ -194,7 +194,7 @@ async function handleRegister() {
           autocomplete="new-password"
           required
           class="w-full"
-          size="lg"
+          size="xl"
         />
       </UFormField>
 

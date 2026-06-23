@@ -12,7 +12,6 @@
 import { eq, or } from 'drizzle-orm'
 import { users } from '../../db/schema'
 import { useDB } from '../../db'
-import { hashPassword } from '../../utils/auth'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)

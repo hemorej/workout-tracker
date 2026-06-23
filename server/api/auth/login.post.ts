@@ -14,7 +14,6 @@
 import { eq } from 'drizzle-orm'
 import { users } from '../../db/schema'
 import { useDB } from '../../db'
-import { verifyPassword } from '../../utils/auth'
 
 export default defineEventHandler(async (event) => {
   // Parse and validate request body

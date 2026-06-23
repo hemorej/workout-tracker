@@ -31,6 +31,9 @@ import { useWorkoutsStore } from '~/stores/workouts'
 // Protect this page — unauthenticated users are sent to /login
 definePageMeta({ middleware: 'auth' })
 
+// ── Tab navigation ────────────────────────────────────────────────────────
+const activeTab = ref<'log' | 'planning'>('log')
+
 const auth = useAuthStore()
 const workouts = useWorkoutsStore()
 const toast = useToast()
@@ -106,8 +109,31 @@ async function onPageChange(page: number) {
       </div>
     </header>
 
+    <!-- ── Tab navigation ────────────────────────────────────────────── -->
+    <div class="bg-white border-b border-stone-100">
+      <div class="max-w-3xl mx-auto px-6 flex gap-6">
+        <button
+          v-for="tab in [{ id: 'log', label: 'Training log' }, { id: 'planning', label: 'Planning' }]"
+          :key="tab.id"
+          class="py-3 text-xs font-medium transition-colors border-b-2 -mb-px"
+          :class="activeTab === tab.id
+            ? 'border-stone-800 text-stone-800'
+            : 'border-transparent text-stone-400 hover:text-stone-600'"
+          @click="activeTab = (tab.id as 'log' | 'planning')"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+    </div>
+
     <!-- ── Main content ────────────────────────────────────────────── -->
     <main class="max-w-3xl mx-auto px-6 py-10 space-y-10">
+
+      <!-- ── Planning tab ────────────────────────────────────────── -->
+      <PlanningTab v-if="activeTab === 'planning'" />
+
+      <!-- ── Training log tab ────────────────────────────────────── -->
+      <template v-if="activeTab === 'log'">
 
       <!-- Headline metrics strip -->
       <MetricsSummary
@@ -196,6 +222,8 @@ async function onPageChange(page: number) {
       <p class="text-center text-xs text-stone-300">
         CTL = 42-day avg &nbsp;·&nbsp; ATL = 7-day avg &nbsp;·&nbsp; TSB = CTL − ATL
       </p>
+
+      </template><!-- end training log tab -->
 
     </main>
 
