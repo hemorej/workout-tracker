@@ -43,6 +43,12 @@ export default defineNuxtConfig({
     /**
      * Global CSS — base typography, font import, page transition.
      */
+    app: {
+        head: {
+            link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+        },
+    },
+
     css: ['./app/assets/css/main.css'],
 
     devtools: {enabled: true},
