@@ -1,5 +1,5 @@
 {
-  "name": "workout-tracker",
+  "name": "sprocket",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,8 @@
     "postinstall": "nuxt prepare",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "reset-password": "npx dotenv -e .env -- node --experimental-strip-types scripts/reset-password.ts"
   },
   "dependencies": {
     "@nuxt/ui": "^3.0.0",

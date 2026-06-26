@@ -254,6 +254,16 @@ All routes require a valid session cookie except `/api/auth/login` and `/api/aut
 
 ---
 
+## Resetting a password
+
+Edit the email and new password at the top of `scripts/reset-password.ts`, then run:
+
+```bash
+npm run reset-password
+```
+
+---
+
 ## Useful commands
 
 ```bash
