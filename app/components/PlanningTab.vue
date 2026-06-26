@@ -110,56 +110,44 @@ function cycleType(date: string) {
   draft.type = zones[(idx + 1) % zones.length] ?? null
 }
 
-// ── Projection chart ─────────────────────────────────────────────────────────
+// ── Live projections ─────────────────────────────────────────────────────────
+// Recomputes CTL/TSB for every future day using draft TSS values so the
+// numbers update as the user types, before the field is saved.
 
-const chartWidth = 600
-const chartHeight = 160
-const padLeft = 36
-const padRight = 8
-const padTop = 12
-const padBottom = 28
+const CTL_DECAY = 2 / 43
+const ATL_DECAY = 2 / 8
 
-const chartData = computed(() => {
-  const days = planning.plans
-  if (days.length === 0) return null
+const liveProjections = computed(() => {
+  let ctl = planning.currentCtl
+  let atl = planning.currentAtl
+  const result: Record<string, { ctl: number, tsb: number }> = {}
 
-  const ctlValues = days.map(d => d.projectedCtl)
-  const tsbValues = days.map(d => d.projectedTsb)
-
-  const allValues = [...ctlValues, ...tsbValues]
-  const minVal = Math.floor(Math.min(...allValues) - 5)
-  const maxVal = Math.ceil(Math.max(...allValues) + 5)
-  const range = maxVal - minVal || 1
-
-  const innerW = chartWidth - padLeft - padRight
-  const innerH = chartHeight - padTop - padBottom
-
-  function x(i: number) { return padLeft + (i / (days.length - 1)) * innerW }
-  function y(v: number) { return padTop + (1 - (v - minVal) / range) * innerH }
-
-  const ctlPath = ctlValues.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
-  const tsbPath = tsbValues.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
-
-  // Y-axis ticks
-  const tickCount = 5
-  const ticks = Array.from({ length: tickCount }, (_, i) => {
-    const val = minVal + (range / (tickCount - 1)) * i
-    return { val: Math.round(val), y: y(val) }
-  })
-
-  // Zero line for TSB
-  const zeroY = y(0)
-  const showZero = minVal < 0 && maxVal > 0
-
-  // Week separators (every 7 days)
-  const weekLines = [7, 14, 21].map(i => x(i))
-
-  // Today marker
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const todayIdx = days.findIndex(d => d.date === todayStr)
-
-  return { ctlPath, tsbPath, ticks, showZero, zeroY, weekLines, todayIdx, todayX: todayIdx >= 0 ? x(todayIdx) : null }
+  for (const day of planning.plans) {
+    if (day.isPast) {
+      result[day.date] = { ctl: day.projectedCtl, tsb: day.projectedTsb }
+      ctl = day.projectedCtl
+      atl = day.projectedCtl - day.projectedTsb
+    }
+    else {
+      const tss = drafts[day.date]?.tss ?? day.plan?.tss ?? 0
+      ctl = tss * CTL_DECAY + ctl * (1 - CTL_DECAY)
+      atl = tss * ATL_DECAY + atl * (1 - ATL_DECAY)
+      result[day.date] = {
+        ctl: Math.round(ctl * 10) / 10,
+        tsb: Math.round((ctl - atl) * 10) / 10,
+      }
+    }
+  }
+  return result
 })
+
+function tsbColor(tsb: number) {
+  if (tsb > 25) return 'text-sky-400'
+  if (tsb > 10) return 'text-emerald-400'
+  if (tsb > -10) return 'text-stone-400'
+  if (tsb > -30) return 'text-amber-400'
+  return 'text-rose-400'
+}
 </script>
 
 <template>
@@ -260,6 +248,25 @@ const chartData = computed(() => {
               <span class="text-[10px] text-stone-300">min</span>
             </div>
 
+            <!-- Projected CTL -->
+            <div class="flex items-center gap-1 shrink-0">
+              <span class="text-[10px] text-stone-300">CTL</span>
+              <span class="w-10 text-xs text-right tabular text-stone-500">
+                {{ liveProjections[day.date]?.ctl ?? '—' }}
+              </span>
+            </div>
+
+            <!-- Projected TSB -->
+            <div class="flex items-center gap-1 shrink-0">
+              <span class="text-[10px] text-stone-300">TSB</span>
+              <span
+                class="w-10 text-xs text-right tabular"
+                :class="liveProjections[day.date] ? tsbColor(liveProjections[day.date]!.tsb) : 'text-stone-300'"
+              >
+                {{ liveProjections[day.date]?.tsb ?? '—' }}
+              </span>
+            </div>
+
             <!-- Save indicator -->
             <div class="w-4 shrink-0 flex justify-center">
               <UIcon
@@ -269,126 +276,6 @@ const chartData = computed(() => {
               />
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- ── Projection chart ─────────────────────────────────────────────── -->
-      <div class="bg-white rounded-xl border border-stone-100 p-4">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-[10px] font-medium uppercase tracking-widest text-stone-400">
-            Projected fitness &amp; form
-          </h3>
-          <div class="flex items-center gap-4 text-[10px] text-stone-400">
-            <span class="flex items-center gap-1.5">
-              <span class="inline-block w-3 h-0.5 bg-sky-400 rounded" />
-              CTL (fitness)
-            </span>
-            <span class="flex items-center gap-1.5">
-              <span class="inline-block w-3 h-0.5 bg-amber-400 rounded" />
-              TSB (form)
-            </span>
-          </div>
-        </div>
-
-        <div v-if="chartData" class="w-full overflow-x-auto">
-          <svg
-            :viewBox="`0 0 ${chartWidth} ${chartHeight}`"
-            class="w-full"
-            :style="`min-width: 320px; height: ${chartHeight}px`"
-            aria-label="Projected CTL and TSB over 4 weeks"
-          >
-            <!-- Week separator lines -->
-            <line
-              v-for="lx in chartData.weekLines"
-              :key="lx"
-              :x1="lx"
-              :x2="lx"
-              :y1="padTop"
-              :y2="chartHeight - padBottom"
-              stroke="#e7e5e4"
-              stroke-width="1"
-              stroke-dasharray="3,3"
-            />
-
-            <!-- Zero line -->
-            <line
-              v-if="chartData.showZero"
-              :x1="padLeft"
-              :x2="chartWidth - padRight"
-              :y1="chartData.zeroY"
-              :y2="chartData.zeroY"
-              stroke="#d6d3d1"
-              stroke-width="1"
-            />
-
-            <!-- Y-axis ticks + labels -->
-            <g v-for="tick in chartData.ticks" :key="tick.val">
-              <line
-                :x1="padLeft - 4"
-                :x2="padLeft"
-                :y1="tick.y"
-                :y2="tick.y"
-                stroke="#d6d3d1"
-                stroke-width="1"
-              />
-              <text
-                :x="padLeft - 6"
-                :y="tick.y + 4"
-                text-anchor="end"
-                font-size="9"
-                fill="#a8a29e"
-                font-family="Inter, sans-serif"
-              >
-                {{ tick.val }}
-              </text>
-            </g>
-
-            <!-- TSB line (amber) -->
-            <path
-              :d="chartData.tsbPath"
-              fill="none"
-              stroke="#fbbf24"
-              stroke-width="1.5"
-              stroke-linejoin="round"
-              stroke-linecap="round"
-            />
-
-            <!-- CTL line (sky) -->
-            <path
-              :d="chartData.ctlPath"
-              fill="none"
-              stroke="#38bdf8"
-              stroke-width="1.5"
-              stroke-linejoin="round"
-              stroke-linecap="round"
-            />
-
-            <!-- Today marker -->
-            <line
-              v-if="chartData.todayX !== null"
-              :x1="chartData.todayX"
-              :x2="chartData.todayX"
-              :y1="padTop"
-              :y2="chartHeight - padBottom"
-              stroke="#0ea5e9"
-              stroke-width="1"
-              stroke-dasharray="4,2"
-            />
-
-            <!-- Week labels on x-axis -->
-            <text
-              v-for="(week, wi) in weeks"
-              :key="wi"
-              :x="padLeft + (wi * 7 / 27) * (chartWidth - padLeft - padRight) + (wi === 0 ? 0 : -4)"
-              :y="chartHeight - 6"
-              font-size="9"
-              :text-anchor="wi === 0 ? 'start' : 'middle'"
-              fill="#a8a29e"
-              font-family="Inter, sans-serif"
-            >
-              {{ weekLabel(week.monday) }}
-            </text>
-          </svg>
         </div>
       </div>
 
