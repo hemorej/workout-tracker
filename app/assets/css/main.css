@@ -7,7 +7,7 @@
  * and a handful of micro-typography tweaks.
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 /* ── Base ──────────────────────────────────────────────────────────────── */
@@ -16,11 +16,10 @@ html {
   /* Smooth font rendering on macOS / retina */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11'; /* Inter alternates */
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
   /* Warm off-white — warmer than gray-50, lighter than stone-100 */
   background-color: #fafaf9;
   color: #1c1917; /* stone-900 */

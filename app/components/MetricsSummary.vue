@@ -69,45 +69,45 @@ const tsbDisplay = computed(() =>
 
     <!-- Weekly TSS -->
     <div class="px-6 py-5 text-center">
-      <p class="text-[10px] font-medium uppercase tracking-widest text-stone-400 mb-2">
+      <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-2">
         Weekly TSS
       </p>
-      <p class="text-3xl font-light text-stone-800 tabular">
+      <p class="text-4xl font-semibold text-stone-900 tabular">
         {{ weeklyTss }}
       </p>
     </div>
 
     <!-- Weekly Hours -->
     <div class="px-6 py-5 text-center">
-      <p class="text-[10px] font-medium uppercase tracking-widest text-stone-400 mb-2">
+      <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-2">
         Hours
       </p>
-      <p class="text-3xl font-light text-stone-800 tabular">
+      <p class="text-4xl font-semibold text-stone-900 tabular">
         {{ weeklyHours.toFixed(1) }}
       </p>
     </div>
 
     <!-- CTL (Fitness) -->
     <div class="px-6 py-5 text-center border-t md:border-t-0 border-stone-100">
-      <p class="text-[10px] font-medium uppercase tracking-widest text-stone-400 mb-2">
+      <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-2">
         CTL
       </p>
-      <p class="text-3xl font-light text-stone-800 tabular">
+      <p class="text-4xl font-semibold text-stone-900 tabular">
         {{ todayCTL.toFixed(1) }}
       </p>
-      <p class="text-[10px] text-stone-300 mt-1">Fitness</p>
+      <p class="text-xs text-stone-300 mt-1">Fitness</p>
     </div>
 
     <!-- TSB (Form) -->
     <div class="px-6 py-5 text-center border-t md:border-t-0 border-stone-100">
-      <p class="text-[10px] font-medium uppercase tracking-widest text-stone-400 mb-2">
+      <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-2">
         TSB
       </p>
-      <p class="text-3xl font-light tabular" :class="tsbNumberColor">
+      <p class="text-4xl font-semibold tabular" :class="tsbNumberColor">
         {{ tsbDisplay }}
       </p>
       <!-- Subtle form zone label — no heavy badge, just small text -->
-      <p class="text-[10px] mt-1" :class="formZone.textColor">
+      <p class="text-xs mt-1" :class="formZone.textColor">
         {{ formZone.label }}
       </p>
     </div>

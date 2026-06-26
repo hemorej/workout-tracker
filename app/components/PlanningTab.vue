@@ -168,12 +168,12 @@ function tsbColor(tsb: number) {
       >
         <!-- Week header -->
         <div class="flex items-center justify-between px-4 py-2.5 bg-stone-50 border-b border-stone-100">
-          <span class="text-[10px] font-medium uppercase tracking-widest text-stone-400">
+          <span class="text-xs font-semibold uppercase tracking-widest text-stone-400">
             Week of {{ weekLabel(week.monday) }}
           </span>
           <div class="flex items-center gap-2">
-            <span class="text-[10px] uppercase tracking-widest text-stone-400">TSS</span>
-            <span class="text-sm font-medium tabular text-stone-700 min-w-[2.5rem] text-right">
+            <span class="text-xs uppercase tracking-widest text-stone-400">TSS</span>
+            <span class="text-base font-semibold tabular text-stone-700 min-w-[2.5rem] text-right">
               {{ weekTss(week.days) }}
             </span>
           </div>
@@ -190,13 +190,13 @@ function tsbColor(tsb: number) {
             ]"
           >
             <!-- Date label -->
-            <span class="w-16 shrink-0 text-xs text-stone-500 tabular">
+            <span class="w-16 shrink-0 text-sm text-stone-500 tabular">
               {{ formatDate(day.date) }}
             </span>
 
             <!-- Zone badge (click to cycle) -->
             <button
-              class="shrink-0 w-8 h-6 rounded border text-[10px] font-semibold uppercase tracking-wide transition-colors cursor-pointer"
+              class="shrink-0 w-9 h-7 rounded-md border text-xs font-bold uppercase tracking-wide transition-colors cursor-pointer"
               :class="zoneClass(getDraft(day.date).type)"
               :disabled="day.isPast"
               :title="getDraft(day.date).type ?? 'No zone — click to set'"
@@ -211,7 +211,7 @@ function tsbColor(tsb: number) {
               type="text"
               placeholder="Workout name"
               :disabled="day.isPast"
-              class="flex-1 min-w-0 text-xs text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1.5 py-1 -mx-1.5 transition-colors disabled:cursor-default"
+              class="flex-1 min-w-0 text-sm text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1.5 py-1 -mx-1.5 transition-colors disabled:cursor-default"
               @blur="save(day.date)"
               @keydown.enter="($event.target as HTMLInputElement).blur()"
             >
@@ -225,11 +225,11 @@ function tsbColor(tsb: number) {
                 max="999"
                 placeholder="—"
                 :disabled="day.isPast"
-                class="w-16 text-xs text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-1 -mx-1 tabular transition-colors disabled:cursor-default"
+                class="w-16 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-1 -mx-1 tabular transition-colors disabled:cursor-default"
                 @blur="save(day.date)"
                 @keydown.enter="($event.target as HTMLInputElement).blur()"
               >
-              <span class="text-[10px] text-stone-300">TSS</span>
+              <span class="text-xs text-stone-300">TSS</span>
             </div>
 
             <!-- Duration -->
@@ -241,26 +241,26 @@ function tsbColor(tsb: number) {
                 max="999"
                 placeholder="—"
                 :disabled="day.isPast"
-                class="w-14 text-xs text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-1 -mx-1 tabular transition-colors disabled:cursor-default"
+                class="w-14 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-1 -mx-1 tabular transition-colors disabled:cursor-default"
                 @blur="save(day.date)"
                 @keydown.enter="($event.target as HTMLInputElement).blur()"
               >
-              <span class="text-[10px] text-stone-300">min</span>
+              <span class="text-xs text-stone-300">min</span>
             </div>
 
             <!-- Projected CTL -->
             <div class="flex items-center gap-1 shrink-0">
-              <span class="text-[10px] text-stone-300">CTL</span>
-              <span class="w-10 text-xs text-right tabular text-stone-500">
+              <span class="text-xs text-stone-300">CTL</span>
+              <span class="w-10 text-sm text-right tabular text-stone-500">
                 {{ liveProjections[day.date]?.ctl ?? '—' }}
               </span>
             </div>
 
             <!-- Projected TSB -->
             <div class="flex items-center gap-1 shrink-0">
-              <span class="text-[10px] text-stone-300">TSB</span>
+              <span class="text-xs text-stone-300">TSB</span>
               <span
-                class="w-10 text-xs text-right tabular"
+                class="w-10 text-sm text-right tabular"
                 :class="liveProjections[day.date] ? tsbColor(liveProjections[day.date]!.tsb) : 'text-stone-300'"
               >
                 {{ liveProjections[day.date]?.tsb ?? '—' }}

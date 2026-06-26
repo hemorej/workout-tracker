@@ -35,11 +35,11 @@ export default defineEventHandler(async (event) => {
     .where(eq(users.email, body.email.toLowerCase().trim()))
     .limit(1)
 
-  // Compare password — always run bcrypt even if user not found to
+  // Compare password — always run scrypt even if user not found to
   // prevent timing attacks that reveal whether an email is registered.
   const passwordMatch = user
-    ? await verifyPassword(body.password, user.passwordHash)
-    : await verifyPassword(body.password, '$2a$12$invalidhashfortimingprotection00000000')
+    ? await verifyPassword(user.passwordHash, body.password)
+    : await verifyPassword('$scrypt$n=16384,r=8,p=1$invalidsaltfortimingprotection$invalidhashfortimingprotection', body.password)
 
   if (!user || !passwordMatch) {
     throw createError({

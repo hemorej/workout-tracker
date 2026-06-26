@@ -3,15 +3,14 @@ import { defineAppConfig } from "nuxt/app";
 /**
  * Nuxt UI theme configuration.
  *
- * Sets the primary colour to 'sky' (a calm, airy blue) and the neutral
- * palette to 'stone' (warm grays rather than cool blue-grays).
- * This gives the whole app a light, natural feel without using
- * any harsh or saturated colours.
+ * Sets the primary colour to 'orange' (Sprocket's energetic accent) and the
+ * neutral palette to 'stone' (warm grays rather than cool blue-grays).
+ * Primary drives all UButton fills, focus rings and interactive accents.
  */
 export default defineAppConfig({
   ui: {
     colors: {
-      primary: 'sky',
+      primary: 'orange',
       neutral: 'stone',
     },
   },

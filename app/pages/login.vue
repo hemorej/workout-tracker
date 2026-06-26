@@ -79,25 +79,28 @@ async function handleRegister() {
   <div class="min-h-screen flex flex-col items-center justify-center bg-white px-6">
 
     <!-- Wordmark -->
-    <div class="mb-10 text-center">
-      <h1 class="text-xl font-medium tracking-tight text-stone-800">
-        WorkoutTracker
+    <div class="mb-10 flex flex-col items-center text-center">
+      <div class="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-2xl bg-gradient-to-br from-orange-50 to-orange-100 text-orange-600 shadow-sm">
+        <BikeLogo :size="44" />
+      </div>
+      <h1 class="text-3xl font-extrabold tracking-tight text-stone-900">
+        Sprocket
       </h1>
-      <p class="mt-1.5 text-sm text-stone-400 font-light">
+      <p class="mt-2 text-base text-stone-400">
         Track your training load &amp; form
       </p>
     </div>
 
-    <!-- Tab switcher — plain text links, no pill/button styling -->
-    <div class="flex gap-6 mb-8 border-b border-stone-100 w-full max-w-xs justify-center pb-0">
+    <!-- Tab switcher — segmented control -->
+    <div class="mb-8 inline-flex gap-1 rounded-xl bg-stone-100 p-1">
       <button
         v-for="tab in [{ label: 'Sign in', value: 'login' }, { label: 'Create account', value: 'register' }]"
         :key="tab.value"
         type="button"
-        class="pb-3 text-sm transition-colors"
+        class="rounded-lg px-5 py-2 text-sm transition-colors"
         :class="activeTab === tab.value
-          ? 'text-stone-900 font-medium border-b-2 border-stone-800 -mb-px'
-          : 'text-stone-400 hover:text-stone-600 font-normal'"
+          ? 'bg-white font-semibold text-stone-900 shadow-sm'
+          : 'font-medium text-stone-500 hover:text-stone-700'"
         @click="activeTab = tab.value as Tab"
       >
         {{ tab.label }}
@@ -139,7 +142,7 @@ async function handleRegister() {
         :loading="loginLoading"
         block
         size="lg"
-        class="mt-1 !font-normal"
+        class="mt-1 rounded-lg font-semibold"
       >
         Sign in
       </UButton>
@@ -203,7 +206,7 @@ async function handleRegister() {
         :loading="registerLoading"
         block
         size="lg"
-        class="mt-1 !font-normal"
+        class="mt-1 rounded-lg font-semibold"
       >
         Create account
       </UButton>

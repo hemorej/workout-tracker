@@ -124,20 +124,20 @@ function confirmDelete() {
     <!-- Left accent line — only on workout days -->
     <div
       v-if="!day.isRestDay"
-      class="absolute left-0 top-3 bottom-3 w-0.5 bg-sky-200 rounded-full"
+      class="absolute left-0 top-3 bottom-3 w-1 bg-orange-500 rounded-full"
     />
 
     <!-- Date column — fixed width, right-aligned -->
     <div class="w-20 shrink-0 text-right pt-0.5">
-      <p class="text-xs font-medium text-stone-600">{{ formattedDate }}</p>
-      <p class="text-[10px] text-stone-300 mt-0.5">{{ isoDate }}</p>
+      <p class="text-sm font-semibold text-stone-600">{{ formattedDate }}</p>
+      <p class="text-xs text-stone-300 mt-0.5">{{ isoDate }}</p>
     </div>
 
     <!-- Main content -->
     <div class="flex-1 min-w-0">
 
       <!-- Rest day -->
-      <p v-if="day.isRestDay" class="text-xs text-stone-400 italic pt-0.5">
+      <p v-if="day.isRestDay" class="text-sm text-stone-400 italic pt-0.5">
         Rest
       </p>
 
@@ -145,17 +145,17 @@ function confirmDelete() {
       <div v-else>
         <!-- Name row -->
         <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-          <span class="text-sm font-medium text-stone-800 truncate max-w-xs">
+          <span class="text-base font-semibold text-stone-800 truncate max-w-xs">
             {{ day.workout?.name }}
           </span>
-          <span class="text-xs text-stone-400">{{ durationDisplay }}</span>
+          <span class="text-sm text-stone-400">{{ durationDisplay }}</span>
           <!-- Inline pill tags — plain spans, no UBadge -->
-          <span class="text-[10px] text-sky-500 font-medium bg-sky-50 rounded-full px-2 py-0.5">
+          <span class="text-xs text-sky-600 font-semibold bg-sky-50 rounded-full px-2.5 py-0.5">
             {{ day.workout?.tss }} TSS
           </span>
           <span
             v-if="day.workout?.rpe"
-            class="text-[10px] text-stone-400 font-medium bg-stone-50 rounded-full px-2 py-0.5"
+            class="text-xs text-stone-500 font-semibold bg-stone-100 rounded-full px-2.5 py-0.5"
           >
             RPE {{ day.workout?.rpe }}/10
           </span>
@@ -163,12 +163,12 @@ function confirmDelete() {
 
         <!-- Notes -->
         <div v-if="day.workout?.notes" class="mt-1">
-          <span class="text-xs text-stone-400">
+          <span class="text-sm text-stone-400">
             {{ notesExpanded ? day.workout.notes : notesPreview }}
           </span>
           <button
             v-if="hasLongNotes"
-            class="ml-1 text-[10px] text-stone-300 hover:text-stone-500 underline"
+            class="ml-1 text-xs text-stone-300 hover:text-stone-500 underline"
             @click="notesExpanded = !notesExpanded"
           >
             {{ notesExpanded ? 'less' : 'more' }}
@@ -177,7 +177,7 @@ function confirmDelete() {
       </div>
 
       <!-- Metrics row — CTL / ATL / TSB — shown for every day -->
-      <div class="flex gap-4 mt-1.5 text-[10px] text-stone-300 tabular">
+      <div class="flex gap-4 mt-1.5 text-xs text-stone-300 tabular">
         <span>CTL <span class="text-stone-500">{{ day.metrics.ctl.toFixed(1) }}</span></span>
         <span>ATL <span class="text-stone-500">{{ day.metrics.atl.toFixed(1) }}</span></span>
         <span>TSB <span :class="tsbColor">{{ tsbDisplay }}</span></span>
@@ -188,7 +188,7 @@ function confirmDelete() {
     <div v-if="!day.isRestDay" class="shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity">
       <div v-if="!showDeleteConfirm">
         <button
-          class="text-[10px] text-stone-300 hover:text-rose-400 transition-colors"
+          class="text-xs text-stone-300 hover:text-rose-400 transition-colors"
           aria-label="Delete workout"
           @click="requestDelete"
         >
@@ -197,10 +197,10 @@ function confirmDelete() {
       </div>
       <!-- Inline confirmation -->
       <div v-else class="flex items-center gap-2">
-        <button class="text-[10px] text-rose-400 hover:text-rose-600 font-medium" @click="confirmDelete">
+        <button class="text-xs text-rose-400 hover:text-rose-600 font-medium" @click="confirmDelete">
           Confirm
         </button>
-        <button class="text-[10px] text-stone-300 hover:text-stone-500" @click="showDeleteConfirm = false">
+        <button class="text-xs text-stone-300 hover:text-stone-500" @click="showDeleteConfirm = false">
           Cancel
         </button>
       </div>

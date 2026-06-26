@@ -87,20 +87,21 @@ async function onPageChange(page: number) {
 
 <template>
   <div class="min-h-screen" style="background-color: #fafaf9;">
-    <title>Workout Tracker</title>
+    <title>Sprocket</title>
 
     <!-- ── Header — minimal, borderless top bar ───────────────────── -->
     <header class="bg-white border-b border-stone-100 sticky top-0 z-10">
       <div class="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
-        <span class="text-sm font-medium tracking-tight text-stone-700">
-          WorkoutTracker
+        <span class="flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-stone-900">
+          <BikeLogo :size="26" class="shrink-0 text-orange-600" />
+          Sprocket
         </span>
         <div class="flex items-center gap-4">
-          <span class="text-xs text-stone-400 hidden sm:inline">
+          <span class="text-sm text-stone-500 hidden sm:inline">
             {{ auth.user?.username }}
           </span>
           <button
-            class="text-xs text-stone-400 hover:text-stone-700 transition-colors"
+            class="text-sm text-stone-400 hover:text-stone-700 transition-colors"
             @click="auth.logout"
           >
             Sign out
@@ -111,18 +112,20 @@ async function onPageChange(page: number) {
 
     <!-- ── Tab navigation ────────────────────────────────────────────── -->
     <div class="bg-white border-b border-stone-100">
-      <div class="max-w-3xl mx-auto px-6 flex gap-6">
-        <button
-          v-for="tab in [{ id: 'log', label: 'Training log' }, { id: 'planning', label: 'Planning' }]"
-          :key="tab.id"
-          class="py-3 text-xs font-medium transition-colors border-b-2 -mb-px"
-          :class="activeTab === tab.id
-            ? 'border-stone-800 text-stone-800'
-            : 'border-transparent text-stone-400 hover:text-stone-600'"
-          @click="activeTab = (tab.id as 'log' | 'planning')"
-        >
-          {{ tab.label }}
-        </button>
+      <div class="max-w-3xl mx-auto px-6 py-3">
+        <div class="inline-flex gap-1 rounded-xl bg-stone-100 p-1">
+          <button
+            v-for="tab in [{ id: 'log', label: 'Training log' }, { id: 'planning', label: 'Planning' }]"
+            :key="tab.id"
+            class="rounded-lg px-5 py-2 text-sm transition-colors"
+            :class="activeTab === tab.id
+              ? 'bg-white font-semibold text-stone-900 shadow-sm'
+              : 'font-medium text-stone-500 hover:text-stone-700'"
+            @click="activeTab = (tab.id as 'log' | 'planning')"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -146,14 +149,14 @@ async function onPageChange(page: number) {
 
       <!-- Section header + Add button -->
       <div class="flex items-center justify-between">
-        <h2 class="text-xs font-medium uppercase tracking-widest text-stone-400">
+        <h2 class="text-xs font-semibold uppercase tracking-widest text-stone-400">
           Training log
         </h2>
         <button
-          class="flex items-center gap-1.5 text-xs font-medium text-stone-500 hover:text-stone-900 border border-stone-200 hover:border-stone-400 rounded-full px-3 py-1.5 transition-colors"
+          class="flex items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-orange-600/20 transition-colors hover:bg-orange-700"
           @click="openAddWorkout"
         >
-          <UIcon name="i-heroicons-plus" class="w-3.5 h-3.5" />
+          <UIcon name="i-heroicons-plus" class="h-4 w-4" />
           Add workout
         </button>
       </div>
@@ -200,17 +203,17 @@ async function onPageChange(page: number) {
         class="flex items-center justify-center gap-6"
       >
         <button
-          class="text-xs text-stone-400 hover:text-stone-700 disabled:opacity-30 transition-colors"
+          class="text-sm text-stone-400 hover:text-stone-700 disabled:opacity-30 transition-colors"
           :disabled="workouts.pagination.page <= 1"
           @click="onPageChange(workouts.pagination.page - 1)"
         >
           ← Newer
         </button>
-        <span class="text-xs text-stone-300">
+        <span class="text-sm text-stone-300">
           {{ workouts.pagination.page }} / {{ workouts.pagination.totalPages }}
         </span>
         <button
-          class="text-xs text-stone-400 hover:text-stone-700 disabled:opacity-30 transition-colors"
+          class="text-sm text-stone-400 hover:text-stone-700 disabled:opacity-30 transition-colors"
           :disabled="workouts.pagination.page >= workouts.pagination.totalPages"
           @click="onPageChange(workouts.pagination.page + 1)"
         >
@@ -248,12 +251,12 @@ async function onPageChange(page: number) {
         />
 
         <!-- Panel — overflow-visible so dropdowns inside aren't clipped -->
-        <div class="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6 my-8 overflow-visible">
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 my-8 overflow-visible">
           <!-- Header -->
           <div class="flex items-start justify-between mb-6">
             <div>
-              <h2 class="text-base font-medium text-stone-800">Log a workout</h2>
-              <p class="text-xs text-stone-400 mt-0.5">Record your training session details.</p>
+              <h2 class="text-lg font-semibold text-stone-900">Log a workout</h2>
+              <p class="text-sm text-stone-400 mt-0.5">Record your training session details.</p>
             </div>
             <button
               class="text-stone-300 hover:text-stone-600 transition-colors ml-4 mt-0.5"

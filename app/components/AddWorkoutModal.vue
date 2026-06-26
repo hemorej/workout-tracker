@@ -99,7 +99,7 @@ async function handleSubmit() {
     <!-- Date -->
     <UFormField name="date">
       <template #label>
-        <span class="text-xs font-medium text-stone-500 uppercase tracking-wide">Date</span>
+        <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide">Date</span>
       </template>
       <UInput v-model="form.date" type="date" required class="w-full" />
     </UFormField>
@@ -107,7 +107,7 @@ async function handleSubmit() {
     <!-- Name -->
     <UFormField name="name">
       <template #label>
-        <span class="text-xs font-medium text-stone-500 uppercase tracking-wide">Workout name</span>
+        <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide">Workout name</span>
       </template>
       <UInput
         v-model="form.name"
@@ -117,11 +117,11 @@ async function handleSubmit() {
       />
     </UFormField>
 
-    <!-- Duration + TSS -->
-    <div class="grid grid-cols-2 gap-4">
+    <!-- Duration + TSS + RPE — short fields, one row -->
+    <div class="grid grid-cols-3 gap-4">
       <UFormField name="durationMinutes">
         <template #label>
-          <span class="text-xs font-medium text-stone-500 uppercase tracking-wide">Duration (min)</span>
+          <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide">Duration (min)</span>
         </template>
         <UInput
           v-model.number="form.durationMinutes"
@@ -132,7 +132,7 @@ async function handleSubmit() {
 
       <UFormField name="tss">
         <template #label>
-          <span class="text-xs font-medium text-stone-500 uppercase tracking-wide">TSS</span>
+          <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide">TSS</span>
         </template>
         <UInput
           v-model.number="form.tss"
@@ -140,30 +140,30 @@ async function handleSubmit() {
           required class="w-full"
         />
       </UFormField>
-    </div>
 
-    <!-- RPE (optional) — number input avoids dropdown z-index issues in modals -->
-    <UFormField name="rpe">
-      <template #label>
-        <span class="text-xs font-medium text-stone-500 uppercase tracking-wide">
-          RPE <span class="normal-case font-normal text-stone-300">(optional, 1–10)</span>
-        </span>
-      </template>
-      <UInput
-        v-model.number="form.rpe"
-        type="number"
-        min="1"
-        max="10"
-        step="1"
-        placeholder="Leave blank to skip"
-        class="w-full"
-      />
-    </UFormField>
+      <!-- RPE (optional) — number input avoids dropdown z-index issues in modals -->
+      <UFormField name="rpe">
+        <template #label>
+          <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide whitespace-nowrap">
+            RPE <span class="normal-case font-normal text-stone-300">1–10</span>
+          </span>
+        </template>
+        <UInput
+          v-model.number="form.rpe"
+          type="number"
+          min="1"
+          max="10"
+          step="1"
+          placeholder="—"
+          class="w-full"
+        />
+      </UFormField>
+    </div>
 
     <!-- Notes (optional) -->
     <UFormField name="notes">
       <template #label>
-        <span class="text-xs font-medium text-stone-500 uppercase tracking-wide">
+        <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
           Notes <span class="normal-case font-normal text-stone-300">(optional)</span>
         </span>
       </template>
@@ -182,12 +182,12 @@ async function handleSubmit() {
     <div class="flex justify-end items-center gap-4 pt-2">
       <button
         type="button"
-        class="text-xs text-stone-400 hover:text-stone-600 transition-colors"
+        class="text-sm font-medium text-stone-500 hover:text-stone-700 transition-colors"
         @click="emit('close')"
       >
         Cancel
       </button>
-      <UButton type="submit" :loading="isLoading" size="sm">
+      <UButton type="submit" :loading="isLoading" size="md" class="rounded-lg font-semibold">
         Log workout
       </UButton>
     </div>

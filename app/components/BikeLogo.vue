@@ -1,0 +1,28 @@
+<script setup lang="ts">
+/**
+ * BikeLogo — the Sprocket brand mark.
+ *
+ * A playful monoline bicycle (frame, wheels, saddle, handlebars).
+ * Uses `currentColor` for the stroke, so colour it via a text-* class
+ * on this component or a parent (e.g. `class="text-orange-600"`).
+ */
+withDefaults(defineProps<{ size?: number }>(), { size: 28 })
+</script>
+
+<template>
+  <svg
+    :width="size"
+    :height="size * 0.66"
+    viewBox="0 0 48 32"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="11" cy="22" r="7.5" />
+    <circle cx="37" cy="22" r="7.5" />
+    <path d="M11 22 L21 22 L18 10 L11 22 M21 22 L30 10 L18 10 M30 10 L37 22 M18 10 L16.5 7 M13 7 L20 7 M30 10 L31.5 7 M28.5 7 L33.5 7" />
+  </svg>
+</template>

@@ -24,7 +24,7 @@ html {
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
   background-color: #fafaf9; /* warm off-white */
   color: #1c1917;            /* stone-900 */
 }
