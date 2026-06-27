@@ -28,15 +28,17 @@ workout-tracker/
 ├── app/                        ← Nuxt 4 source directory
 │   ├── app.vue                 ← Root component (UApp wrapper)
 │   ├── pages/
-│   │   ├── index.vue           ← Dashboard (protected)
+│   │   ├── index.vue           ← Dashboard with Log + Planning tabs (protected)
 │   │   └── login.vue           ← Login / register
 │   ├── components/
 │   │   ├── MetricsSummary.vue  ← Weekly stats + CTL/TSB cards
 │   │   ├── WorkoutCard.vue     ← Single day row (workout or rest)
-│   │   └── AddWorkoutModal.vue ← Log workout form (modal)
+│   │   ├── AddWorkoutModal.vue ← Log workout form (modal)
+│   │   └── PlanningTab.vue     ← 4-week planning grid with live projections
 │   ├── stores/
 │   │   ├── auth.ts             ← Login, register, logout actions
-│   │   └── workouts.ts         ← Day list, weekly stats, pagination
+│   │   ├── workouts.ts         ← Day list, weekly stats, pagination
+│   │   └── planning.ts         ← Planned workouts + live CTL/TSB projection
 │   └── middleware/
 │       ├── auth.ts             ← Redirects guests → /login
 │       └── guest.ts            ← Redirects logged-in users → /
@@ -47,16 +49,24 @@ workout-tracker/
 │   │   │   ├── login.post.ts
 │   │   │   ├── logout.post.ts
 │   │   │   └── register.post.ts
-│   │   └── workouts/
-│   │       ├── index.get.ts    ← Paginated list + metrics
-│   │       ├── index.post.ts   ← Create workout
-│   │       └── [id].delete.ts  ← Delete workout
+│   │   ├── workouts/
+│   │   │   ├── index.get.ts        ← Paginated list + metrics
+│   │   │   ├── index.post.ts       ← Create workout
+│   │   │   └── [id].delete.ts      ← Delete workout
+│   │   └── planned-workouts/
+│   │       ├── index.get.ts        ← 4-week plan grid + projections
+│   │       ├── index.put.ts        ← Upsert planned workout
+│   │       └── [date].delete.ts    ← Delete planned workout
 │   ├── db/
 │   │   ├── index.ts            ← Drizzle client (singleton pool)
 │   │   └── schema.ts           ← Table definitions + inferred types
 │   └── utils/
 │       ├── auth.ts             ← hashPassword / verifyPassword
-│       └── tss.ts              ← CTL / ATL / TSB formula engine
+│       ├── tss.ts              ← CTL / ATL / TSB formula engine
+│       └── metricsCache.ts     ← In-process series cache (TTL + write invalidation)
+│
+├── scripts/
+│   └── reset-password.ts       ← CLI utility to reset a user's password
 │
 ├── drizzle/                    ← Auto-generated migration SQL files
 ├── drizzle.config.ts
@@ -146,7 +156,15 @@ Open [http://localhost:3000](http://localhost:3000). You'll see the login page �
 | `email` | text | Unique |
 | `username` | text | Unique |
 | `password_hash` | text | bcrypt hash |
+| `initial_ctl` | integer | Seed CTL before first workout (default 0) |
+| `initial_atl` | integer | Seed ATL before first workout (default 0) |
 | `created_at` | timestamptz | Default: now() |
+
+Set `initial_ctl` and `initial_atl` to seed the rolling averages from a realistic baseline rather than zero:
+
+```sql
+UPDATE users SET initial_ctl = 44, initial_atl = 44 WHERE email = 'you@example.com';
+```
 
 ### `workouts`
 
@@ -160,6 +178,19 @@ Open [http://localhost:3000](http://localhost:3000). You'll see the login page �
 | `tss` | integer | ≥ 0 |
 | `rpe` | integer | Optional, 1–10 |
 | `notes` | text | Optional |
+| `created_at` | timestamptz | Default: now() |
+
+### `planned_workouts`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | serial PK | Auto-increment |
+| `user_id` | integer FK | → users.id (cascade delete) |
+| `date` | date | One plan per user per day (unique index) |
+| `name` | text | Optional workout name |
+| `type` | text | Training zone: `zone2`, `zone4`, `zone5`, `zone6`, `rest` |
+| `tss` | integer | Optional planned TSS |
+| `duration_minutes` | integer | Optional planned duration |
 | `created_at` | timestamptz | Default: now() |
 
 ---
@@ -220,6 +251,9 @@ All routes require a valid session cookie except `/api/auth/login` and `/api/aut
 | GET | `/api/workouts?page=1&limit=14` | Paginated day list with metrics |
 | POST | `/api/workouts` | Log a new workout |
 | DELETE | `/api/workouts/:id` | Delete a workout |
+| GET | `/api/planned-workouts` | 4-week plan grid with projected CTL/TSB |
+| PUT | `/api/planned-workouts` | Upsert a planned workout |
+| DELETE | `/api/planned-workouts/:date` | Delete a planned workout by date |
 
 ### GET /api/workouts response shape
 
@@ -252,6 +286,33 @@ All routes require a valid session cookie except `/api/auth/login` and `/api/aut
 }
 ```
 
+### GET /api/planned-workouts response shape
+
+```json
+{
+  "plans": [
+    {
+      "date": "2026-06-23",
+      "isPast": true,
+      "plan": { "id": 1, "name": "Long ride", "type": "zone2", "tss": 120, "durationMinutes": 180 },
+      "projectedCtl": 62.4,
+      "projectedTsb": -8.1
+    },
+    {
+      "date": "2026-06-28",
+      "isPast": false,
+      "plan": null,
+      "projectedCtl": 61.8,
+      "projectedTsb": -5.3
+    }
+  ],
+  "currentCtl": 61.2,
+  "currentAtl": 68.5
+}
+```
+
+28 entries are returned (4 weeks starting from the current Monday). Past days carry their actual historical CTL/TSB; future days carry projected values computed from planned TSS.
+
 ---
 
 ## Resetting a password
@@ -278,6 +339,20 @@ npm run db:studio    # Open Drizzle Studio (visual DB browser at localhost:4983)
 
 ---
 
+## Planning feature
+
+The Planning tab shows a rolling 4-week grid (current week + 3 ahead) where you can sketch out upcoming training.
+
+- **Zone badge** — click to cycle through Z2 → Z4 → Z5 → Z6 → REST → (none). Color-coded for quick scanning.
+- **Inline editing** — workout name, TSS, and duration save on blur or Enter. No save button.
+- **Live projections** — CTL and TSB update as you type, before a field is saved, so you can see the impact of planned load in real time.
+- **Past days** — shown dimmed and non-editable; display actual historical CTL/TSB values.
+- **Weekly TSS totals** — each week header shows the sum of planned TSS for that week.
+
+Planned workouts are stored in the `planned_workouts` table and are independent of actual logged workouts.
+
+---
+
 ## Key patterns to study
 
 This codebase is intentionally annotated to be a learning reference. A few patterns worth noting:
@@ -288,6 +363,8 @@ This codebase is intentionally annotated to be a learning reference. A few patte
 
 **Timing-safe login** (`server/api/auth/login.post.ts`) — bcrypt is run even when the email isn't found, so response times don't reveal whether an email address is registered.
 
-**Server-side metrics** (`server/utils/tss.ts`) — CTL/ATL/TSB are computed from the full workout history on each GET request. For a personal app this is fine; at scale you'd cache or persist the computed values.
+**Server-side metrics with in-process cache** (`server/utils/tss.ts`, `server/utils/metricsCache.ts`) — CTL/ATL/TSB are computed from the full workout history and cached per user in a module-level Map. The cache is invalidated on every write (create/delete workout) and has a 5-minute TTL as a safety net to roll forward across midnight. For multi-instance deployments, replace the Map with a shared store such as Redis.
+
+**Live projections without a round-trip** (`PlanningTab.vue`) — The planning grid recomputes projected CTL/TSB locally using the same EMA formula as the server. Draft TSS values (not yet saved) are included in the computation, so the numbers update as you type.
 
 **`defineExpose` for modal control** (`AddWorkoutModal.vue`) — The parent holds a template ref to the modal and calls `modal.open()`. This keeps the open/close state encapsulated inside the modal component.
