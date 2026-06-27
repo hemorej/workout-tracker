@@ -14,6 +14,9 @@ import { users } from '../../db/schema'
 import { useDB } from '../../db'
 
 export default defineEventHandler(async (event) => {
+  // Registration is temporarily disabled
+  throw createError({ statusCode: 403, statusMessage: 'Account registration is currently closed.' })
+
   const body = await readBody(event)
 
   // Basic presence validation

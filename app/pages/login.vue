@@ -18,8 +18,10 @@ const auth = useAuthStore()
 const toast = useToast()
 
 // ── Tab state ────────────────────────────────────────────────────────────
+// Registration is temporarily disabled — only login tab is shown
 type Tab = 'login' | 'register'
 const activeTab = ref<Tab>('login')
+const registrationOpen = false
 
 // ── Login form ───────────────────────────────────────────────────────────
 const loginForm = reactive({ email: '', password: '' })
@@ -91,8 +93,8 @@ async function handleRegister() {
       </p>
     </div>
 
-    <!-- Tab switcher — segmented control -->
-    <div class="mb-8 inline-flex gap-1 rounded-xl bg-stone-100 p-1">
+    <!-- Tab switcher — segmented control (registration temporarily disabled) -->
+    <div v-if="registrationOpen" class="mb-8 inline-flex gap-1 rounded-xl bg-stone-100 p-1">
       <button
         v-for="tab in [{ label: 'Sign in', value: 'login' }, { label: 'Create account', value: 'register' }]"
         :key="tab.value"
@@ -106,6 +108,9 @@ async function handleRegister() {
         {{ tab.label }}
       </button>
     </div>
+    <p v-else class="mb-8 text-sm text-stone-400">
+      Registration is currently closed.
+    </p>
 
     <!-- ── Login Form ─────────────────────────────────────────────────── -->
     <form
