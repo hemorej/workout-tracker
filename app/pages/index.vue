@@ -32,7 +32,7 @@ import { useWorkoutsStore } from '~/stores/workouts'
 definePageMeta({ middleware: 'auth' })
 
 // ── Tab navigation ────────────────────────────────────────────────────────
-const activeTab = ref<'log' | 'planning'>('log')
+const activeTab = ref<'log' | 'planning' | 'history'>('log')
 
 const auth = useAuthStore()
 const workouts = useWorkoutsStore()
@@ -115,13 +115,17 @@ async function onPageChange(page: number) {
       <div class="max-w-3xl mx-auto px-6 py-3">
         <div class="inline-flex gap-1 rounded-xl bg-stone-100 p-1">
           <button
-            v-for="tab in [{ id: 'log', label: 'Training log' }, { id: 'planning', label: 'Planning' }]"
+            v-for="tab in [
+              { id: 'log', label: 'Training log' },
+              { id: 'planning', label: 'Planning' },
+              { id: 'history', label: 'History' },
+            ]"
             :key="tab.id"
             class="rounded-lg px-5 py-2 text-sm transition-colors"
             :class="activeTab === tab.id
               ? 'bg-white font-semibold text-stone-900 shadow-sm'
               : 'font-medium text-stone-500 hover:text-stone-700'"
-            @click="activeTab = (tab.id as 'log' | 'planning')"
+            @click="activeTab = (tab.id as 'log' | 'planning' | 'history')"
           >
             {{ tab.label }}
           </button>
@@ -134,6 +138,9 @@ async function onPageChange(page: number) {
 
       <!-- ── Planning tab ────────────────────────────────────────── -->
       <PlanningTab v-if="activeTab === 'planning'" />
+
+      <!-- ── History tab ────────────────────────────────────────── -->
+      <HistoryTab v-if="activeTab === 'history'" />
 
       <!-- ── Training log tab ────────────────────────────────────── -->
       <template v-if="activeTab === 'log'">

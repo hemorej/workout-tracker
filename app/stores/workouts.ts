@@ -18,6 +18,11 @@ import { defineStore } from 'pinia'
 
 // ── Types (mirror the API response shape) ───────────────────────────────────
 
+export interface PowerBestEntry {
+  duration: string
+  watts: number
+}
+
 export interface WorkoutDetail {
   id: number
   name: string
@@ -25,6 +30,8 @@ export interface WorkoutDetail {
   tss: number
   rpe: number | null
   notes: string | null
+  ftpWatts: number | null
+  powerBests: PowerBestEntry[]
 }
 
 export interface DayMetrics {
@@ -59,6 +66,8 @@ export interface NewWorkoutPayload {
   tss: number
   rpe?: number | null
   notes?: string | null
+  ftpWatts?: number | null
+  powerBests?: PowerBestEntry[]
 }
 
 // ── Store ───────────────────────────────────────────────────────────────────
