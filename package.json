@@ -7,7 +7,8 @@
   },
   "scripts": {
     "build": "nuxt build",
-    "dev": "nuxt dev",
+    "dev": "brew services start postgresql@15; nuxt dev",
+    "stop": "brew services stop postgresql@15",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
