@@ -15,6 +15,13 @@
       "when": 1782252766491,
       "tag": "0001_rich_martin_li",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782686430892,
+      "tag": "0002_massive_alex_power",
+      "breakpoints": true
     }
   ]
 }

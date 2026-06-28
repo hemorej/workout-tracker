@@ -11,6 +11,8 @@
  *   tss:             number   — non-negative integer
  *   rpe?:            number   — optional, 1–10
  *   notes?:          string   — optional free text
+ *   ftpWatts?:       number   — optional, positive integer (watts)
+ *   powerBests?:     { duration: string; watts: number }[]
  * }
  *
  * Returns:
@@ -20,7 +22,7 @@
  */
 
 import { eq, and } from 'drizzle-orm'
-import { workouts } from '../../db/schema'
+import { workouts, powerBests, POWER_BEST_DURATIONS } from '../../db/schema'
 import { useDB } from '../../db'
 import { invalidateMetrics } from '../../utils/metricsCache'
 
@@ -62,6 +64,34 @@ export default defineEventHandler(async (event) => {
 
   const notes: string | null = body.notes?.trim() || null
 
+  let ftpWatts: number | null = null
+  if (body.ftpWatts !== undefined && body.ftpWatts !== null && body.ftpWatts !== '') {
+    ftpWatts = Number(body.ftpWatts)
+    if (!Number.isInteger(ftpWatts) || ftpWatts <= 0) {
+      throw createError({ statusCode: 400, statusMessage: 'FTP must be a positive integer in watts.' })
+    }
+  }
+
+  const validDurations = new Set(POWER_BEST_DURATIONS as readonly string[])
+  const pbInput: { duration: string; watts: number }[] = []
+  if (Array.isArray(body.powerBests)) {
+    for (const pb of body.powerBests) {
+      if (!pb.duration || !validDurations.has(pb.duration)) {
+        throw createError({ statusCode: 400, statusMessage: `Invalid power best duration: ${pb.duration}` })
+      }
+      const watts = Number(pb.watts)
+      if (!Number.isInteger(watts) || watts <= 0) {
+        throw createError({ statusCode: 400, statusMessage: 'Power best watts must be a positive integer.' })
+      }
+      pbInput.push({ duration: pb.duration, watts })
+    }
+    // Reject duplicate durations in one submission
+    const durations = pbInput.map((p) => p.duration)
+    if (new Set(durations).size !== durations.length) {
+      throw createError({ statusCode: 400, statusMessage: 'Each power best duration must be unique.' })
+    }
+  }
+
   // ── Duplicate check ───────────────────────────────────────────────────────
 
   const db = useDB()
@@ -81,7 +111,7 @@ export default defineEventHandler(async (event) => {
 
   // ── Insert ────────────────────────────────────────────────────────────────
 
-  const [newWorkout] = await db
+  const inserted = await db
     .insert(workouts)
     .values({
       userId: user.id,
@@ -91,8 +121,20 @@ export default defineEventHandler(async (event) => {
       tss,
       rpe,
       notes,
+      ftpWatts,
     })
     .returning()
+
+  const newWorkout = inserted[0]
+  if (!newWorkout) {
+    throw createError({ statusCode: 500, statusMessage: 'Failed to create workout.' })
+  }
+
+  if (pbInput.length > 0) {
+    await db.insert(powerBests).values(
+      pbInput.map((pb) => ({ workoutId: newWorkout.id, duration: pb.duration, watts: pb.watts })),
+    )
+  }
 
   // Invalidate the metrics cache so the next GET recomputes with the new workout
   invalidateMetrics(user.id)

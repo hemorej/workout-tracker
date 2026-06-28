@@ -21,6 +21,13 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 
+export const POWER_BEST_DURATIONS = [
+  '5sec', '15sec', '30sec', '1min', '2min', '3min', '5min',
+  '8min', '10min', '15min', '20min', '30min', '45min', '1h',
+] as const
+
+export type PowerBestDuration = typeof POWER_BEST_DURATIONS[number]
+
 // ---------------------------------------------------------------------------
 // users
 // ---------------------------------------------------------------------------
@@ -102,6 +109,9 @@ export const workouts = pgTable(
     /** Optional free-text notes about the workout */
     notes: text('notes'),
 
+    /** FTP (Functional Threshold Power) in watts recorded during this workout, if updated */
+    ftpWatts: integer('ftp_watts'),
+
     /** Row creation timestamp (UTC) */
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -127,6 +137,26 @@ export const workouts = pgTable(
      * CHECK constraint: TSS must be non-negative.
      */
     check('tss_non_negative', sql`${table.tss} >= 0`),
+  ],
+)
+
+// ---------------------------------------------------------------------------
+// power_bests
+// ---------------------------------------------------------------------------
+
+export const powerBests = pgTable(
+  'power_bests',
+  {
+    id: serial('id').primaryKey(),
+    workoutId: integer('workout_id')
+      .references(() => workouts.id, { onDelete: 'cascade' })
+      .notNull(),
+    duration: text('duration').notNull(),
+    watts: integer('watts').notNull(),
+  },
+  (table) => [
+    uniqueIndex('power_bests_workout_id_duration_idx').on(table.workoutId, table.duration),
+    check('pb_watts_positive', sql`${table.watts} > 0`),
   ],
 )
 
@@ -163,10 +193,18 @@ export const usersRelations = relations(users, ({ many }) => ({
   plannedWorkouts: many(plannedWorkouts),
 }))
 
-export const workoutsRelations = relations(workouts, ({ one }) => ({
+export const workoutsRelations = relations(workouts, ({ one, many }) => ({
   user: one(users, {
     fields: [workouts.userId],
     references: [users.id],
+  }),
+  powerBests: many(powerBests),
+}))
+
+export const powerBestsRelations = relations(powerBests, ({ one }) => ({
+  workout: one(workouts, {
+    fields: [powerBests.workoutId],
+    references: [workouts.id],
   }),
 }))
 
@@ -185,8 +223,10 @@ export const plannedWorkoutsRelations = relations(plannedWorkouts, ({ one }) => 
 export type User = typeof users.$inferSelect
 export type Workout = typeof workouts.$inferSelect
 export type PlannedWorkout = typeof plannedWorkouts.$inferSelect
+export type PowerBest = typeof powerBests.$inferSelect
 
 /** Insert types (id and createdAt are optional / auto-generated) */
 export type NewUser = typeof users.$inferInsert
 export type NewWorkout = typeof workouts.$inferInsert
 export type NewPlannedWorkout = typeof plannedWorkouts.$inferInsert
+export type NewPowerBest = typeof powerBests.$inferInsert

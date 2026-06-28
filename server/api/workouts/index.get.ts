@@ -24,8 +24,8 @@
  * }
  */
 
-import { eq, asc } from 'drizzle-orm'
-import { workouts, users } from '../../db/schema'
+import { eq, asc, inArray } from 'drizzle-orm'
+import { workouts, users, powerBests } from '../../db/schema'
 import { useDB } from '../../db'
 import { computeMetricsSeries, computeWeeklyStats } from '../../utils/tss'
 import { getCachedMetrics, setCachedMetrics } from '../../utils/metricsCache'
@@ -74,6 +74,7 @@ export default defineEventHandler(async (event) => {
         tss: workouts.tss,
         rpe: workouts.rpe,
         notes: workouts.notes,
+        ftpWatts: workouts.ftpWatts,
       })
       .from(workouts)
       .where(eq(workouts.userId, user.id))
@@ -113,15 +114,30 @@ export default defineEventHandler(async (event) => {
       tss: workouts.tss,
       rpe: workouts.rpe,
       notes: workouts.notes,
+      ftpWatts: workouts.ftpWatts,
     })
     .from(workouts)
     .where(eq(workouts.userId, user.id))
 
   // Filter in JS (Drizzle doesn't support `date IN (...)` on string arrays
   // without raw SQL; filtering server-side is fine for ≤ 60 rows per page)
-  const workoutByDate = new Map(
-    pageWorkouts.filter((w) => pageDateSet.has(w.date)).map((w) => [w.date, w]),
-  )
+  const filteredPageWorkouts = pageWorkouts.filter((w) => pageDateSet.has(w.date))
+  const workoutByDate = new Map(filteredPageWorkouts.map((w) => [w.date, w]))
+
+  // Fetch power bests for the workouts in this page
+  const pageWorkoutIds = filteredPageWorkouts.map((w) => w.id)
+  const pagePowerBests = pageWorkoutIds.length > 0
+    ? await db
+        .select({ workoutId: powerBests.workoutId, duration: powerBests.duration, watts: powerBests.watts })
+        .from(powerBests)
+        .where(inArray(powerBests.workoutId, pageWorkoutIds))
+    : []
+
+  const powerBestsByWorkoutId = new Map<number, { duration: string; watts: number }[]>()
+  for (const pb of pagePowerBests) {
+    if (!powerBestsByWorkoutId.has(pb.workoutId)) powerBestsByWorkoutId.set(pb.workoutId, [])
+    powerBestsByWorkoutId.get(pb.workoutId)!.push({ duration: pb.duration, watts: pb.watts })
+  }
 
   // ── Build response ─────────────────────────────────────────────────────────
 
@@ -155,6 +171,8 @@ export default defineEventHandler(async (event) => {
             tss: workout.tss,
             rpe: workout.rpe,
             notes: workout.notes,
+            ftpWatts: workout.ftpWatts,
+            powerBests: powerBestsByWorkoutId.get(workout.id) ?? [],
           }
         : null,
     }
