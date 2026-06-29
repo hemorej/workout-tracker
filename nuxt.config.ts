@@ -45,7 +45,17 @@ export default defineNuxtConfig({
      */
     app: {
         head: {
-            link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+            meta: [
+                { name: 'theme-color', content: '#fafaf9' },
+                { name: 'apple-mobile-web-app-capable', content: 'yes' },
+                { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
+                { name: 'apple-mobile-web-app-title', content: 'Sprocket' },
+            ],
+            link: [
+                { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+                { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+                { rel: 'manifest', href: '/site.webmanifest' },
+            ],
         },
     },
 
