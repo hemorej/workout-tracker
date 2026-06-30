@@ -69,4 +69,45 @@ export default defineNuxtConfig({
     typescript: {
         strict: true,
     },
+
+    /**
+     * Pre-compress public assets (gzip + brotli) at build time so the
+     * production server can serve the compressed variant directly instead
+     * of compressing on every request.
+     */
+    nitro: {
+        compressPublicAssets: {
+            gzip: true,
+            brotli: true,
+        },
+    },
+
+    /**
+     * Route-level caching. The login page has no per-user data, so it can
+     * be prerendered to a static file at build time. Everything else stays
+     * dynamic — the dashboard (/) is per-user and must not be cached.
+     */
+    routeRules: {
+        '/login': { prerender: true },
+    },
+
+    vite: {
+        build: {
+            /**
+             * Split large third-party deps into their own chunks so app code
+             * changes don't bust the cache for vendor code, and the initial
+             * JS payload can be fetched in parallel.
+             */
+            rollupOptions: {
+                output: {
+                    manualChunks: {
+                        vue: ['vue', 'vue-router'],
+                        pinia: ['pinia'],
+                    },
+                },
+            },
+            // Raise the warning threshold since @nuxt/ui's chunk is legitimately large.
+            chunkSizeWarningLimit: 1000,
+        },
+    },
 })
