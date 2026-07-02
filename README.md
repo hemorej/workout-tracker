@@ -1,4 +1,4 @@
-# WorkoutTracker
+# Sprocket
 
 A personal workout logging app built to practice the modern Nuxt 4 + Vue 3.5 + TypeScript stack.
 
@@ -24,19 +24,20 @@ Track your daily training sessions, visualise your fitness and fatigue over time
 ## Project structure
 
 ```
-workout-tracker/
+sprocket/
 ├── app/                        ← Nuxt 4 source directory
 │   ├── app.vue                 ← Root component (UApp wrapper)
 │   ├── pages/
-│   │   ├── index.vue           ← Dashboard with Log + Planning tabs (protected)
-│   │   └── login.vue           ← Login / register
+│   │   ├── index.vue           ← Dashboard with Log + Planning + History tabs (protected)
+│   │   └── login.vue           ← Login page
 │   ├── components/
 │   │   ├── MetricsSummary.vue  ← Weekly stats + CTL/TSB cards
 │   │   ├── WorkoutCard.vue     ← Single day row (workout or rest)
 │   │   ├── AddWorkoutModal.vue ← Log workout form (modal)
-│   │   └── PlanningTab.vue     ← 4-week planning grid with live projections
+│   │   ├── PlanningTab.vue     ← 4-week planning grid with live projections
+│   │   └── HistoryTab.vue      ← Aggregated history + power bests panel
 │   ├── stores/
-│   │   ├── auth.ts             ← Login, register, logout actions
+│   │   ├── auth.ts             ← Login, logout actions
 │   │   ├── workouts.ts         ← Day list, weekly stats, pagination
 │   │   └── planning.ts         ← Planned workouts + live CTL/TSB projection
 │   └── middleware/
@@ -48,22 +49,24 @@ workout-tracker/
 │   │   ├── auth/
 │   │   │   ├── login.post.ts
 │   │   │   ├── logout.post.ts
-│   │   │   └── register.post.ts
+│   │   │   └── register.post.ts    ← Currently disabled (returns 403)
 │   │   ├── workouts/
 │   │   │   ├── index.get.ts        ← Paginated list + metrics
 │   │   │   ├── index.post.ts       ← Create workout
 │   │   │   └── [id].delete.ts      ← Delete workout
-│   │   └── planned-workouts/
-│   │       ├── index.get.ts        ← 4-week plan grid + projections
-│   │       ├── index.put.ts        ← Upsert planned workout
-│   │       └── [date].delete.ts    ← Delete planned workout
+│   │   ├── planned-workouts/
+│   │   │   ├── index.get.ts        ← 4-week plan grid + projections
+│   │   │   ├── index.put.ts        ← Upsert planned workout
+│   │   │   └── [date].delete.ts    ← Delete planned workout
+│   │   └── history/
+│   │       └── index.get.ts        ← Aggregated history + power bests panel
 │   ├── db/
 │   │   ├── index.ts            ← Drizzle client (singleton pool)
 │   │   └── schema.ts           ← Table definitions + inferred types
 │   └── utils/
-│       ├── auth.ts             ← hashPassword / verifyPassword
 │       ├── tss.ts              ← CTL / ATL / TSB formula engine
-│       └── metricsCache.ts     ← In-process series cache (TTL + write invalidation)
+│       ├── metricsCache.ts     ← In-process series cache (TTL + write invalidation)
+│       └── session.d.ts        ← UserSession type augmentation for nuxt-auth-utils
 │
 ├── scripts/
 │   └── reset-password.ts       ← CLI utility to reset a user's password
@@ -81,13 +84,14 @@ workout-tracker/
 
 ### 1. Prerequisites
 
-- Node.js 20+
+- Node.js 24.x
+- pnpm 11+ (`npm install -g pnpm`)
 - PostgreSQL 15+ running locally (or a hosted instance)
 
 ### 2. Install dependencies
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### 3. Configure environment variables
@@ -130,16 +134,16 @@ CREATE USER postgres WITH SUPERUSER CREATEDB CREATEROLE LOGIN PASSWORD 'postgres
 
 ```bash
 # Generate the SQL from the schema (only needed after schema changes)
-npm run db:generate
+pnpm db:generate
 
 # Apply migrations to the database
-npm run db:migrate
+pnpm db:migrate
 ```
 
 ### 6. Start the dev server
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). You'll see the login page — create an account to get started.
@@ -178,7 +182,19 @@ UPDATE users SET initial_ctl = 44, initial_atl = 44 WHERE email = 'you@example.c
 | `tss` | integer | ≥ 0 |
 | `rpe` | integer | Optional, 1–10 |
 | `notes` | text | Optional |
+| `ftp_watts` | integer | Optional FTP recorded at time of workout |
 | `created_at` | timestamptz | Default: now() |
+
+### `power_bests`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | serial PK | Auto-increment |
+| `workout_id` | integer FK | → workouts.id (cascade delete) |
+| `duration` | text | One of the standard durations (5sec, 1min, 5min, 20min, 1h, …) |
+| `watts` | integer | Best power in watts for this duration |
+
+One row per duration per workout. Unique index on `(workout_id, duration)`.
 
 ### `planned_workouts`
 
@@ -245,7 +261,7 @@ All routes require a valid session cookie except `/api/auth/login` and `/api/aut
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/api/auth/register` | Create account + auto-login |
+| POST | `/api/auth/register` | Create account + auto-login *(currently disabled — returns 403)* |
 | POST | `/api/auth/login` | Login with email + password |
 | POST | `/api/auth/logout` | Clear session cookie |
 | GET | `/api/workouts?page=1&limit=14` | Paginated day list with metrics |
@@ -254,6 +270,7 @@ All routes require a valid session cookie except `/api/auth/login` and `/api/aut
 | GET | `/api/planned-workouts` | 4-week plan grid with projected CTL/TSB |
 | PUT | `/api/planned-workouts` | Upsert a planned workout |
 | DELETE | `/api/planned-workouts/:date` | Delete a planned workout by date |
+| GET | `/api/history?groupBy=week\|month\|year` | Aggregated history periods + power bests panel |
 
 ### GET /api/workouts response shape
 
@@ -320,7 +337,7 @@ All routes require a valid session cookie except `/api/auth/login` and `/api/aut
 Edit the email and new password at the top of `scripts/reset-password.ts`, then run:
 
 ```bash
-npm run reset-password
+pnpm reset-password
 ```
 
 ---
@@ -328,13 +345,13 @@ npm run reset-password
 ## Useful commands
 
 ```bash
-npm run dev          # Start dev server with hot reload
-npm run build        # Build for production
-npm run preview      # Preview production build locally
+pnpm dev             # Start dev server with hot reload (also starts PostgreSQL)
+pnpm build           # Build for production
+pnpm preview         # Preview production build locally
 
-npm run db:generate  # Generate migration files after schema changes
-npm run db:migrate   # Apply pending migrations
-npm run db:studio    # Open Drizzle Studio (visual DB browser at localhost:4983)
+pnpm db:generate     # Generate migration files after schema changes
+pnpm db:migrate      # Apply pending migrations
+pnpm db:studio       # Open Drizzle Studio (visual DB browser at localhost:4983)
 ```
 
 ---
@@ -361,7 +378,7 @@ This codebase is intentionally annotated to be a learning reference. A few patte
 
 **Row-level security in routes** — Every workout mutation filters by both `id` AND `userId`. This is the simplest safeguard against insecure direct object reference (IDOR) bugs.
 
-**Timing-safe login** (`server/api/auth/login.post.ts`) — bcrypt is run even when the email isn't found, so response times don't reveal whether an email address is registered.
+**Timing-safe login** (`server/api/auth/login.post.ts`) — scrypt is run even when the email isn't found, so response times don't reveal whether an email address is registered.
 
 **Server-side metrics with in-process cache** (`server/utils/tss.ts`, `server/utils/metricsCache.ts`) — CTL/ATL/TSB are computed from the full workout history and cached per user in a module-level Map. The cache is invalidated on every write (create/delete workout) and has a 5-minute TTL as a safety net to roll forward across midnight. For multi-instance deployments, replace the Map with a shared store such as Redis.
 

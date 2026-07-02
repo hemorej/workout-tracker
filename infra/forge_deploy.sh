@@ -2,9 +2,9 @@ $CREATE_RELEASE()
 
 cd $FORGE_RELEASE_DIRECTORY
 
-npm install
-npm run build
-npm run db:migrate
+/home/forge/.local/share/pnpm/bin/pnpm install --frozen-lockfile
+/home/forge/.local/share/pnpm/bin/pnpm build
+/home/forge/.local/share/pnpm/bin/pnpm db:migrate
 
 $ACTIVATE_RELEASE()
 

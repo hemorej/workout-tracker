@@ -1,31 +1,64 @@
+/**
+ * Planning store (Pinia)
+ *
+ * Manages the 4-week training plan grid:
+ *   - The list of planned days (28 days, current Monday + 3 weeks ahead)
+ *   - Current CTL and ATL from the actual training history (used as the seed)
+ *   - Projected CTL and TSB computed locally without a round-trip
+ *
+ * Actions:
+ *   fetchPlans()         — loads the plan grid from the API
+ *   savePlan(date, entry)— upserts a planned workout and recomputes projections
+ *   clearPlan(date)      — removes a planned workout and recomputes projections
+ *
+ * The local recompute (recomputeProjections) uses the same EMA formula as the
+ * server so draft TSS values update the projected numbers as the user types,
+ * before anything is saved.
+ */
+
 import { defineStore } from 'pinia'
 
+/** A single planned workout row as returned by the API */
 export interface PlanEntry {
   id?: number
   name: string | null
+  /** Training zone: 'zone2' | 'zone4' | 'zone5' | 'zone6' | 'rest' */
   type: string | null
   tss: number | null
   durationMinutes: number | null
 }
 
+/** One day in the 4-week planning grid */
 export interface PlannedDay {
+  /** ISO date string "YYYY-MM-DD" */
   date: string
+  /** True when the date is before today (historical, read-only) */
   isPast: boolean
+  /** Planned workout for this day, or null for an unplanned rest day */
   plan: PlanEntry | null
+  /** Projected Chronic Training Load after applying this day's planned TSS */
   projectedCtl: number
+  /** Projected Training Stress Balance (CTL − ATL) at the start of this day */
   projectedTsb: number
 }
 
+/** EMA decay factors — must match the server-side constants in tss.ts */
 const CTL_DECAY = 2 / 43
 const ATL_DECAY = 2 / 8
 
 export const usePlanningStore = defineStore('planning', () => {
   const plans = ref<PlannedDay[]>([])
+  /** Current CTL from the actual training history — seed for future projections */
   const currentCtl = ref(0)
+  /** Current ATL from the actual training history — seed for future projections */
   const currentAtl = ref(0)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
+  /**
+   * Loads the 4-week plan grid from GET /api/planned-workouts.
+   * Populates plans, currentCtl, and currentAtl.
+   */
   async function fetchPlans() {
     isLoading.value = true
     error.value = null
@@ -45,9 +78,14 @@ export const usePlanningStore = defineStore('planning', () => {
     }
   }
 
-  // Recomputes projected CTL/TSB for all future days in-place, without a fetch.
-  // Past days keep their historical projections; the seed CTL/ATL for future days
-  // is derived from the last past day (or currentCtl/currentAtl if none exist).
+  /**
+   * Recomputes projected CTL/TSB for all future days in-place, without a fetch.
+   * Past days keep their historical projections; the seed CTL/ATL for future days
+   * is derived from the last past day (or currentCtl/currentAtl if none exist).
+   *
+   * Called after every save/clear so the grid reflects the latest planned load
+   * immediately — no round-trip required.
+   */
   function recomputeProjections() {
     let ctl = currentCtl.value
     let atl = currentAtl.value
@@ -72,6 +110,10 @@ export const usePlanningStore = defineStore('planning', () => {
     }
   }
 
+  /**
+   * Upserts a planned workout via PUT /api/planned-workouts, then updates the
+   * affected day in-place and recomputes all future projections.
+   */
   async function savePlan(date: string, entry: PlanEntry) {
     await $fetch('/api/planned-workouts', {
       method: 'PUT',
@@ -85,6 +127,10 @@ export const usePlanningStore = defineStore('planning', () => {
     recomputeProjections()
   }
 
+  /**
+   * Deletes the planned workout for a given date via DELETE /api/planned-workouts/:date,
+   * clears the plan in-place, and recomputes all future projections.
+   */
   async function clearPlan(date: string) {
     await $fetch(`/api/planned-workouts/${date}`, { method: 'DELETE' })
     const idx = plans.value.findIndex(p => p.date === date)
