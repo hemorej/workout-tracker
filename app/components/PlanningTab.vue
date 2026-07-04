@@ -59,6 +59,14 @@ function weekTss(days: typeof planning.plans) {
   return days.reduce((sum, d) => sum + (d.plan?.tss ?? 0), 0)
 }
 
+function weekHours(days: typeof planning.plans) {
+  const mins = days.reduce((sum, d) => sum + (d.plan?.durationMinutes ?? 0), 0)
+  if (!mins) return null
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m ? `${h}h ${m}m` : `${h}h`
+}
+
 // ── Inline editing ───────────────────────────────────────────────────────────
 
 // Per-date draft state (only for dates being edited)
@@ -172,11 +180,18 @@ function tsbColor(tsb: number) {
           <span class="text-xs font-semibold uppercase tracking-widest text-stone-400">
             Week of {{ weekLabel(week.monday) }}
           </span>
-          <div class="flex items-center gap-2">
-            <span class="text-xs uppercase tracking-widest text-stone-400">TSS</span>
-            <span class="text-base font-semibold tabular text-stone-700 min-w-[2.5rem] text-right">
-              {{ weekTss(week.days) }}
-            </span>
+          <div class="flex items-center gap-4">
+            <div v-if="weekHours(week.days)" class="flex items-center gap-2">
+              <span class="text-base font-semibold tabular text-stone-700 min-w-[2.5rem] text-right">
+                {{ weekHours(week.days) }}
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs uppercase tracking-widest text-stone-400">TSS</span>
+              <span class="text-base font-semibold tabular text-stone-700 min-w-[2.5rem] text-right">
+                {{ weekTss(week.days) }}
+              </span>
+            </div>
           </div>
         </div>
 
