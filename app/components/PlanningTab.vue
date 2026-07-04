@@ -108,6 +108,7 @@ function cycleType(date: string) {
   const zones = [null, 'zone2', 'zone4', 'zone5', 'zone6', 'rest']
   const idx = zones.indexOf(draft.type)
   draft.type = zones[(idx + 1) % zones.length] ?? null
+  save(date)
 }
 
 // ── Live projections ─────────────────────────────────────────────────────────
