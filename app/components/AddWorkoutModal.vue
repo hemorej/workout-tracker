@@ -143,7 +143,7 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <form @submit.prevent="handleSubmit" class="space-y-5">
+  <form method="post" @submit.prevent="handleSubmit" class="space-y-5">
 
     <!-- Date -->
     <UFormField name="date">

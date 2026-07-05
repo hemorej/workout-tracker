@@ -115,6 +115,7 @@ async function handleRegister() {
     <!-- ── Login Form ─────────────────────────────────────────────────── -->
     <form
       v-if="activeTab === 'login'"
+      method="post"
       @submit.prevent="handleLogin"
       class="w-full max-w-xs space-y-5"
     >
@@ -156,6 +157,7 @@ async function handleRegister() {
     <!-- ── Register Form ──────────────────────────────────────────────── -->
     <form
       v-else
+      method="post"
       @submit.prevent="handleRegister"
       class="w-full max-w-xs space-y-5"
     >
