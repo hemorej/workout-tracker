@@ -27,6 +27,7 @@
 
 import { useAuthStore } from '~/stores/auth'
 import { useWorkoutsStore } from '~/stores/workouts'
+import { usePlanningStore } from '~/stores/planning'
 
 // Protect this page — unauthenticated users are sent to /login
 definePageMeta({ middleware: 'auth' })
@@ -36,7 +37,22 @@ const activeTab = ref<'log' | 'planning' | 'history'>('log')
 
 const auth = useAuthStore()
 const workouts = useWorkoutsStore()
+const planning = usePlanningStore()
 const toast = useToast()
+
+// Today's date as YYYY-MM-DD (local time, matches DayEntry.date format)
+const todayStr = computed(() => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})
+
+// Today's planned day entry (null if nothing planned or plan is a rest day)
+// Pass the full PlannedDay so WorkoutCard can use projected CTL/TSB values
+const todayPlan = computed(() => {
+  const entry = planning.plans.find(p => p.date === todayStr.value)
+  if (!entry?.plan || entry.plan.type === 'rest') return null
+  return entry
+})
 
 // ── Add-workout modal ────────────────────────────────────────────────────
 // UModal lives here (same component that owns the open state) — this matches
@@ -56,6 +72,7 @@ function closeAddWorkout() {
 
 onMounted(() => {
   workouts.fetchPage(1)
+  planning.fetchPlans()
 })
 
 // ── Actions ──────────────────────────────────────────────────────────────
@@ -200,6 +217,7 @@ async function onPageChange(page: number) {
           v-for="day in workouts.days"
           :key="day.date"
           :day="day"
+          :planned-workout="day.date === todayStr ? todayPlan : null"
           @delete="onDeleteWorkout"
         />
       </div>

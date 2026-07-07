@@ -18,9 +18,11 @@
  */
 
 import type { DayEntry } from '~/stores/workouts'
+import type { PlannedDay } from '~/stores/planning'
 
 interface Props {
   day: DayEntry
+  plannedWorkout?: PlannedDay | null
 }
 
 const props = defineProps<Props>()
@@ -80,13 +82,37 @@ const hasLongNotes = computed(
   () => (props.day.workout?.notes ?? '').length > NOTES_PREVIEW_LENGTH,
 )
 
+// ── Planned workout state ────────────────────────────────────────────────
+const plannedPlan = computed(() => props.plannedWorkout?.plan ?? null)
+const isPlannedDay = computed(() => props.day.isRestDay && !!plannedPlan.value)
+
+const plannedDurationDisplay = computed(() => {
+  const mins = plannedPlan.value?.durationMinutes ?? 0
+  if (!mins) return null
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+})
+
+// When showing a planned workout, use the projected CTL/ATL/TSB from the planning store
+const displayMetrics = computed(() => {
+  if (isPlannedDay.value && props.plannedWorkout) {
+    const ctl = props.plannedWorkout.projectedCtl
+    const tsb = props.plannedWorkout.projectedTsb
+    return { ctl, atl: Math.round((ctl - tsb) * 10) / 10, tsb }
+  }
+  return props.day.metrics
+})
+
 // ── Power data indicators ────────────────────────────────────────────────
 const hasFtp = computed(() => !!props.day.workout?.ftpWatts)
 const hasPowerBests = computed(() => (props.day.workout?.powerBests?.length ?? 0) > 0)
 
 // ── TSB colouring — muted, in line with the stone palette ───────────────
 const tsbColor = computed(() => {
-  const tsb = props.day.metrics.tsb
+  const tsb = displayMetrics.value.tsb
   if (tsb > 10)  return 'text-emerald-500'
   if (tsb > -10) return 'text-stone-500'
   if (tsb > -30) return 'text-amber-500'
@@ -94,7 +120,7 @@ const tsbColor = computed(() => {
 })
 
 const tsbDisplay = computed(() => {
-  const v = props.day.metrics.tsb
+  const v = displayMetrics.value.tsb
   return v >= 0 ? `+${v.toFixed(1)}` : v.toFixed(1)
 })
 
@@ -123,12 +149,16 @@ function confirmDelete() {
   -->
   <div
     class="relative flex items-start gap-5 px-6 py-4 group transition-colors hover:bg-stone-50"
-    :class="day.isRestDay ? 'opacity-50' : ''"
+    :class="day.isRestDay && !isPlannedDay ? 'opacity-50' : ''"
   >
-    <!-- Left accent line — only on workout days -->
+    <!-- Left accent line — orange for logged workouts, violet for planned -->
     <div
       v-if="!day.isRestDay"
       class="absolute left-0 top-3 bottom-3 w-1 bg-orange-500 rounded-full"
+    />
+    <div
+      v-else-if="isPlannedDay"
+      class="absolute left-0 top-3 bottom-3 w-1 bg-violet-400 rounded-full opacity-70"
     />
 
     <!-- Date column — fixed width, right-aligned -->
@@ -141,9 +171,28 @@ function confirmDelete() {
     <div class="flex-1 min-w-0">
 
       <!-- Rest day -->
-      <p v-if="day.isRestDay" class="text-sm text-stone-400 italic pt-0.5">
+      <p v-if="day.isRestDay && !isPlannedDay" class="text-sm text-stone-400 italic pt-0.5">
         Rest
       </p>
+
+      <!-- Planned workout (today, not yet logged) -->
+      <div v-else-if="isPlannedDay">
+        <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+          <span class="text-base font-medium text-stone-500 italic truncate max-w-xs">
+            {{ plannedPlan?.name || 'Planned workout' }}
+          </span>
+          <span v-if="plannedDurationDisplay" class="text-sm text-stone-400">{{ plannedDurationDisplay }}</span>
+          <span
+            v-if="plannedPlan?.tss"
+            class="text-xs text-violet-600 font-semibold bg-violet-50 rounded-full px-2.5 py-0.5"
+          >
+            {{ plannedPlan.tss }} TSS
+          </span>
+          <span class="text-xs text-violet-500 font-medium bg-violet-50 rounded-full px-2.5 py-0.5 border border-violet-200">
+            Planned
+          </span>
+        </div>
+      </div>
 
       <!-- Workout day -->
       <div v-else>
@@ -204,14 +253,14 @@ function confirmDelete() {
 
       <!-- Metrics row — CTL / ATL / TSB — shown for every day -->
       <div class="flex gap-4 mt-1.5 text-xs text-stone-300 tabular">
-        <span>CTL <span class="text-stone-500">{{ day.metrics.ctl.toFixed(1) }}</span></span>
-        <span>ATL <span class="text-stone-500">{{ day.metrics.atl.toFixed(1) }}</span></span>
+        <span>CTL <span class="text-stone-500">{{ displayMetrics.ctl.toFixed(1) }}</span></span>
+        <span>ATL <span class="text-stone-500">{{ displayMetrics.atl.toFixed(1) }}</span></span>
         <span>TSB <span :class="tsbColor">{{ tsbDisplay }}</span></span>
       </div>
     </div>
 
-    <!-- Delete button — appears on hover only -->
-    <div v-if="!day.isRestDay" class="shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity">
+    <!-- Delete button — appears on hover only, not for rest or planned days -->
+    <div v-if="!day.isRestDay && !isPlannedDay" class="shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity">
       <div v-if="!showDeleteConfirm">
         <button
           class="text-xs text-stone-300 hover:text-rose-400 transition-colors"
