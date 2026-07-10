@@ -237,6 +237,7 @@ function tsbColor(tsb: number) {
               <input
                 v-model.number="getDraft(day.date).tss"
                 type="number"
+                inputmode="numeric"
                 min="0"
                 max="999"
                 placeholder="—"
@@ -253,6 +254,7 @@ function tsbColor(tsb: number) {
               <input
                 v-model.number="getDraft(day.date).durationMinutes"
                 type="number"
+                inputmode="numeric"
                 min="0"
                 max="999"
                 placeholder="—"

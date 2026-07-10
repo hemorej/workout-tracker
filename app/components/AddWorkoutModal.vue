@@ -174,7 +174,7 @@ async function handleSubmit() {
         </template>
         <UInput
           v-model.number="form.durationMinutes"
-          type="number" min="1" step="1" placeholder="60"
+          type="number" inputmode="numeric" min="1" step="1" placeholder="60"
           required class="w-full"
         />
       </UFormField>
@@ -185,7 +185,7 @@ async function handleSubmit() {
         </template>
         <UInput
           v-model.number="form.tss"
-          type="number" min="0" step="1" placeholder="75"
+          type="number" inputmode="numeric" min="0" step="1" placeholder="75"
           required class="w-full"
         />
       </UFormField>
@@ -200,6 +200,7 @@ async function handleSubmit() {
         <UInput
           v-model.number="form.rpe"
           type="number"
+          inputmode="numeric"
           min="1"
           max="10"
           step="1"
@@ -251,6 +252,7 @@ async function handleSubmit() {
           <UInput
             v-model.number="ftpWatts"
             type="number"
+            inputmode="numeric"
             min="1"
             step="1"
             placeholder="e.g. 280"
@@ -276,6 +278,7 @@ async function handleSubmit() {
               <UInput
                 v-model.number="row.watts"
                 type="number"
+                inputmode="numeric"
                 min="1"
                 step="1"
                 placeholder="watts"
