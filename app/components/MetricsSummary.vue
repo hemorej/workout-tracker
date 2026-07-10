@@ -21,9 +21,15 @@ interface Props {
   todayCTL: number
   todayATL: number
   todayTSB: number
+  yesterdayCTL?: number | null
+  yesterdayTSB?: number | null
 }
 
 const props = defineProps<Props>()
+
+/** Trend arrows (CTL/TSB vs. yesterday) shown next to the big numbers */
+const ctlTrend = computed(() => trendArrow(props.todayCTL, props.yesterdayCTL))
+const tsbTrend = computed(() => trendArrow(props.todayTSB, props.yesterdayTSB))
 
 /**
  * Maps TSB to a form zone label + text colour class.
@@ -69,7 +75,7 @@ const tsbDisplay = computed(() =>
 
     <!-- Weekly TSS -->
     <div class="px-6 py-5 text-center">
-      <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-2">
+      <p class="text-xs font-semibold uppercase tracking-widest text-stone-500 mb-2">
         Weekly TSS
       </p>
       <p class="text-4xl font-semibold text-stone-900 tabular">
@@ -79,7 +85,7 @@ const tsbDisplay = computed(() =>
 
     <!-- Weekly Hours -->
     <div class="px-6 py-5 text-center">
-      <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-2">
+      <p class="text-xs font-semibold uppercase tracking-widest text-stone-500 mb-2">
         Hours
       </p>
       <p class="text-4xl font-semibold text-stone-900 tabular">
@@ -89,22 +95,24 @@ const tsbDisplay = computed(() =>
 
     <!-- CTL (Fitness) -->
     <div class="px-6 py-5 text-center border-t md:border-t-0 border-stone-100">
-      <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-2">
+      <p class="text-xs font-semibold uppercase tracking-widest text-stone-500 mb-2">
         CTL
       </p>
       <p class="text-4xl font-semibold text-stone-900 tabular">
         {{ todayCTL.toFixed(1) }}
+        <span v-if="ctlTrend" class="text-[15px] align-middle" :class="ctlTrend.colorClass">{{ ctlTrend.symbol }}</span>
       </p>
-      <p class="text-xs text-stone-300 mt-1">Fitness</p>
+      <p class="text-xs text-stone-500 mt-1">Fitness</p>
     </div>
 
     <!-- TSB (Form) -->
     <div class="px-6 py-5 text-center border-t md:border-t-0 border-stone-100">
-      <p class="text-xs font-semibold uppercase tracking-widest text-stone-400 mb-2">
+      <p class="text-xs font-semibold uppercase tracking-widest text-stone-500 mb-2">
         TSB
       </p>
       <p class="text-4xl font-semibold tabular" :class="tsbNumberColor">
         {{ tsbDisplay }}
+        <span v-if="tsbTrend" class="text-[15px] align-middle" :class="tsbTrend.colorClass">{{ tsbTrend.symbol }}</span>
       </p>
       <!-- Subtle form zone label — no heavy badge, just small text -->
       <p class="text-xs mt-1" :class="formZone.textColor">

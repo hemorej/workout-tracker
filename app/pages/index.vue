@@ -169,6 +169,8 @@ async function onPageChange(page: number) {
         :today-c-t-l="workouts.todayMetrics.ctl"
         :today-a-t-l="workouts.todayMetrics.atl"
         :today-t-s-b="workouts.todayMetrics.tsb"
+        :yesterday-c-t-l="workouts.yesterdayMetrics?.ctl"
+        :yesterday-t-s-b="workouts.yesterdayMetrics?.tsb"
       />
 
       <!-- Section header + Add button -->
@@ -212,11 +214,12 @@ async function onPageChange(page: number) {
       </div>
 
       <!-- ── Day list — rendered as a seamless list, not individual cards ── -->
-      <div v-else class="bg-white rounded-xl border border-stone-100 overflow-hidden divide-y divide-stone-50">
+      <div v-else class="bg-white rounded-xl border border-stone-100 overflow-hidden divide-y divide-[#f7f5f3]">
         <WorkoutCard
-          v-for="day in workouts.days"
+          v-for="(day, index) in workouts.days"
           :key="day.date"
           :day="day"
+          :prev-metrics="workouts.days[index + 1]?.metrics ?? null"
           :planned-workout="day.date === todayStr ? todayPlan : null"
           @delete="onDeleteWorkout"
         />

@@ -20,6 +20,7 @@
  *   days: DayEntry[]          — paginated, newest first
  *   weeklyStats: { tssTotal, hoursTotal }
  *   todayMetrics: { ctl, atl, tsb }
+ *   yesterdayMetrics: { ctl, atl, tsb } | null
  *   pagination: { page, limit, totalDays, totalPages }
  * }
  */
@@ -153,6 +154,15 @@ export default defineEventHandler(async (event) => {
       }
     : { ctl: 0, atl: 0, tsb: 0 }
 
+  // Yesterday's metrics — powers the trend arrows on the summary cards
+  const yesterdayMetrics = series.at(-2)
+    ? {
+        ctl: series.at(-2)!.ctl,
+        atl: series.at(-2)!.atl,
+        tsb: series.at(-2)!.tsb,
+      }
+    : null
+
   const days = pageSlice.map((day) => {
     const workout = workoutByDate.get(day.date)
     return {
@@ -182,6 +192,7 @@ export default defineEventHandler(async (event) => {
     days,
     weeklyStats,
     todayMetrics,
+    yesterdayMetrics,
     pagination: {
       page,
       limit,

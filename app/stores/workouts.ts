@@ -77,6 +77,7 @@ export const useWorkoutsStore = defineStore('workouts', () => {
   const days = ref<DayEntry[]>([])
   const weeklyStats = ref<WeeklyStats>({ tssTotal: 0, hoursTotal: 0 })
   const todayMetrics = ref<DayMetrics>({ ctl: 0, atl: 0, tsb: 0 })
+  const yesterdayMetrics = ref<DayMetrics | null>(null)
   const pagination = ref<Pagination>({ page: 1, limit: 14, totalDays: 0, totalPages: 0 })
   const isLoading = ref(false)
   const error = ref<string | null>(null)
@@ -98,12 +99,14 @@ export const useWorkoutsStore = defineStore('workouts', () => {
         days: DayEntry[]
         weeklyStats: WeeklyStats
         todayMetrics: DayMetrics
+        yesterdayMetrics: DayMetrics | null
         pagination: Pagination
       }
 
       days.value = data.days
       weeklyStats.value = data.weeklyStats
       todayMetrics.value = data.todayMetrics
+      yesterdayMetrics.value = data.yesterdayMetrics
       pagination.value = data.pagination
     }
     catch (err: unknown) {
@@ -150,6 +153,7 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     days,
     weeklyStats,
     todayMetrics,
+    yesterdayMetrics,
     pagination,
     isLoading,
     error,

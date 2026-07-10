@@ -17,12 +17,14 @@
  *   delete — when the user confirms deletion (parent calls the store)
  */
 
-import type { DayEntry } from '~/stores/workouts'
+import type { DayEntry, DayMetrics } from '~/stores/workouts'
 import type { PlannedDay } from '~/stores/planning'
 
 interface Props {
   day: DayEntry
   plannedWorkout?: PlannedDay | null
+  /** Previous chronological day's metrics, used to compute trend arrows */
+  prevMetrics?: DayMetrics | null
 }
 
 const props = defineProps<Props>()
@@ -113,16 +115,21 @@ const hasPowerBests = computed(() => (props.day.workout?.powerBests?.length ?? 0
 // ── TSB colouring — muted, in line with the stone palette ───────────────
 const tsbColor = computed(() => {
   const tsb = displayMetrics.value.tsb
-  if (tsb > 10)  return 'text-emerald-500'
-  if (tsb > -10) return 'text-stone-500'
-  if (tsb > -30) return 'text-amber-500'
-  return 'text-rose-400'
+  if (tsb > 10)  return 'text-emerald-600'
+  if (tsb > -10) return 'text-stone-600'
+  if (tsb > -30) return 'text-amber-600'
+  return 'text-rose-500'
 })
 
 const tsbDisplay = computed(() => {
   const v = displayMetrics.value.tsb
   return v >= 0 ? `+${v.toFixed(1)}` : v.toFixed(1)
 })
+
+// ── Trend arrows — CTL/ATL/TSB direction vs. the previous entry ─────────
+const ctlTrend = computed(() => trendArrow(displayMetrics.value.ctl, props.prevMetrics?.ctl))
+const atlTrend = computed(() => trendArrow(displayMetrics.value.atl, props.prevMetrics?.atl))
+const tsbTrend = computed(() => trendArrow(displayMetrics.value.tsb, props.prevMetrics?.tsb))
 
 // ── Delete confirmation ──────────────────────────────────────────────────
 const showDeleteConfirm = ref(false)
@@ -141,34 +148,39 @@ function confirmDelete() {
 
 <template>
   <!--
-    Each day is a flat list row, not a card.
-    Workout rows have a 2px left accent line in sky-200.
+    Each day is a fixed-column grid row, not a card:
+      84px date | flexible title/metrics | 260px badge group
+    The badge group is a single right-aligned flex row (PR, TSS, RPE) with a
+    small fixed gap between pills, so they sit snug against each other while
+    the group's right edge stays pinned to the same x-position on every row.
+    Workout rows have a 2px left accent line in orange-600.
     Rest days are visually quieter — no accent, lighter text.
     The parent (index.vue) wraps all rows in a single white container
     with divide-y so the borders render between rows, not around each one.
   -->
   <div
-    class="relative flex items-start gap-5 px-6 py-4 group transition-colors hover:bg-stone-50"
+    class="relative grid items-start gap-x-5 px-6 py-[18px] group transition-colors hover:bg-stone-50"
+    style="grid-template-columns: 84px minmax(160px,1fr) 260px;"
     :class="day.isRestDay && !isPlannedDay ? 'opacity-50' : ''"
   >
     <!-- Left accent line — orange for logged workouts, violet for planned -->
     <div
       v-if="!day.isRestDay"
-      class="absolute left-0 top-3 bottom-3 w-1 bg-orange-500 rounded-full"
+      class="absolute left-0 top-3 bottom-3 w-1 bg-orange-600 rounded-full"
     />
     <div
       v-else-if="isPlannedDay"
       class="absolute left-0 top-3 bottom-3 w-1 bg-violet-400 rounded-full opacity-70"
     />
 
-    <!-- Date column — fixed width, right-aligned -->
-    <div class="w-20 shrink-0 text-right pt-0.5">
+    <!-- Column 1: date — fixed width, right-aligned -->
+    <div class="text-right pt-0.5">
       <p class="text-sm font-semibold text-stone-600">{{ formattedDate }}</p>
-      <p class="text-xs text-stone-300 mt-0.5">{{ isoDate }}</p>
+      <p class="text-xs text-stone-500 mt-0.5">{{ isoDate }}</p>
     </div>
 
-    <!-- Main content -->
-    <div class="flex-1 min-w-0">
+    <!-- Column 2: title/duration + notes + metrics — absorbs variable-length text -->
+    <div class="min-w-0">
 
       <!-- Rest day -->
       <p v-if="day.isRestDay && !isPlannedDay" class="text-sm text-stone-400 italic pt-0.5">
@@ -182,15 +194,6 @@ function confirmDelete() {
             {{ plannedPlan?.name || 'Planned workout' }}
           </span>
           <span v-if="plannedDurationDisplay" class="text-sm text-stone-400">{{ plannedDurationDisplay }}</span>
-          <span
-            v-if="plannedPlan?.tss"
-            class="text-xs text-violet-600 font-semibold bg-violet-50 rounded-full px-2.5 py-0.5"
-          >
-            {{ plannedPlan.tss }} TSS
-          </span>
-          <span class="text-xs text-violet-500 font-medium bg-violet-50 rounded-full px-2.5 py-0.5 border border-violet-200">
-            Planned
-          </span>
         </div>
       </div>
 
@@ -202,16 +205,6 @@ function confirmDelete() {
             {{ day.workout?.name }}
           </span>
           <span class="text-sm text-stone-400">{{ durationDisplay }}</span>
-          <!-- Inline pill tags — plain spans, no UBadge -->
-          <span class="text-xs text-sky-600 font-semibold bg-sky-50 rounded-full px-2.5 py-0.5">
-            {{ day.workout?.tss }} TSS
-          </span>
-          <span
-            v-if="day.workout?.rpe"
-            class="text-xs text-stone-500 font-semibold bg-stone-100 rounded-full px-2.5 py-0.5"
-          >
-            RPE {{ day.workout?.rpe }}/10
-          </span>
           <!-- FTP update indicator -->
           <span
             v-if="hasFtp"
@@ -222,17 +215,6 @@ function confirmDelete() {
               <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
             {{ day.workout?.ftpWatts }}W FTP
-          </span>
-          <!-- Power bests indicator -->
-          <span
-            v-if="hasPowerBests"
-            class="inline-flex items-center gap-1 text-xs text-amber-600 font-semibold bg-amber-50 rounded-full px-2.5 py-0.5"
-            :title="`${day.workout?.powerBests?.length} power best${(day.workout?.powerBests?.length ?? 0) > 1 ? 's' : ''} recorded`"
-          >
-            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
-            {{ day.workout?.powerBests?.length }} PR{{ (day.workout?.powerBests?.length ?? 0) > 1 ? 's' : '' }}
           </span>
         </div>
 
@@ -251,33 +233,76 @@ function confirmDelete() {
         </div>
       </div>
 
-      <!-- Metrics row — CTL / ATL / TSB — shown for every day -->
-      <div class="flex gap-4 mt-1.5 text-xs text-stone-300 tabular">
-        <span>CTL <span class="text-stone-500">{{ displayMetrics.ctl.toFixed(1) }}</span></span>
-        <span>ATL <span class="text-stone-500">{{ displayMetrics.atl.toFixed(1) }}</span></span>
-        <span>TSB <span :class="tsbColor">{{ tsbDisplay }}</span></span>
+      <!-- Metrics row — CTL / ATL / TSB with trend arrows, shown for every day -->
+      <div class="flex gap-4 mt-1.5 text-xs text-stone-500 tabular">
+        <span>
+          CTL <span class="font-semibold text-stone-700">{{ displayMetrics.ctl.toFixed(1) }}</span
+          ><span v-if="ctlTrend" class="ml-0.5 text-[10px]" :class="ctlTrend.colorClass">{{ ctlTrend.symbol }}</span>
+        </span>
+        <span>
+          ATL <span class="font-semibold text-stone-700">{{ displayMetrics.atl.toFixed(1) }}</span
+          ><span v-if="atlTrend" class="ml-0.5 text-[10px]" :class="atlTrend.colorClass">{{ atlTrend.symbol }}</span>
+        </span>
+        <span>
+          TSB <span :class="tsbColor">{{ tsbDisplay }}</span
+          ><span v-if="tsbTrend" class="ml-0.5 text-[10px]" :class="tsbTrend.colorClass">{{ tsbTrend.symbol }}</span>
+        </span>
       </div>
     </div>
 
-    <!-- Delete button — appears on hover only, not for rest or planned days -->
-    <div v-if="!day.isRestDay && !isPlannedDay" class="shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity">
-      <div v-if="!showDeleteConfirm">
-        <button
-          class="text-xs text-stone-300 hover:text-rose-400 transition-colors"
-          aria-label="Delete workout"
-          @click="requestDelete"
+    <!-- Column 3: badge group — PR, TSS, RPE sit snug together, right-aligned -->
+    <div class="flex flex-col items-end gap-1 pt-0.5">
+      <div class="flex items-center gap-1">
+        <span
+          v-if="hasPowerBests"
+          class="inline-flex items-center gap-1 text-xs text-amber-600 font-semibold bg-amber-50 rounded-full px-2.5 py-0.5"
+          :title="`${day.workout?.powerBests?.length} power best${(day.workout?.powerBests?.length ?? 0) > 1 ? 's' : ''} recorded`"
         >
-          Delete
-        </button>
+          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+          </svg>
+          {{ day.workout?.powerBests?.length }} PR{{ (day.workout?.powerBests?.length ?? 0) > 1 ? 's' : '' }}
+        </span>
+        <span
+          v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
+          class="inline-block text-xs text-sky-600 font-semibold bg-sky-50 rounded-full px-2.5 py-0.5"
+        >
+          {{ isPlannedDay ? plannedPlan?.tss : day.workout?.tss }} TSS
+        </span>
+        <span
+          v-if="day.workout?.rpe"
+          class="inline-block text-xs text-stone-500 font-semibold bg-stone-100 rounded-full px-2.5 py-0.5"
+        >
+          RPE {{ day.workout?.rpe }}/10
+        </span>
+        <span
+          v-else-if="isPlannedDay"
+          class="inline-block text-xs text-violet-500 font-medium bg-violet-50 rounded-full px-2.5 py-0.5 border border-violet-200"
+        >
+          Planned
+        </span>
       </div>
-      <!-- Inline confirmation -->
-      <div v-else class="flex items-center gap-2">
-        <button class="text-xs text-rose-400 hover:text-rose-600 font-medium" @click="confirmDelete">
-          Confirm
-        </button>
-        <button class="text-xs text-stone-300 hover:text-stone-500" @click="showDeleteConfirm = false">
-          Cancel
-        </button>
+
+      <!-- Delete control — appears on hover only, not for rest or planned days -->
+      <div v-if="!day.isRestDay && !isPlannedDay" class="opacity-0 group-hover:opacity-100 transition-opacity">
+        <div v-if="!showDeleteConfirm">
+          <button
+            class="text-xs text-stone-300 hover:text-rose-400 transition-colors"
+            aria-label="Delete workout"
+            @click="requestDelete"
+          >
+            Delete
+          </button>
+        </div>
+        <!-- Inline confirmation -->
+        <div v-else class="flex items-center gap-2">
+          <button class="text-xs text-rose-400 hover:text-rose-600 font-medium" @click="confirmDelete">
+            Confirm
+          </button>
+          <button class="text-xs text-stone-300 hover:text-stone-500" @click="showDeleteConfirm = false">
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
 
