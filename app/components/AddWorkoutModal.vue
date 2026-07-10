@@ -170,7 +170,7 @@ async function handleSubmit() {
     <div class="grid grid-cols-3 gap-4">
       <UFormField name="durationMinutes">
         <template #label>
-          <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide">Duration (min)</span>
+          <span class="text-xs font-semibold text-stone-500 uppercase tracking-tight sm:tracking-wide">Duration (min)</span>
         </template>
         <UInput
           v-model.number="form.durationMinutes"
@@ -181,7 +181,7 @@ async function handleSubmit() {
 
       <UFormField name="tss">
         <template #label>
-          <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide">TSS</span>
+          <span class="text-xs font-semibold text-stone-500 uppercase tracking-tight sm:tracking-wide">TSS</span>
         </template>
         <UInput
           v-model.number="form.tss"
@@ -193,7 +193,7 @@ async function handleSubmit() {
       <!-- RPE (optional) — number input avoids dropdown z-index issues in modals -->
       <UFormField name="rpe">
         <template #label>
-          <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide whitespace-nowrap">
+          <span class="text-xs font-semibold text-stone-500 uppercase tracking-tight sm:tracking-wide whitespace-nowrap">
             RPE <span class="normal-case font-normal text-stone-300">1–10</span>
           </span>
         </template>
