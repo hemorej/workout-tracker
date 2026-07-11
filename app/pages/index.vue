@@ -33,7 +33,14 @@ import { usePlanningStore } from '~/stores/planning'
 definePageMeta({ middleware: 'auth' })
 
 // ── Tab navigation ────────────────────────────────────────────────────────
-const activeTab = ref<'log' | 'planning' | 'history'>('log')
+const activeTab = ref<'log' | 'planning' | 'builder' | 'history'>('log')
+
+const tabs = [
+  { id: 'log', label: 'Training log' },
+  { id: 'planning', label: 'Planning' },
+  { id: 'builder', label: 'Workout builder' },
+  { id: 'history', label: 'History' },
+] as const
 
 const auth = useAuthStore()
 const workouts = useWorkoutsStore()
@@ -127,34 +134,36 @@ async function onPageChange(page: number) {
       </div>
     </header>
 
-    <!-- ── Tab navigation ────────────────────────────────────────────── -->
-    <div class="bg-white border-b border-stone-100">
-      <div class="max-w-3xl mx-auto px-6 py-3">
-        <div class="inline-flex gap-1 rounded-xl bg-stone-100 p-1">
-          <button
-            v-for="tab in [
-              { id: 'log', label: 'Training log' },
-              { id: 'planning', label: 'Planning' },
-              { id: 'history', label: 'History' },
-            ]"
-            :key="tab.id"
-            class="rounded-lg px-5 py-2 text-sm transition-colors"
-            :class="activeTab === tab.id
-              ? 'bg-white font-semibold text-stone-900 shadow-sm'
-              : 'font-medium text-stone-500 hover:text-stone-700'"
-            @click="activeTab = (tab.id as 'log' | 'planning' | 'history')"
-          >
-            {{ tab.label }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- ── Tab navigation — full-width justified 4-up bar ──────────────── -->
+    <nav class="grid grid-cols-4 bg-white border-b border-stone-100">
+      <button
+        v-for="(tab, i) in tabs"
+        :key="tab.id"
+        class="px-2 py-3.5 text-center text-[15px] border-b-[3px] transition-colors"
+        :class="[
+          i > 0 ? 'border-l border-l-[#f5f4f2]' : '',
+          activeTab === tab.id
+            ? 'font-bold text-stone-900 border-b-orange-600'
+            : 'font-medium text-stone-500 border-b-transparent hover:text-stone-700',
+        ]"
+        @click="activeTab = tab.id"
+      >
+        {{ tab.label }}
+      </button>
+    </nav>
 
     <!-- ── Main content ────────────────────────────────────────────── -->
     <main class="max-w-3xl mx-auto px-6 py-10 space-y-10">
 
       <!-- ── Planning tab ────────────────────────────────────────── -->
       <PlanningTab v-if="activeTab === 'planning'" />
+
+      <!-- ── Workout builder tab ──────────────────────────────────── -->
+      <!-- Nav entry only per design handoff; page content is out of scope. -->
+      <div v-if="activeTab === 'builder'" class="text-center py-20">
+        <p class="text-stone-300 text-4xl mb-4">○</p>
+        <p class="text-sm font-medium text-stone-500">Workout builder is coming soon</p>
+      </div>
 
       <!-- ── History tab ────────────────────────────────────────── -->
       <HistoryTab v-if="activeTab === 'history'" />
