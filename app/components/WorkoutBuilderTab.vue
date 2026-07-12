@@ -613,11 +613,13 @@ function download() {
     </div>
 
     <!-- ── Toolbar + download — same narrow width as row 1, same row ──── -->
-    <div class="max-w-3xl mx-auto flex items-center justify-between gap-4 flex-wrap">
-      <div class="flex flex-wrap items-center gap-2">
+    <!-- Download is icon-only so the row fits without wrapping or scrolling;
+         its right edge lines up with the FTP stat card above. -->
+    <div class="max-w-3xl mx-auto flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-2 min-w-0">
         <button
           title="Warm up"
-          class="inline-flex items-center justify-center cursor-pointer"
+          class="inline-flex items-center justify-center cursor-pointer shrink-0"
           style="width: 38px; height: 34px; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px;"
           @click="addBlock('warmup')"
         >
@@ -625,7 +627,7 @@ function download() {
         </button>
         <button
           title="Cool down"
-          class="inline-flex items-center justify-center cursor-pointer"
+          class="inline-flex items-center justify-center cursor-pointer shrink-0"
           style="width: 38px; height: 34px; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px;"
           @click="addBlock('cooldown')"
         >
@@ -633,7 +635,7 @@ function download() {
         </button>
         <button
           title="Interval"
-          class="inline-flex items-center justify-center cursor-pointer"
+          class="inline-flex items-center justify-center cursor-pointer shrink-0"
           style="width: 38px; height: 34px; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px;"
           @click="addBlock('interval')"
         >
@@ -651,7 +653,7 @@ function download() {
           v-for="z in ZONES"
           :key="z.label"
           :title="`${z.label} · ${z.name} · ${z.range}`"
-          class="inline-flex items-center cursor-pointer"
+          class="inline-flex items-center cursor-pointer shrink-0"
           style="gap: 7px; font: 600 13px 'Hanken Grotesk'; color: #57534e; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px; padding: 8px 14px 8px 10px;"
           @click="addSteady(z.midpoint)"
         >
@@ -663,7 +665,7 @@ function download() {
 
         <button
           title="Clear workout"
-          class="inline-flex items-center justify-center cursor-pointer"
+          class="inline-flex items-center justify-center cursor-pointer shrink-0"
           style="width: 38px; height: 34px; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px; color: #a8a29e;"
           @click="clearWorkout"
         >
@@ -675,23 +677,29 @@ function download() {
         </button>
       </div>
 
-      <!-- Download -->
+      <!-- Download — icon-only, bigger than the toolbar buttons for prominence -->
       <button
+        title="Download .zwo"
+        aria-label="Download .zwo"
         :disabled="blocks.length === 0"
-        class="inline-flex items-center gap-2 text-white"
+        class="inline-flex items-center justify-center shrink-0 ml-auto"
         :class="blocks.length === 0 ? 'cursor-not-allowed' : 'cursor-pointer'"
         :style="{
-          font: '700 14px \'Hanken Grotesk\'',
+          width: '46px',
+          height: '46px',
           background: '#EA580C',
           border: 'none',
-          borderRadius: '10px',
-          padding: '11px 20px',
+          borderRadius: '50%',
           boxShadow: blocks.length === 0 ? 'none' : '0 3px 10px rgba(234,88,12,.28)',
           opacity: blocks.length === 0 ? 0.4 : 1,
         }"
         @click="download"
       >
-        ⬇ Download .zwo
+        <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 3 V13" />
+          <path d="M6 9 L10 13 L14 9" />
+          <path d="M4 16.5 H16" />
+        </svg>
       </button>
     </div>
   </div>
