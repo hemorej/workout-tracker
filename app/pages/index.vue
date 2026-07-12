@@ -181,44 +181,47 @@ async function onPageChange(page: number) {
   <div class="min-h-screen" style="background-color: #fafaf9;">
     <title>Sprocket</title>
 
-    <!-- ── Header — minimal, borderless top bar ───────────────────── -->
-    <header class="bg-white border-b border-stone-100 sticky top-0 z-10">
-      <div class="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
-        <span class="flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-stone-900">
-          <BikeLogo :size="26" class="shrink-0 text-orange-600" />
-          Sprocket
-        </span>
-        <div class="flex items-center gap-4">
-          <span class="text-sm text-stone-500 hidden sm:inline">
-            {{ auth.user?.username }}
+    <!-- ── Header + tab nav — pinned together to the top on scroll ──── -->
+    <div class="sticky top-0 z-10">
+      <!-- Header — minimal, borderless top bar -->
+      <header class="bg-white border-b border-stone-100">
+        <div class="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
+          <span class="flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-stone-900">
+            <BikeLogo :size="26" class="shrink-0 text-orange-600" />
+            Sprocket
           </span>
-          <button
-            class="text-sm text-stone-400 hover:text-stone-700 transition-colors"
-            @click="auth.logout"
-          >
-            Sign out
-          </button>
+          <div class="flex items-center gap-4">
+            <span class="text-sm text-stone-500 hidden sm:inline">
+              {{ auth.user?.username }}
+            </span>
+            <button
+              class="text-sm text-stone-400 hover:text-stone-700 transition-colors"
+              @click="auth.logout"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <!-- ── Tab navigation — full-width justified 4-up bar ──────────────── -->
-    <nav class="grid grid-cols-4 bg-white border-b border-stone-100">
-      <button
-        v-for="(tab, i) in tabs"
-        :key="tab.id"
-        class="px-2 py-3.5 text-center text-[15px] border-b-[3px] transition-colors"
-        :class="[
-          i > 0 ? 'border-l border-l-[#f5f4f2]' : '',
-          activeTab === tab.id
-            ? 'font-bold text-stone-900 border-b-orange-600'
-            : 'font-medium text-stone-500 border-b-transparent hover:text-stone-700',
-        ]"
-        @click="activeTab = tab.id"
-      >
-        {{ tab.label }}
-      </button>
-    </nav>
+      <!-- Tab navigation — full-width justified 4-up bar -->
+      <nav class="grid grid-cols-4 bg-white border-b border-stone-100">
+        <button
+          v-for="(tab, i) in tabs"
+          :key="tab.id"
+          class="px-2 py-3.5 text-center text-[15px] border-b-[3px] transition-colors"
+          :class="[
+            i > 0 ? 'border-l border-l-[#f5f4f2]' : '',
+            activeTab === tab.id
+              ? 'font-bold text-stone-900 border-b-orange-600'
+              : 'font-medium text-stone-500 border-b-transparent hover:text-stone-700',
+          ]"
+          @click="activeTab = tab.id"
+        >
+          {{ tab.label }}
+        </button>
+      </nav>
+    </div>
 
     <!-- ── Main content ────────────────────────────────────────────── -->
     <main class="max-w-3xl mx-auto px-6 py-10 space-y-10">
