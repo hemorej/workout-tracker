@@ -209,7 +209,7 @@ async function onPageChange(page: number) {
         <button
           v-for="(tab, i) in tabs"
           :key="tab.id"
-          class="px-2 py-3.5 text-center text-[15px] border-b-[3px] transition-colors"
+          class="px-2 py-3.5 text-center text-[13px] sm:text-[15px] whitespace-nowrap border-b-[3px] transition-colors"
           :class="[
             i > 0 ? 'border-l border-l-[#f5f4f2]' : '',
             activeTab === tab.id
@@ -224,17 +224,19 @@ async function onPageChange(page: number) {
     </div>
 
     <!-- ── Main content ────────────────────────────────────────────── -->
-    <main class="max-w-3xl mx-auto px-6 py-10 space-y-10">
+    <!-- Workout builder gets a wider container so its timeline can be wider
+         than the other tabs' content column; the tab itself re-narrows its
+         name/stat row and toolbar row back down to match. -->
+    <main
+      class="mx-auto px-6 py-10 space-y-10"
+      :class="activeTab === 'builder' ? 'max-w-6xl' : 'max-w-3xl'"
+    >
 
       <!-- ── Planning tab ────────────────────────────────────────── -->
       <PlanningTab v-if="activeTab === 'planning'" />
 
       <!-- ── Workout builder tab ──────────────────────────────────── -->
-      <!-- Nav entry only per design handoff; page content is out of scope. -->
-      <div v-if="activeTab === 'builder'" class="text-center py-20">
-        <p class="text-stone-300 text-4xl mb-4">○</p>
-        <p class="text-sm font-medium text-stone-500">Workout builder is coming soon</p>
-      </div>
+      <WorkoutBuilderTab v-if="activeTab === 'builder'" />
 
       <!-- ── History tab ────────────────────────────────────────── -->
       <HistoryTab v-if="activeTab === 'history'" />
