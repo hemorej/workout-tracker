@@ -26,9 +26,18 @@ export default defineNuxtConfig({
      *   DATABASE_URL            → runtimeConfig.databaseUrl
      *   NUXT_SESSION_PASSWORD   → read directly by nuxt-auth-utils (≥32 chars required)
      *   NUXT_SESSION_MAX_AGE    → overrides runtimeConfig.session.maxAge
+     *   STRAVA_CLIENT_ID        → runtimeConfig.stravaClientId
+     *   STRAVA_CLIENT_SECRET    → runtimeConfig.stravaClientSecret
+     *   STRAVA_REFRESH_TOKEN    → runtimeConfig.stravaRefreshToken
      */
     runtimeConfig: {
         databaseUrl: process.env.DATABASE_URL,
+
+        // Strava API access — single-user, refresh token acquired via a one-time
+        // manual OAuth exchange (see CLAUDE.md). No in-app OAuth flow.
+        stravaClientId: process.env.STRAVA_CLIENT_ID,
+        stravaClientSecret: process.env.STRAVA_CLIENT_SECRET,
+        stravaRefreshToken: process.env.STRAVA_REFRESH_TOKEN,
 
         /**
          * nuxt-auth-utils session configuration.
