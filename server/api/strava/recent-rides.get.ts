@@ -1,9 +1,10 @@
 /**
  * GET /api/strava/recent-rides
  *
- * Returns the 3 most recent Strava activities of type "Ride" for the
- * (single) connected Strava account. Used by the "Mark as completed" flow
- * to let the user pick which ride corresponds to a planned workout.
+ * Returns the 3 most recent Strava rides (outdoor "Ride" or indoor
+ * "VirtualRide", e.g. Zwift) for the (single) connected Strava account. Used
+ * by the "Mark as completed" flow to let the user pick which ride
+ * corresponds to a planned workout.
  *
  * Returns:
  *   200 { activities: StravaRideSummary[] }

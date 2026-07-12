@@ -82,8 +82,9 @@ export async function fetchRecentRides(limit = 3): Promise<StravaRideSummary[]> 
     query: { per_page: 15 },
   })
 
+  // "Ride" covers outdoor rides; Zwift/indoor trainer sessions come back as "VirtualRide".
   return activities
-    .filter((a) => a.type === 'Ride')
+    .filter((a) => a.type === 'Ride' || a.type === 'VirtualRide')
     .slice(0, limit)
     .map((a) => ({
       id: a.id,

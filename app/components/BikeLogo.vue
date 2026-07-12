@@ -11,8 +11,8 @@ withDefaults(defineProps<{ size?: number }>(), { size: 28 })
 
 <template>
   <svg
-    :width="size"
-    :height="size * 0.66"
+    :width.attr="size"
+    :height.attr="size * 0.66"
     viewBox="0 0 48 32"
     fill="none"
     stroke="currentColor"
