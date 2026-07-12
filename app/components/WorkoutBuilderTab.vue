@@ -401,7 +401,7 @@ function download() {
         </div>
 
         <!-- Chart + popover wrapper -->
-        <div ref="chartScrollEl" class="relative flex-1 min-w-0" style="overflow-x: auto;">
+        <div ref="chartScrollEl" class="relative flex-1 min-w-0 no-scrollbar" style="overflow-x: auto;">
           <!-- Bars -->
           <div
             class="relative"
@@ -720,5 +720,14 @@ function download() {
   color: #fff;
   text-align: center;
   display: inline-block;
+}
+
+/* Timeline chart stays scrollable but hides the visible scrollbar chrome. */
+.no-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* old Edge/IE */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
 }
 </style>
