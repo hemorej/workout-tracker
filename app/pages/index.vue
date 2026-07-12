@@ -209,7 +209,7 @@ async function onPageChange(page: number) {
         <button
           v-for="(tab, i) in tabs"
           :key="tab.id"
-          class="px-2 py-3.5 text-center text-[15px] border-b-[3px] transition-colors"
+          class="px-2 py-3.5 text-center text-[13px] sm:text-[15px] whitespace-nowrap border-b-[3px] transition-colors"
           :class="[
             i > 0 ? 'border-l border-l-[#f5f4f2]' : '',
             activeTab === tab.id
