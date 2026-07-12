@@ -12,6 +12,17 @@
 
 import type { NewWorkoutPayload, PowerBestEntry } from '~/stores/workouts'
 
+export interface WorkoutPrefill {
+  date: string
+  name: string
+  durationMinutes: number
+}
+
+const props = defineProps<{
+  /** Pre-fills date/name/duration, e.g. from a matched Strava activity. TSS/RPE are never pre-filled. */
+  prefill?: WorkoutPrefill | null
+}>()
+
 const emit = defineEmits<{
   saved: []
   close: []
@@ -31,9 +42,9 @@ function todayString(): string {
 }
 
 const form = reactive({
-  date: todayString(),
-  name: '',
-  durationMinutes: null as number | null,
+  date: props.prefill?.date ?? todayString(),
+  name: props.prefill?.name ?? '',
+  durationMinutes: props.prefill?.durationMinutes ?? null as number | null,
   tss: null as number | null,
   rpe: null as number | null,
 })

@@ -30,6 +30,7 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: 'delete', id: number): void
+  (e: 'mark-completed'): void
 }>()
 
 // ── Date formatting ──────────────────────────────────────────────────────
@@ -282,6 +283,15 @@ function confirmDelete() {
           Planned
         </span>
       </div>
+
+      <!-- Mark as completed — primary action for a planned-but-not-logged day -->
+      <button
+        v-if="isPlannedDay"
+        class="text-xs font-semibold text-violet-500 hover:text-violet-700 transition-colors"
+        @click="emit('mark-completed')"
+      >
+        Mark as completed
+      </button>
 
       <!-- Delete control — appears on hover only, not for rest or planned days -->
       <div v-if="!day.isRestDay && !isPlannedDay" class="opacity-0 group-hover:opacity-100 transition-opacity">

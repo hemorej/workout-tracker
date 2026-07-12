@@ -28,6 +28,15 @@
 import { useAuthStore } from '~/stores/auth'
 import { useWorkoutsStore } from '~/stores/workouts'
 import { usePlanningStore } from '~/stores/planning'
+import type { WorkoutPrefill } from '~/components/AddWorkoutModal.vue'
+
+interface StravaRideSummary {
+  id: number
+  name: string
+  startDateLocal: string
+  movingTimeSeconds: number
+  distanceMeters: number
+}
 
 // Protect this page — unauthenticated users are sent to /login
 definePageMeta({ middleware: 'auth' })
@@ -66,13 +75,72 @@ const todayPlan = computed(() => {
 // the documented pattern and avoids prop-forwarding reactivity issues.
 const showAddWorkout = ref(false)
 const addWorkoutForm = ref<{ reset: () => void } | null>(null)
+const pendingPrefill = ref<WorkoutPrefill | null>(null)
 
 function openAddWorkout() {
+  pendingPrefill.value = null
   showAddWorkout.value = true
 }
 
 function closeAddWorkout() {
   showAddWorkout.value = false
+}
+
+// ── "Mark as completed" — Strava activity picker ────────────────────────
+const showActivityPicker = ref(false)
+const activityPickerLoading = ref(false)
+const activityPickerError = ref<string | null>(null)
+const recentRides = ref<StravaRideSummary[]>([])
+
+async function onMarkCompleted() {
+  showActivityPicker.value = true
+  activityPickerLoading.value = true
+  activityPickerError.value = null
+  recentRides.value = []
+
+  try {
+    const { activities } = await $fetch<{ activities: StravaRideSummary[] }>('/api/strava/recent-rides')
+    recentRides.value = activities
+  }
+  catch {
+    activityPickerError.value = "Couldn't reach Strava. Try again in a moment."
+  }
+  finally {
+    activityPickerLoading.value = false
+  }
+}
+
+function closeActivityPicker() {
+  showActivityPicker.value = false
+}
+
+/** "Xh Ym" duration display, matching WorkoutCard's formatting */
+function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
+
+function formatRideDate(startDateLocal: string): string {
+  return new Date(startDateLocal).toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function selectActivity(activity: StravaRideSummary) {
+  pendingPrefill.value = {
+    date: activity.startDateLocal.slice(0, 10),
+    name: activity.name,
+    durationMinutes: Math.round(activity.movingTimeSeconds / 60),
+  }
+  showActivityPicker.value = false
+  showAddWorkout.value = true
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -231,6 +299,7 @@ async function onPageChange(page: number) {
           :prev-metrics="workouts.days[index + 1]?.metrics ?? null"
           :planned-workout="day.date === todayStr ? todayPlan : null"
           @delete="onDeleteWorkout"
+          @mark-completed="onMarkCompleted"
         />
       </div>
 
@@ -307,9 +376,89 @@ async function onPageChange(page: number) {
           <!-- Form -->
           <AddWorkoutModal
             ref="addWorkoutForm"
+            :prefill="pendingPrefill"
             @saved="onWorkoutSaved"
             @close="closeAddWorkout"
           />
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ── Strava Activity Picker ────────────────────────────────────── -->
+    <Teleport to="body">
+      <div
+        v-if="showActivityPicker"
+        class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Pick a Strava ride"
+      >
+        <div
+          class="fixed inset-0 bg-black/25 backdrop-blur-sm"
+          @click="closeActivityPicker"
+        />
+
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 my-8">
+          <div class="flex items-start justify-between mb-6">
+            <div>
+              <h2 class="text-lg font-semibold text-stone-900">Mark as completed</h2>
+              <p class="text-sm text-stone-400 mt-0.5">Pick the Strava ride that matches this workout.</p>
+            </div>
+            <button
+              class="text-stone-300 hover:text-stone-600 transition-colors ml-4 mt-0.5"
+              aria-label="Close"
+              @click="closeActivityPicker"
+            >
+              <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+            </button>
+          </div>
+
+          <!-- Loading -->
+          <div v-if="activityPickerLoading" class="flex justify-center py-10">
+            <UIcon name="i-heroicons-arrow-path" class="animate-spin text-stone-300 text-2xl" />
+          </div>
+
+          <!-- Error -->
+          <div v-else-if="activityPickerError" class="text-center py-6">
+            <p class="text-sm text-stone-500">{{ activityPickerError }}</p>
+            <button
+              class="mt-3 text-sm font-medium text-orange-600 hover:text-orange-700"
+              @click="onMarkCompleted"
+            >
+              Retry
+            </button>
+          </div>
+
+          <!-- Empty -->
+          <div v-else-if="recentRides.length === 0" class="text-center py-6">
+            <p class="text-sm text-stone-500">No recent rides found on Strava.</p>
+          </div>
+
+          <!-- Activity list -->
+          <ul v-else class="divide-y divide-stone-100">
+            <li
+              v-for="activity in recentRides"
+              :key="activity.id"
+              class="flex items-center justify-between gap-4 py-3"
+            >
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-stone-800 truncate">{{ activity.name }}</p>
+                <p class="text-xs text-stone-400 mt-0.5">
+                  {{ formatRideDate(activity.startDateLocal) }}
+                  &nbsp;·&nbsp;
+                  {{ formatDuration(Math.round(activity.movingTimeSeconds / 60)) }}
+                  &nbsp;·&nbsp;
+                  {{ (activity.distanceMeters / 1000).toFixed(1) }} km
+                </p>
+              </div>
+              <button
+                class="shrink-0 text-sm font-semibold text-orange-600 hover:text-orange-700 transition-colors"
+                @click="selectActivity(activity)"
+              >
+                Use this
+              </button>
+            </li>
+          </ul>
         </div>
       </div>
     </Teleport>
