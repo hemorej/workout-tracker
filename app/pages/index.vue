@@ -76,6 +76,15 @@ const todayPlan = computed(() => {
 const showAddWorkout = ref(false)
 const addWorkoutForm = ref<{ reset: () => void } | null>(null)
 const pendingPrefill = ref<WorkoutPrefill | null>(null)
+const workoutBuilderRef = ref<{ setName: (name: string) => void } | null>(null)
+
+/** "Planned" icon on a planned day — switch to the builder tab pre-filled with the plan's name */
+async function goToBuilder() {
+  const name = todayPlan.value?.plan?.name ?? ''
+  activeTab.value = 'builder'
+  await nextTick()
+  workoutBuilderRef.value?.setName(name)
+}
 
 function openAddWorkout() {
   pendingPrefill.value = null
@@ -138,6 +147,7 @@ function selectActivity(activity: StravaRideSummary) {
     date: activity.startDateLocal.slice(0, 10),
     name: activity.name,
     durationMinutes: Math.round(activity.movingTimeSeconds / 60),
+    tss: todayPlan.value?.plan?.tss ?? null,
   }
   showActivityPicker.value = false
   showAddWorkout.value = true
@@ -236,7 +246,7 @@ async function onPageChange(page: number) {
       <PlanningTab v-if="activeTab === 'planning'" />
 
       <!-- ── Workout builder tab ──────────────────────────────────── -->
-      <WorkoutBuilderTab v-if="activeTab === 'builder'" />
+      <WorkoutBuilderTab v-if="activeTab === 'builder'" ref="workoutBuilderRef" />
 
       <!-- ── History tab ────────────────────────────────────────── -->
       <HistoryTab v-if="activeTab === 'history'" />
@@ -305,7 +315,7 @@ async function onPageChange(page: number) {
           :planned-workout="day.date === todayStr ? todayPlan : null"
           @delete="onDeleteWorkout"
           @mark-completed="onMarkCompleted"
-          @go-to-builder="activeTab = 'builder'"
+          @go-to-builder="goToBuilder"
         />
       </div>
 

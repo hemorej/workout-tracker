@@ -44,6 +44,12 @@ function zoneFor(pct: number) {
 
 const title = ref('')
 const ftp = ref(240)
+
+function setName(name: string) {
+  title.value = name
+}
+
+defineExpose({ setName })
 const nextId = ref(1)
 const selectedId = ref<number | null>(null)
 const blocks = ref<Block[]>([])
@@ -98,8 +104,13 @@ const totalDurationLabel = computed(() => fmtClock(totalDuration.value))
 
 const totalTSS = computed(() => {
   const raw = segments.value.reduce((s, x) => {
-    const intensity = (x.powerStart + x.powerEnd) / 2
-    return s + (x.duration / 3600) * intensity * intensity * 100
+    // Mean of power^2 over a linear ramp from powerStart to powerEnd —
+    // (a²+ab+b²)/3 — not the square of the mean. For flat segments
+    // (powerStart === powerEnd) this reduces to power², same as before;
+    // for ramps it's larger, matching how NP weights the higher end of
+    // the ramp more heavily than a simple average would.
+    const meanSquare = (x.powerStart ** 2 + x.powerStart * x.powerEnd + x.powerEnd ** 2) / 3
+    return s + (x.duration / 3600) * meanSquare * 100
   }, 0)
   return Math.round(raw)
 })

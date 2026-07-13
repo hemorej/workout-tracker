@@ -16,10 +16,12 @@ export interface WorkoutPrefill {
   date: string
   name: string
   durationMinutes: number
+  /** Pre-filled from the day's planned workout TSS, if any. */
+  tss?: number | null
 }
 
 const props = defineProps<{
-  /** Pre-fills date/name/duration, e.g. from a matched Strava activity. TSS/RPE are never pre-filled. */
+  /** Pre-fills date/name/duration, e.g. from a matched Strava activity. RPE is never pre-filled. */
   prefill?: WorkoutPrefill | null
 }>()
 
@@ -45,7 +47,7 @@ const form = reactive({
   date: props.prefill?.date ?? todayString(),
   name: props.prefill?.name ?? '',
   durationMinutes: props.prefill?.durationMinutes ?? null as number | null,
-  tss: null as number | null,
+  tss: props.prefill?.tss ?? null as number | null,
   rpe: null as number | null,
 })
 
