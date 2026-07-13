@@ -305,6 +305,7 @@ async function onPageChange(page: number) {
           :planned-workout="day.date === todayStr ? todayPlan : null"
           @delete="onDeleteWorkout"
           @mark-completed="onMarkCompleted"
+          @go-to-builder="activeTab = 'builder'"
         />
       </div>
 

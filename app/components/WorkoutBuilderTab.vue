@@ -42,15 +42,11 @@ function zoneFor(pct: number) {
 
 // ── State ────────────────────────────────────────────────────────────────
 
-const title = ref('4×8 Threshold')
+const title = ref('')
 const ftp = ref(240)
-const nextId = ref(4)
+const nextId = ref(1)
 const selectedId = ref<number | null>(null)
-const blocks = ref<Block[]>([
-  { id: 1, type: 'warmup', duration: 600, powerStart: 0.50, powerEnd: 0.75, cadence: null },
-  { id: 2, type: 'interval', reps: 4, onDuration: 480, onPower: 1.00, onCadence: 90, offDuration: 240, offPower: 0.55, offCadence: null },
-  { id: 3, type: 'cooldown', duration: 480, powerStart: 0.70, powerEnd: 0.45, cadence: null },
-])
+const blocks = ref<Block[]>([])
 
 // ── Formatting ───────────────────────────────────────────────────────────
 
