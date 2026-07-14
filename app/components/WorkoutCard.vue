@@ -8,9 +8,9 @@
  * Displays:
  *   - Date (formatted, with "Today" / "Yesterday" relative labels)
  *   - Workout name (or "Rest day" badge)
- *   - Duration + TSS + optional RPE
+ *   - Duration + distance + TSS + optional RPE
  *   - Optional notes (truncated, expandable)
- *   - CTL, ATL, TSB metrics for that day
+ *   - CTL, TSB metrics for that day, as trend-tinted chips
  *   - A delete button for workout days
  *
  * Emits:
@@ -72,6 +72,12 @@ const durationDisplay = computed(() => {
   return `${h}h ${m}m`
 })
 
+/** Distance formatted as "32.4 km" — omitted for older workouts logged before this field existed */
+const distanceDisplay = computed(() => {
+  const km = props.day.workout?.distanceKm
+  return km != null ? `${km.toFixed(1)} km` : null
+})
+
 // ── Notes expansion ──────────────────────────────────────────────────────
 const notesExpanded = ref(false)
 const NOTES_PREVIEW_LENGTH = 80
@@ -114,24 +120,34 @@ const displayMetrics = computed(() => {
 const hasFtp = computed(() => !!props.day.workout?.ftpWatts)
 const hasPowerBests = computed(() => (props.day.workout?.powerBests?.length ?? 0) > 0)
 
-// ── TSB colouring — muted, in line with the stone palette ───────────────
-const tsbColor = computed(() => {
-  const tsb = displayMetrics.value.tsb
-  if (tsb > 10)  return 'text-emerald-600'
-  if (tsb > -10) return 'text-stone-600'
-  if (tsb > -30) return 'text-amber-600'
-  return 'text-rose-500'
-})
-
 const tsbDisplay = computed(() => {
   const v = displayMetrics.value.tsb
   return v >= 0 ? `+${v.toFixed(1)}` : v.toFixed(1)
 })
 
-// ── Trend arrows — CTL/ATL/TSB direction vs. the previous entry ─────────
+// ── Trend arrows — CTL/TSB direction vs. the previous entry ──────────────
 const ctlTrend = computed(() => trendArrow(displayMetrics.value.ctl, props.prevMetrics?.ctl))
-const atlTrend = computed(() => trendArrow(displayMetrics.value.atl, props.prevMetrics?.atl))
 const tsbTrend = computed(() => trendArrow(displayMetrics.value.tsb, props.prevMetrics?.tsb))
+
+/**
+ * Chip tint follows trend direction, identically for CTL and TSB:
+ *   up (▲)   → green
+ *   down (▼) → amber
+ *   no trend → neutral gray
+ */
+const CHIP_TINTS = {
+  up: 'text-emerald-600 bg-emerald-50 border-emerald-200',
+  down: 'text-amber-600 bg-amber-50 border-amber-200',
+  neutral: 'text-stone-500 bg-[#faf9f7] border-[#f0eeec]',
+} as const
+
+function chipTint(trend: ReturnType<typeof trendArrow>) {
+  if (!trend) return CHIP_TINTS.neutral
+  return trend.symbol === '▲' ? CHIP_TINTS.up : CHIP_TINTS.down
+}
+
+const ctlChipClass = computed(() => chipTint(ctlTrend.value))
+const tsbChipClass = computed(() => chipTint(tsbTrend.value))
 
 // ── Delete confirmation ──────────────────────────────────────────────────
 const showDeleteConfirm = ref(false)
@@ -208,6 +224,7 @@ function confirmDelete() {
             {{ day.workout?.name }}
           </span>
           <span class="text-sm text-stone-400">{{ durationDisplay }}</span>
+          <span v-if="distanceDisplay" class="text-sm text-stone-400">{{ distanceDisplay }}</span>
           <!-- FTP update indicator -->
           <span
             v-if="hasFtp"
@@ -236,19 +253,13 @@ function confirmDelete() {
         </div>
       </div>
 
-      <!-- Metrics row — CTL / ATL / TSB with trend arrows, shown for every day -->
-      <div class="flex gap-4 mt-1.5 text-xs text-stone-500 tabular">
-        <span>
-          CTL <span class="font-semibold text-stone-700">{{ displayMetrics.ctl.toFixed(1) }}</span
-          ><span v-if="ctlTrend" class="ml-0.5 text-[10px]" :class="ctlTrend.colorClass">{{ ctlTrend.symbol }}</span>
+      <!-- Metrics row — CTL / TSB as small tinted chips, tint follows trend direction -->
+      <div class="flex flex-wrap gap-1.5 mt-1.5 text-[11px] font-medium tabular">
+        <span class="rounded-[7px] border px-2 py-[3px]" :class="ctlChipClass">
+          CTL <b>{{ displayMetrics.ctl.toFixed(1) }}<template v-if="ctlTrend"> {{ ctlTrend.symbol }}</template></b>
         </span>
-        <span>
-          ATL <span class="font-semibold text-stone-700">{{ displayMetrics.atl.toFixed(1) }}</span
-          ><span v-if="atlTrend" class="ml-0.5 text-[10px]" :class="atlTrend.colorClass">{{ atlTrend.symbol }}</span>
-        </span>
-        <span>
-          TSB <span :class="tsbColor">{{ tsbDisplay }}</span
-          ><span v-if="tsbTrend" class="ml-0.5 text-[10px]" :class="tsbTrend.colorClass">{{ tsbTrend.symbol }}</span>
+        <span class="rounded-[7px] border px-2 py-[3px]" :class="tsbChipClass">
+          TSB <b>{{ tsbDisplay }}<template v-if="tsbTrend"> {{ tsbTrend.symbol }}</template></b>
         </span>
       </div>
     </div>

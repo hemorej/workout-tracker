@@ -27,6 +27,7 @@ export interface WorkoutDetail {
   id: number
   name: string
   durationMinutes: number
+  distanceKm: number | null
   tss: number
   rpe: number | null
   notes: string | null
@@ -50,6 +51,7 @@ export interface DayEntry {
 export interface WeeklyStats {
   tssTotal: number
   hoursTotal: number
+  kmTotal: number
 }
 
 export interface Pagination {
@@ -63,6 +65,7 @@ export interface NewWorkoutPayload {
   date: string
   name: string
   durationMinutes: number
+  distanceKm?: number | null
   tss: number
   rpe?: number | null
   notes?: string | null
@@ -75,7 +78,7 @@ export interface NewWorkoutPayload {
 export const useWorkoutsStore = defineStore('workouts', () => {
   // State
   const days = ref<DayEntry[]>([])
-  const weeklyStats = ref<WeeklyStats>({ tssTotal: 0, hoursTotal: 0 })
+  const weeklyStats = ref<WeeklyStats>({ tssTotal: 0, hoursTotal: 0, kmTotal: 0 })
   const todayMetrics = ref<DayMetrics>({ ctl: 0, atl: 0, tsb: 0 })
   const yesterdayMetrics = ref<DayMetrics | null>(null)
   const pagination = ref<Pagination>({ page: 1, limit: 14, totalDays: 0, totalPages: 0 })

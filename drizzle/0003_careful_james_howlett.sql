@@ -1,0 +1,2 @@
+ALTER TABLE "workouts" ADD COLUMN "distance_km" real;--> statement-breakpoint
+ALTER TABLE "workouts" ADD CONSTRAINT "distance_km_non_negative" CHECK ("workouts"."distance_km" IS NULL OR "workouts"."distance_km" >= 0);

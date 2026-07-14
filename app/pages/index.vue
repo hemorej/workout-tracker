@@ -147,6 +147,7 @@ function selectActivity(activity: StravaRideSummary) {
     date: activity.startDateLocal.slice(0, 10),
     name: activity.name,
     durationMinutes: Math.round(activity.movingTimeSeconds / 60),
+    distanceKm: Math.round((activity.distanceMeters / 1000) * 10) / 10,
     tss: todayPlan.value?.plan?.tss ?? null,
   }
   showActivityPicker.value = false
@@ -258,6 +259,7 @@ async function onPageChange(page: number) {
       <MetricsSummary
         :weekly-tss="workouts.weeklyStats.tssTotal"
         :weekly-hours="workouts.weeklyStats.hoursTotal"
+        :weekly-km="workouts.weeklyStats.kmTotal"
         :today-c-t-l="workouts.todayMetrics.ctl"
         :today-a-t-l="workouts.todayMetrics.atl"
         :today-t-s-b="workouts.todayMetrics.tsb"

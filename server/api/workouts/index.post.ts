@@ -8,6 +8,7 @@
  *   date:            string   — ISO date "YYYY-MM-DD" (defaults to today)
  *   name:            string   — workout name
  *   durationMinutes: number   — positive integer
+ *   distanceKm?:     number   — optional, non-negative
  *   tss:             number   — non-negative integer
  *   rpe?:            number   — optional, 1–10
  *   notes?:          string   — optional free text
@@ -44,6 +45,14 @@ export default defineEventHandler(async (event) => {
   const tss = Number(body.tss)
   if (!Number.isInteger(tss) || tss < 0) {
     throw createError({ statusCode: 400, statusMessage: 'TSS must be a non-negative integer.' })
+  }
+
+  let distanceKm: number | null = null
+  if (body.distanceKm !== undefined && body.distanceKm !== null && body.distanceKm !== '') {
+    distanceKm = Number(body.distanceKm)
+    if (!Number.isFinite(distanceKm) || distanceKm < 0) {
+      throw createError({ statusCode: 400, statusMessage: 'Distance must be a non-negative number.' })
+    }
   }
 
   let rpe: number | null = null
@@ -118,6 +127,7 @@ export default defineEventHandler(async (event) => {
       date,
       name: body.name.trim(),
       durationMinutes,
+      distanceKm,
       tss,
       rpe,
       notes,

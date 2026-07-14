@@ -16,6 +16,8 @@ export interface WorkoutPrefill {
   date: string
   name: string
   durationMinutes: number
+  /** Pre-filled from a matched Strava activity's distance, if any. */
+  distanceKm?: number | null
   /** Pre-filled from the day's planned workout TSS, if any. */
   tss?: number | null
 }
@@ -47,6 +49,7 @@ const form = reactive({
   date: props.prefill?.date ?? todayString(),
   name: props.prefill?.name ?? '',
   durationMinutes: props.prefill?.durationMinutes ?? null as number | null,
+  distanceKm: props.prefill?.distanceKm ?? null as number | null,
   tss: props.prefill?.tss ?? null as number | null,
   rpe: null as number | null,
 })
@@ -82,6 +85,7 @@ function reset() {
   form.date = todayString()
   form.name = ''
   form.durationMinutes = null
+  form.distanceKm = null
   form.tss = null
   form.rpe = null
   notes.value = ''
@@ -112,6 +116,10 @@ async function handleSubmit() {
     validationError.value = 'TSS must be 0 or greater.'
     return
   }
+  if (form.distanceKm !== null && form.distanceKm < 0) {
+    validationError.value = 'Distance must be 0 or greater.'
+    return
+  }
 
   // Validate power best rows
   for (const row of powerBestRows.value) {
@@ -132,6 +140,7 @@ async function handleSubmit() {
     date: form.date,
     name: form.name.trim(),
     durationMinutes: Math.round(form.durationMinutes),
+    distanceKm: form.distanceKm !== null ? Math.round(form.distanceKm * 10) / 10 : null,
     tss: Math.round(form.tss),
     rpe: form.rpe,
     notes: notes.value.trim() || null,
@@ -179,11 +188,14 @@ async function handleSubmit() {
       />
     </UFormField>
 
-    <!-- Duration + TSS + RPE — short fields, one row -->
-    <div class="grid grid-cols-3 gap-4">
+    <!-- Duration + Distance + TSS + RPE — short fields, one row.
+         Column widths are weighted (not an even 1fr each) so every label
+         fits on a single line without wrapping — RPE only ever needs two
+         digits, so it gets the smallest share and a narrower input. -->
+    <div class="grid grid-cols-2 sm:grid-cols-[1.3fr_1.3fr_1fr_0.85fr] gap-3">
       <UFormField name="durationMinutes">
         <template #label>
-          <span class="text-xs font-semibold text-stone-500 uppercase tracking-tight sm:tracking-wide">Duration (min)</span>
+          <span class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide whitespace-nowrap">Duration (min)</span>
         </template>
         <UInput
           v-model.number="form.durationMinutes"
@@ -192,9 +204,20 @@ async function handleSubmit() {
         />
       </UFormField>
 
+      <UFormField name="distanceKm">
+        <template #label>
+          <span class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide whitespace-nowrap">Distance (km)</span>
+        </template>
+        <UInput
+          v-model.number="form.distanceKm"
+          type="number" inputmode="decimal" min="0" step="0.1" placeholder="32.4"
+          class="w-full"
+        />
+      </UFormField>
+
       <UFormField name="tss">
         <template #label>
-          <span class="text-xs font-semibold text-stone-500 uppercase tracking-tight sm:tracking-wide">TSS</span>
+          <span class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide whitespace-nowrap">TSS</span>
         </template>
         <UInput
           v-model.number="form.tss"
@@ -206,7 +229,7 @@ async function handleSubmit() {
       <!-- RPE (optional) — number input avoids dropdown z-index issues in modals -->
       <UFormField name="rpe">
         <template #label>
-          <span class="text-xs font-semibold text-stone-500 uppercase tracking-tight sm:tracking-wide whitespace-nowrap">
+          <span class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide whitespace-nowrap">
             RPE <span class="normal-case font-normal text-stone-300">1–10</span>
           </span>
         </template>
@@ -218,7 +241,7 @@ async function handleSubmit() {
           max="10"
           step="1"
           placeholder="—"
-          class="w-full"
+          class="w-16"
         />
       </UFormField>
     </div>

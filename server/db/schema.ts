@@ -14,6 +14,7 @@ import {
   serial,
   text,
   integer,
+  real,
   date,
   timestamp,
   uniqueIndex,
@@ -94,6 +95,9 @@ export const workouts = pgTable(
     /** Duration of the workout in minutes (must be > 0) */
     durationMinutes: integer('duration_minutes').notNull(),
 
+    /** Distance covered in kilometres (optional — null for older rows logged before this field existed) */
+    distanceKm: real('distance_km'),
+
     /**
      * Training Stress Score — a composite measure of workout load.
      * Must be a non-negative integer.
@@ -137,6 +141,11 @@ export const workouts = pgTable(
      * CHECK constraint: TSS must be non-negative.
      */
     check('tss_non_negative', sql`${table.tss} >= 0`),
+
+    /**
+     * CHECK constraint: distance, when provided, must be non-negative.
+     */
+    check('distance_km_non_negative', sql`${table.distanceKm} IS NULL OR ${table.distanceKm} >= 0`),
   ],
 )
 

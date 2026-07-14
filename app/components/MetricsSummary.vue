@@ -2,11 +2,10 @@
 /**
  * MetricsSummary component
  *
- * Displays the four headline stats at the top of the dashboard:
- *   - Weekly TSS total
- *   - Weekly training hours
- *   - Today's CTL (Fitness)
- *   - Today's TSB (Form)
+ * Displays the headline stats at the top of the dashboard, grouped into
+ * two sections:
+ *   - "This week": weekly TSS total, weekly training hours, weekly distance (km)
+ *   - "Today": CTL (Fitness), TSB (Form)
  *
  * Also shows a colour-coded "form zone" label for TSB to give the user
  * an at-a-glance interpretation of where they stand.
@@ -18,6 +17,7 @@
 interface Props {
   weeklyTss: number
   weeklyHours: number
+  weeklyKm: number
   todayCTL: number
   todayATL: number
   todayTSB: number
@@ -43,20 +43,11 @@ const tsbTrend = computed(() => trendArrow(props.todayTSB, props.yesterdayTSB))
  */
 const formZone = computed(() => {
   const tsb = props.todayTSB
-  if (tsb > 25)  return { label: 'Very fresh',  textColor: 'text-sky-400' }
-  if (tsb > 10)  return { label: 'Fresh',        textColor: 'text-emerald-400' }
-  if (tsb > -10) return { label: 'Neutral',      textColor: 'text-stone-400' }
-  if (tsb > -30) return { label: 'Tired',        textColor: 'text-amber-400' }
-  return           { label: 'Very fatigued', textColor: 'text-rose-400' }
-})
-
-/** Colour the TSB number itself to match the zone */
-const tsbNumberColor = computed(() => {
-  const tsb = props.todayTSB
-  if (tsb > 10)  return 'text-emerald-500'
-  if (tsb > -10) return 'text-stone-800'
-  if (tsb > -30) return 'text-amber-500'
-  return 'text-rose-500'
+  if (tsb > 25)  return { label: 'Very fresh' }
+  if (tsb > 10)  return { label: 'Fresh' }
+  if (tsb > -10) return { label: 'Neutral' }
+  if (tsb > -30) return { label: 'Tired' }
+  return           { label: 'Very fatigued' }
 })
 
 /** Format TSB with a leading + for positive values */
@@ -67,58 +58,61 @@ const tsbDisplay = computed(() =>
 
 <template>
   <!--
-    Metrics strip: a single white panel divided into four stat cells.
-    On mobile the four cells wrap into a 2×2 grid using CSS grid.
-    No individual card shadows — the container has one thin border.
+    Metrics card: one white panel split into two label-headed groups —
+    "This week" (TSS / Hours / Km) and "Today" (CTL / TSB) — separated by
+    a 2fr/1.33fr-ish column ratio (3fr/2fr) so each side's stat columns line
+    up evenly despite the 3-vs-2 stat count. A 2px bottom rule under each
+    group label replaces the old full-height dividers between every stat.
   -->
-  <div class="bg-white rounded-xl border border-stone-100 grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-stone-100">
+  <div class="bg-white rounded-[14px] border border-[#f0eeec] px-7 py-6">
+    <div class="grid grid-cols-[3fr_2fr] gap-7">
 
-    <!-- Weekly TSS -->
-    <div class="px-6 py-5 text-center">
-      <p class="text-xs font-semibold uppercase tracking-widest text-stone-500 mb-2">
-        Weekly TSS
-      </p>
-      <p class="text-4xl font-semibold text-stone-900 tabular">
-        {{ weeklyTss }}
-      </p>
+      <!-- This week -->
+      <div>
+        <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 pb-[10px] border-b-2 border-[#e7e5e0] mb-2.5">
+          This week
+        </p>
+        <div class="grid grid-cols-3 gap-5">
+          <div>
+            <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-stone-400 mb-1.5">TSS</p>
+            <p class="text-[30px] font-bold text-stone-900 tabular">{{ weeklyTss }}</p>
+          </div>
+          <div>
+            <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-stone-400 mb-1.5">Hours</p>
+            <p class="text-[30px] font-bold text-stone-900 tabular">{{ weeklyHours.toFixed(1) }}</p>
+          </div>
+          <div>
+            <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-stone-400 mb-1.5">Km</p>
+            <p class="text-[30px] font-bold text-stone-900 tabular">{{ weeklyKm }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Today -->
+      <div>
+        <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 pb-[10px] border-b-2 border-[#e7e5e0] mb-2.5">
+          Today
+        </p>
+        <div class="grid grid-cols-2 gap-5">
+          <div>
+            <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-emerald-600 mb-1.5">CTL</p>
+            <p class="flex items-baseline gap-1.5">
+              <span class="text-[30px] font-bold text-stone-900 tabular">{{ todayCTL.toFixed(1) }}</span>
+              <span v-if="ctlTrend" class="text-[13px]" :class="ctlTrend.colorClass">{{ ctlTrend.symbol }}</span>
+            </p>
+            <p class="text-[11px] text-stone-500 mt-1">Fitness</p>
+          </div>
+          <div>
+            <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-amber-600 mb-1.5">TSB</p>
+            <p class="flex items-baseline gap-1.5">
+              <span class="text-[30px] font-bold text-stone-900 tabular">{{ tsbDisplay }}</span>
+              <span v-if="tsbTrend" class="text-[13px]" :class="tsbTrend.colorClass">{{ tsbTrend.symbol }}</span>
+            </p>
+            <p class="text-[11px] text-stone-500 mt-1">{{ formZone.label }}</p>
+          </div>
+        </div>
+      </div>
+
     </div>
-
-    <!-- Weekly Hours -->
-    <div class="px-6 py-5 text-center">
-      <p class="text-xs font-semibold uppercase tracking-widest text-stone-500 mb-2">
-        Hours
-      </p>
-      <p class="text-4xl font-semibold text-stone-900 tabular">
-        {{ weeklyHours.toFixed(1) }}
-      </p>
-    </div>
-
-    <!-- CTL (Fitness) -->
-    <div class="px-6 py-5 text-center border-t md:border-t-0 border-stone-100">
-      <p class="text-xs font-semibold uppercase tracking-widest text-stone-500 mb-2">
-        CTL
-      </p>
-      <p class="text-4xl font-semibold text-stone-900 tabular">
-        {{ todayCTL.toFixed(1) }}
-        <span v-if="ctlTrend" class="text-[15px] align-middle" :class="ctlTrend.colorClass">{{ ctlTrend.symbol }}</span>
-      </p>
-      <p class="text-xs text-stone-500 mt-1">Fitness</p>
-    </div>
-
-    <!-- TSB (Form) -->
-    <div class="px-6 py-5 text-center border-t md:border-t-0 border-stone-100">
-      <p class="text-xs font-semibold uppercase tracking-widest text-stone-500 mb-2">
-        TSB
-      </p>
-      <p class="text-4xl font-semibold tabular" :class="tsbNumberColor">
-        {{ tsbDisplay }}
-        <span v-if="tsbTrend" class="text-[15px] align-middle" :class="tsbTrend.colorClass">{{ tsbTrend.symbol }}</span>
-      </p>
-      <!-- Subtle form zone label — no heavy badge, just small text -->
-      <p class="text-xs mt-1" :class="formZone.textColor">
-        {{ formZone.label }}
-      </p>
-    </div>
-
   </div>
 </template>

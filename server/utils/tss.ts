@@ -49,6 +49,7 @@ export interface WorkoutRecord {
   date: string // ISO 8601 date string, e.g. "2026-05-25"
   tss: number
   durationMinutes: number
+  distanceKm?: number | null
 }
 
 /** Computed metrics for a single calendar day */
@@ -58,6 +59,8 @@ export interface DayMetrics {
   tss: number
   /** Total training minutes (0 for rest days) */
   durationMinutes: number
+  /** Distance covered in kilometres (0 for rest days) */
+  distanceKm: number
   /** Chronic Training Load — fitness accumulated over ~42 days */
   ctl: number
   /** Acute Training Load — fatigue accumulated over ~7 days */
@@ -173,6 +176,7 @@ export function computeMetricsSeries(
     const workout = workoutByDate.get(dateStr)
     const tss = workout?.tss ?? 0
     const durationMinutes = workout?.durationMinutes ?? 0
+    const distanceKm = workout?.distanceKm ?? 0
     const isRestDay = !workout
 
     /**
@@ -193,6 +197,7 @@ export function computeMetricsSeries(
       date: dateStr,
       tss,
       durationMinutes,
+      distanceKm,
       ctl: round(ctl),
       atl: round(atl),
       tsb: round(tsb),
@@ -216,7 +221,7 @@ export function computeMetricsSeries(
 export function computeWeeklyStats(
   series: DayMetrics[],
   referenceDate: Date = new Date(),
-): { tssTotal: number; hoursTotal: number } {
+): { tssTotal: number; hoursTotal: number; kmTotal: number } {
   // Find Monday of the reference week
   const ref = new Date(
     Date.UTC(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate()),
@@ -231,17 +236,20 @@ export function computeWeeklyStats(
 
   let tssTotal = 0
   let minutesTotal = 0
+  let kmTotal = 0
 
   for (const day of series) {
     if (day.date >= mondayStr && day.date <= sundayStr) {
       tssTotal += day.tss
       minutesTotal += day.durationMinutes
+      kmTotal += day.distanceKm
     }
   }
 
   return {
     tssTotal: Math.round(tssTotal),
     hoursTotal: round(minutesTotal / 60),
+    kmTotal: Math.round(kmTotal),
   }
 }
 
