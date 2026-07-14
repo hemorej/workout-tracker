@@ -86,6 +86,9 @@ function formatHours(h: number): string {
             <span class="text-sm tabular-nums text-stone-400 w-14 text-right">
               {{ formatHours(period.hoursTotal) }}
             </span>
+            <span class="text-sm tabular-nums text-stone-400 w-16 text-right">
+              {{ period.kmTotal }} km
+            </span>
           </div>
 
           <!-- Indicators — fixed width so stats column stays aligned across all rows -->

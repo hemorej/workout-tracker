@@ -65,6 +65,7 @@ export default defineEventHandler(async (event) => {
       date: workouts.date,
       tss: workouts.tss,
       durationMinutes: workouts.durationMinutes,
+      distanceKm: workouts.distanceKm,
       ftpWatts: workouts.ftpWatts,
     })
     .from(workouts)
@@ -90,6 +91,7 @@ export default defineEventHandler(async (event) => {
   const periodMap = new Map<string, {
     tssTotal: number
     minutesTotal: number
+    kmTotal: number
     workoutCount: number
     hasFtp: boolean
     hasPowerBests: boolean
@@ -102,6 +104,7 @@ export default defineEventHandler(async (event) => {
       periodMap.set(key, {
         tssTotal: 0,
         minutesTotal: 0,
+        kmTotal: 0,
         workoutCount: 0,
         hasFtp: false,
         hasPowerBests: false,
@@ -111,6 +114,7 @@ export default defineEventHandler(async (event) => {
     const p = periodMap.get(key)!
     p.tssTotal += w.tss
     p.minutesTotal += w.durationMinutes
+    p.kmTotal += w.distanceKm ?? 0
     p.workoutCount += 1
     if (w.ftpWatts != null) {
       p.hasFtp = true
@@ -131,6 +135,7 @@ export default defineEventHandler(async (event) => {
         label: formatLabel(key, groupBy),
         tssTotal: p.tssTotal,
         hoursTotal: p.minutesTotal / 60,
+        kmTotal: Math.round(p.kmTotal),
         workoutCount: p.workoutCount,
         hasFtp: p.hasFtp,
         hasPowerBests: p.hasPowerBests,
