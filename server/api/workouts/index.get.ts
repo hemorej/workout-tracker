@@ -113,6 +113,7 @@ export default defineEventHandler(async (event) => {
       date: workouts.date,
       name: workouts.name,
       durationMinutes: workouts.durationMinutes,
+      distanceKm: workouts.distanceKm,
       tss: workouts.tss,
       rpe: workouts.rpe,
       notes: workouts.notes,
