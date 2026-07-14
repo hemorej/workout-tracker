@@ -40,18 +40,6 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * Sends registration data to the server.
-   * The server automatically logs the user in upon success.
-   */
-  async function register(email: string, username: string, password: string) {
-    await $fetch('/api/auth/register', {
-      method: 'POST',
-      body: { email, username, password },
-    })
-    await fetchSession()
-  }
-
-  /**
    * Clears the session cookie server-side then wipes local state.
    * Navigates to /login after logout.
    */
@@ -65,7 +53,6 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     loggedIn,
     login,
-    register,
     logout,
   }
 })

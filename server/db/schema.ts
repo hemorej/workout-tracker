@@ -43,7 +43,7 @@ export const users = pgTable('users', {
   /** Display name / username (also unique) */
   username: text('username').unique().notNull(),
 
-  /** bcrypt hash of the user's password — never store plaintext */
+  /** hash of the user's password — never store plaintext */
   passwordHash: text('password_hash').notNull(),
 
   /**

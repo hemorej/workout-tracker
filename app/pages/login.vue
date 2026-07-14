@@ -1,12 +1,9 @@
 <script setup lang="ts">
 /**
- * Login / Register page
+ * Login page
  *
- * A single page with two tabs: "Sign in" and "Create account".
- * Uses the auth store for all API calls, and Nuxt UI for form components.
- *
- * After a successful login or registration, navigateTo('/') is called
- * automatically from the auth store.
+ * Uses the auth store for the login API call, and Nuxt UI for form components.
+ * After a successful login, navigateTo('/') is called automatically.
  */
 
 import { useAuthStore } from '~/stores/auth'
@@ -16,12 +13,6 @@ definePageMeta({ middleware: 'guest' })
 
 const auth = useAuthStore()
 const toast = useToast()
-
-// ── Tab state ────────────────────────────────────────────────────────────
-// Registration is temporarily disabled — only login tab is shown
-type Tab = 'login' | 'register'
-const activeTab = ref<Tab>('login')
-const registrationOpen = false
 
 // ── Login form ───────────────────────────────────────────────────────────
 const loginForm = reactive({ email: '', password: '' })
@@ -40,35 +31,6 @@ async function handleLogin() {
   }
   finally {
     loginLoading.value = false
-  }
-}
-
-// ── Register form ────────────────────────────────────────────────────────
-const registerForm = reactive({ email: '', username: '', password: '', confirm: '' })
-const registerLoading = ref(false)
-
-async function handleRegister() {
-  if (registerForm.password !== registerForm.confirm) {
-    toast.add({ title: 'Passwords do not match', color: 'error' })
-    return
-  }
-  if (registerForm.password.length < 8) {
-    toast.add({ title: 'Password too short', description: 'Minimum 8 characters.', color: 'error' })
-    return
-  }
-
-  registerLoading.value = true
-  try {
-    await auth.register(registerForm.email, registerForm.username, registerForm.password)
-    await navigateTo('/')
-  }
-  catch (err: unknown) {
-    const message = (err as { data?: { statusMessage?: string } })?.data?.statusMessage
-      ?? 'Registration failed. Please try again.'
-    toast.add({ title: 'Registration failed', description: message, color: 'error' })
-  }
-  finally {
-    registerLoading.value = false
   }
 }
 </script>
@@ -93,28 +55,8 @@ async function handleRegister() {
       </p>
     </div>
 
-    <!-- Tab switcher — segmented control (registration temporarily disabled) -->
-    <div v-if="registrationOpen" class="mb-8 inline-flex gap-1 rounded-xl bg-stone-100 p-1">
-      <button
-        v-for="tab in [{ label: 'Sign in', value: 'login' }, { label: 'Create account', value: 'register' }]"
-        :key="tab.value"
-        type="button"
-        class="rounded-lg px-5 py-2 text-sm transition-colors"
-        :class="activeTab === tab.value
-          ? 'bg-white font-semibold text-stone-900 shadow-sm'
-          : 'font-medium text-stone-500 hover:text-stone-700'"
-        @click="activeTab = tab.value as Tab"
-      >
-        {{ tab.label }}
-      </button>
-    </div>
-    <p v-else class="mb-8 text-sm text-stone-400">
-      Registration is currently closed.
-    </p>
-
     <!-- ── Login Form ─────────────────────────────────────────────────── -->
     <form
-      v-if="activeTab === 'login'"
       method="post"
       @submit.prevent="handleLogin"
       class="w-full max-w-xs space-y-5"
@@ -151,71 +93,6 @@ async function handleRegister() {
         class="mt-1 rounded-lg font-semibold"
       >
         Sign in
-      </UButton>
-    </form>
-
-    <!-- ── Register Form ──────────────────────────────────────────────── -->
-    <form
-      v-else
-      method="post"
-      @submit.prevent="handleRegister"
-      class="w-full max-w-xs space-y-5"
-    >
-      <UFormField label="Email" name="email">
-        <UInput
-          v-model="registerForm.email"
-          type="email"
-          placeholder="you@example.com"
-          autocomplete="email"
-          required
-          class="w-full"
-          size="xl"
-        />
-      </UFormField>
-
-      <UFormField label="Username" name="username">
-        <UInput
-          v-model="registerForm.username"
-          placeholder="your_name"
-          autocomplete="username"
-          required
-          class="w-full"
-          size="xl"
-        />
-      </UFormField>
-
-      <UFormField label="Password" name="password">
-        <UInput
-          v-model="registerForm.password"
-          type="password"
-          placeholder="Min. 8 characters"
-          autocomplete="new-password"
-          required
-          class="w-full"
-          size="xl"
-        />
-      </UFormField>
-
-      <UFormField label="Confirm password" name="confirm">
-        <UInput
-          v-model="registerForm.confirm"
-          type="password"
-          placeholder="Repeat password"
-          autocomplete="new-password"
-          required
-          class="w-full"
-          size="xl"
-        />
-      </UFormField>
-
-      <UButton
-        type="submit"
-        :loading="registerLoading"
-        block
-        size="lg"
-        class="mt-1 rounded-lg font-semibold"
-      >
-        Create account
       </UButton>
     </form>
 
