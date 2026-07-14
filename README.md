@@ -14,8 +14,8 @@ Track your daily training sessions, visualise your fitness and fatigue over time
 | Frontend | Vue 3.5, TypeScript |
 | State | Pinia (`@pinia/nuxt`) |
 | UI | Nuxt UI v3 (built on Tailwind CSS) |
-| Auth | `nuxt-auth-utils` (cookie sessions) + bcrypt |
-| Database | PostgreSQL |
+| Auth | `nuxt-auth-utils` (cookie sessions) + scrypt (`@adonisjs/hash`) |
+| Database | PostgreSQL 18 |
 | ORM | Drizzle ORM (`drizzle-orm/node-postgres`) |
 | Migrations | Drizzle Kit |
 
@@ -28,13 +28,15 @@ sprocket/
 ├── app/                        ← Nuxt 4 source directory
 │   ├── app.vue                 ← Root component (UApp wrapper)
 │   ├── pages/
-│   │   ├── index.vue           ← Dashboard with Log + Planning + History tabs (protected)
-│   │   └── login.vue           ← Login page
+│   │   ├── index.vue           ← Dashboard with Log + Planning + Builder + History tabs (protected)
+│   │   └── login.vue           ← Login page (registration disabled — no signup form)
 │   ├── components/
+│   │   ├── BikeLogo.vue        ← App wordmark icon
 │   │   ├── MetricsSummary.vue  ← Weekly stats + CTL/TSB cards
 │   │   ├── WorkoutCard.vue     ← Single day row (workout or rest)
-│   │   ├── AddWorkoutModal.vue ← Log workout form (modal)
+│   │   ├── AddWorkoutModal.vue ← Log workout form (modal), pre-fillable from recent Strava rides
 │   │   ├── PlanningTab.vue     ← 4-week planning grid with live projections
+│   │   ├── WorkoutBuilderTab.vue ← Structured workout builder, exports Zwift .zwo files
 │   │   └── HistoryTab.vue      ← Aggregated history + power bests panel
 │   ├── stores/
 │   │   ├── auth.ts             ← Login, logout actions
@@ -50,6 +52,8 @@ sprocket/
 │   │   │   ├── login.post.ts
 │   │   │   ├── logout.post.ts
 │   │   │   └── register.post.ts    ← Currently disabled (returns 403)
+│   │   ├── strava/
+│   │   │   └── recent-rides.get.ts ← Last 3 Strava rides, used to pre-fill the Add Workout form
 │   │   ├── workouts/
 │   │   │   ├── index.get.ts        ← Paginated list + metrics
 │   │   │   ├── index.post.ts       ← Create workout
@@ -66,6 +70,7 @@ sprocket/
 │   └── utils/
 │       ├── tss.ts              ← CTL / ATL / TSB formula engine
 │       ├── metricsCache.ts     ← In-process series cache (TTL + write invalidation)
+│       ├── strava.ts           ← Refresh-token exchange + fetchRecentRides()
 │       └── session.d.ts        ← UserSession type augmentation for nuxt-auth-utils
 │
 ├── scripts/
@@ -86,7 +91,7 @@ sprocket/
 
 - Node.js 24.x
 - pnpm 11+ (`npm install -g pnpm`)
-- PostgreSQL 15+ running locally (or a hosted instance)
+- PostgreSQL 18+ running locally (or a hosted instance)
 
 ### 2. Install dependencies
 
@@ -103,9 +108,9 @@ cp .env.example .env
 ### 3.5 Install and configure the database server
 
 ```bash
-brew install postgresql@15
-brew services start postgresql@15
-brew services stop postgresql@15
+brew install postgresql@18
+brew services start postgresql@18
+brew services stop postgresql@18
 ```
 
 Edit `.env`:
@@ -117,6 +122,13 @@ DATABASE_URL="postgresql://postgres:password@localhost:5432/workout_tracker"
 # Session encryption secret (must be ≥ 32 characters)
 # Generate one with: openssl rand -base64 32
 NUXT_SESSION_PASSWORD="replace-this-with-a-long-random-secret!!"
+
+# Optional — Strava integration (pre-fills the Add Workout form from your
+# last 3 rides). Single-user, no in-app OAuth flow. See "Strava integration"
+# below for how to acquire these.
+STRAVA_CLIENT_ID=
+STRAVA_CLIENT_SECRET=
+STRAVA_REFRESH_TOKEN=
 ```
 
 ### 4. Create the database
@@ -146,7 +158,14 @@ pnpm db:migrate
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). You'll see the login page — create an account to get started.
+Open [http://localhost:3000](http://localhost:3000). You'll see the login page. Registration is disabled — create your account directly in the database:
+
+```sql
+-- Password hash must be generated with the app's scrypt hasher, not by hand.
+-- Easiest path: insert a placeholder row, then set a real password with:
+--   pnpm reset-password   (edit EMAIL / NEW_PASSWORD in scripts/reset-password.ts first)
+INSERT INTO users (email, username, password_hash) VALUES ('you@example.com', 'you', 'placeholder');
+```
 
 ---
 
@@ -159,7 +178,7 @@ Open [http://localhost:3000](http://localhost:3000). You'll see the login page �
 | `id` | serial PK | Auto-increment |
 | `email` | text | Unique |
 | `username` | text | Unique |
-| `password_hash` | text | bcrypt hash |
+| `password_hash` | text | scrypt hash |
 | `initial_ctl` | integer | Seed CTL before first workout (default 0) |
 | `initial_atl` | integer | Seed ATL before first workout (default 0) |
 | `created_at` | timestamptz | Default: now() |
@@ -179,6 +198,7 @@ UPDATE users SET initial_ctl = 44, initial_atl = 44 WHERE email = 'you@example.c
 | `date` | date | One workout per user per day (unique index) |
 | `name` | text | Required |
 | `duration_minutes` | integer | > 0 |
+| `distance_km` | real | Optional, ≥ 0 (null for rows logged before this field existed) |
 | `tss` | integer | ≥ 0 |
 | `rpe` | integer | Optional, 1–10 |
 | `notes` | text | Optional |
@@ -271,6 +291,7 @@ All routes require a valid session cookie except `/api/auth/login` and `/api/aut
 | PUT | `/api/planned-workouts` | Upsert a planned workout |
 | DELETE | `/api/planned-workouts/:date` | Delete a planned workout by date |
 | GET | `/api/history?groupBy=week\|month\|year` | Aggregated history periods + power bests panel |
+| GET | `/api/strava/recent-rides` | Last 3 Strava rides, used to pre-fill the Add Workout form |
 
 ### GET /api/workouts response shape
 
@@ -332,6 +353,14 @@ All routes require a valid session cookie except `/api/auth/login` and `/api/aut
 
 ---
 
+## Strava integration
+
+Single-user "pre-fill from a recent ride" flow — there's no in-app OAuth flow and no webhooks/polling. `server/utils/strava.ts` exchanges a long-lived `STRAVA_REFRESH_TOKEN` for a short-lived access token (cached in-process, refreshed as needed) and exposes `fetchRecentRides()`. `GET /api/strava/recent-rides` returns the last 3 Ride-type activities, which the Add Workout form uses to pre-fill name, moving time, and date — TSS and power bests always stay manual since Strava's own NP/TSS formula doesn't match the user's bike computer.
+
+To (re)acquire a refresh token: register an app at [strava.com/settings/api](https://www.strava.com/settings/api) with Authorization Callback Domain `localhost`, visit the OAuth authorize URL with `scope=activity:read_all`, approve, copy the `code` param from the (failed-to-load) `localhost` redirect, then `POST https://www.strava.com/oauth/token` with `client_id`, `client_secret`, `code`, `grant_type=authorization_code` to get the initial token pair.
+
+---
+
 ## Resetting a password
 
 Edit the email and new password at the top of `scripts/reset-password.ts`, then run:
@@ -352,6 +381,8 @@ pnpm preview         # Preview production build locally
 pnpm db:generate     # Generate migration files after schema changes
 pnpm db:migrate      # Apply pending migrations
 pnpm db:studio       # Open Drizzle Studio (visual DB browser at localhost:4983)
+pnpm typecheck       # Type-check the whole app (nuxt typecheck / vue-tsc)
+pnpm reset-password  # Reset a user's password (edit EMAIL/NEW_PASSWORD in the script first)
 ```
 
 ---
@@ -385,3 +416,5 @@ This codebase is intentionally annotated to be a learning reference. A few patte
 **Live projections without a round-trip** (`PlanningTab.vue`) — The planning grid recomputes projected CTL/TSB locally using the same EMA formula as the server. Draft TSS values (not yet saved) are included in the computation, so the numbers update as you type.
 
 **`defineExpose` for modal control** (`AddWorkoutModal.vue`) — The parent holds a template ref to the modal and calls `modal.open()`. This keeps the open/close state encapsulated inside the modal component.
+
+**Structured workout builder** (`WorkoutBuilderTab.vue`) — Composes warmup/cooldown ramps, steady-power blocks, and on/off intervals on a zone-colored timeline, then exports a Zwift `.zwo` file. All state is local to the component — nothing is persisted or shared with the Log/Planning/History tabs.
