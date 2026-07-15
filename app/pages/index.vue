@@ -267,6 +267,11 @@ async function onPageChange(page: number) {
         :yesterday-t-s-b="workouts.yesterdayMetrics?.tsb"
       />
 
+      <!-- Section header + Add button, and the content directly below it —
+           grouped so their shared spacing can be tightened on narrow/vertical
+           screens independently of the rest of main's space-y-10 rhythm. -->
+      <div class="!mt-4 sm:!mt-10 space-y-4 sm:space-y-10">
+
       <!-- Section header + Add button -->
       <div class="flex items-center justify-between">
         <h2 class="text-xs font-semibold uppercase tracking-widest text-stone-400">
@@ -319,6 +324,8 @@ async function onPageChange(page: number) {
           @mark-completed="onMarkCompleted"
           @go-to-builder="goToBuilder"
         />
+      </div>
+
       </div>
 
       <!-- ── Pagination ────────────────────────────────────────────── -->

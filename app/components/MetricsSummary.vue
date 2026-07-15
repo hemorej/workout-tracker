@@ -64,26 +64,26 @@ const tsbDisplay = computed(() =>
     up evenly despite the 3-vs-2 stat count. A 2px bottom rule under each
     group label replaces the old full-height dividers between every stat.
   -->
-  <div class="bg-white rounded-[14px] border border-[#f0eeec] px-7 py-6">
-    <div class="grid grid-cols-[3fr_2fr] gap-7">
+  <div class="bg-white rounded-[14px] border border-[#f0eeec] px-4 py-5 sm:px-7 sm:py-6">
+    <div class="grid grid-cols-[3fr_2fr] gap-3 sm:gap-7">
 
       <!-- This week -->
       <div>
         <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 pb-[10px] border-b-2 border-[#e7e5e0] mb-2.5">
           This week
         </p>
-        <div class="grid grid-cols-3 gap-5">
+        <div class="grid grid-cols-3 gap-2 sm:gap-5">
           <div>
             <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-stone-400 mb-1.5">TSS</p>
-            <p class="text-[30px] font-bold text-stone-900 tabular">{{ weeklyTss }}</p>
+            <p class="text-xl sm:text-[30px] font-bold text-stone-900 tabular">{{ weeklyTss }}</p>
           </div>
           <div>
             <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-stone-400 mb-1.5">Hours</p>
-            <p class="text-[30px] font-bold text-stone-900 tabular">{{ weeklyHours.toFixed(1) }}</p>
+            <p class="text-xl sm:text-[30px] font-bold text-stone-900 tabular">{{ weeklyHours.toFixed(1) }}</p>
           </div>
           <div>
             <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-stone-400 mb-1.5">Km</p>
-            <p class="text-[30px] font-bold text-stone-900 tabular">{{ weeklyKm }}</p>
+            <p class="text-xl sm:text-[30px] font-bold text-stone-900 tabular">{{ weeklyKm }}</p>
           </div>
         </div>
       </div>
@@ -93,11 +93,11 @@ const tsbDisplay = computed(() =>
         <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 pb-[10px] border-b-2 border-[#e7e5e0] mb-2.5">
           Today
         </p>
-        <div class="grid grid-cols-2 gap-5">
+        <div class="grid grid-cols-2 gap-2 sm:gap-5">
           <div>
             <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-emerald-600 mb-1.5">CTL</p>
             <p class="flex items-baseline gap-1.5">
-              <span class="text-[30px] font-bold text-stone-900 tabular">{{ todayCTL.toFixed(1) }}</span>
+              <span class="text-xl sm:text-[30px] font-bold text-stone-900 tabular">{{ todayCTL.toFixed(1) }}</span>
               <span v-if="ctlTrend" class="text-[13px]" :class="ctlTrend.colorClass">{{ ctlTrend.symbol }}</span>
             </p>
             <p class="text-[11px] text-stone-500 mt-1">Fitness</p>
@@ -105,7 +105,7 @@ const tsbDisplay = computed(() =>
           <div>
             <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-amber-600 mb-1.5">TSB</p>
             <p class="flex items-baseline gap-1.5">
-              <span class="text-[30px] font-bold text-stone-900 tabular">{{ tsbDisplay }}</span>
+              <span class="text-xl sm:text-[30px] font-bold text-stone-900 tabular">{{ tsbDisplay }}</span>
               <span v-if="tsbTrend" class="text-[13px]" :class="tsbTrend.colorClass">{{ tsbTrend.symbol }}</span>
             </p>
             <p class="text-[11px] text-stone-500 mt-1">{{ formZone.label }}</p>
