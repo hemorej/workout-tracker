@@ -116,6 +116,13 @@ export const workouts = pgTable(
     /** FTP (Functional Threshold Power) in watts recorded during this workout, if updated */
     ftpWatts: integer('ftp_watts'),
 
+    /**
+     * Indoor/trainer (Zwift, etc.) vs outdoor ride. Optional — null for rows
+     * logged before this field existed, until backfilled from Strava
+     * (Strava's `type: 'VirtualRide'` vs `'Ride'`).
+     */
+    rideType: text('ride_type'),
+
     /** Row creation timestamp (UTC) */
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -146,6 +153,11 @@ export const workouts = pgTable(
      * CHECK constraint: distance, when provided, must be non-negative.
      */
     check('distance_km_non_negative', sql`${table.distanceKm} IS NULL OR ${table.distanceKm} >= 0`),
+
+    /**
+     * CHECK constraint: ride_type, when provided, must be 'outdoor' or 'trainer'.
+     */
+    check('ride_type_valid', sql`${table.rideType} IS NULL OR ${table.rideType} IN ('outdoor', 'trainer')`),
   ],
 )
 

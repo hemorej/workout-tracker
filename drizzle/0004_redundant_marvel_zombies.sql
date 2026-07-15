@@ -1,0 +1,2 @@
+ALTER TABLE "workouts" ADD COLUMN "ride_type" text;--> statement-breakpoint
+ALTER TABLE "workouts" ADD CONSTRAINT "ride_type_valid" CHECK ("workouts"."ride_type" IS NULL OR "workouts"."ride_type" IN ('outdoor', 'trainer'));
