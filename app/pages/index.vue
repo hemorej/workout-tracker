@@ -186,6 +186,134 @@ async function onPageChange(page: number) {
   // Scroll to top of list on page change
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
+
+// ── Training log filter bar — UI only, not yet wired to the workout list ──
+type LogFilterType = 'all' | 'zwift' | 'outdoor'
+type LogPanel = null | 'type' | 'tss' | 'dist' | 'dur' | 'dates'
+
+const logSearch = ref('')
+const logFilterType = ref<LogFilterType>('all')
+const logMinTSS = ref(0)
+const logMinDistance = ref(0)
+const logMinDuration = ref(0)
+const logDateFrom = ref('')
+const logDateTo = ref('')
+
+const activeLogPanel = ref<LogPanel>(null)
+const logFilterGroupRef = ref<HTMLElement | null>(null)
+const draftMinTSS = ref(0)
+const draftMinDistance = ref(0)
+const draftMinDuration = ref(0)
+const draftDateFrom = ref('')
+const draftDateTo = ref('')
+
+const hasActiveLogFilters = computed(() =>
+  logSearch.value !== ''
+  || logFilterType.value !== 'all'
+  || logMinTSS.value > 0
+  || logMinDistance.value > 0
+  || logMinDuration.value > 0
+  || logDateFrom.value !== ''
+  || logDateTo.value !== '',
+)
+
+function formatChipDate(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+const typeChipLabel = computed(() => {
+  if (logFilterType.value === 'zwift') return 'Zwift'
+  if (logFilterType.value === 'outdoor') return 'Outdoor'
+  return 'Type'
+})
+const tssChipLabel = computed(() => logMinTSS.value > 0 ? `≥${logMinTSS.value} TSS` : 'TSS')
+const distChipLabel = computed(() => logMinDistance.value > 0 ? `≥${logMinDistance.value} km` : 'Distance')
+const durChipLabel = computed(() => logMinDuration.value > 0 ? `≥${logMinDuration.value} min` : 'Duration')
+const datesChipLabel = computed(() => {
+  if (logDateFrom.value && logDateTo.value) return `${formatChipDate(logDateFrom.value)} – ${formatChipDate(logDateTo.value)}`
+  if (logDateFrom.value) return `From ${formatChipDate(logDateFrom.value)}`
+  if (logDateTo.value) return `Until ${formatChipDate(logDateTo.value)}`
+  return 'Dates'
+})
+
+const draftTSSLabel = computed(() => draftMinTSS.value > 0 ? `${draftMinTSS.value} TSS` : 'Any')
+const draftDistLabel = computed(() => draftMinDistance.value > 0 ? `${draftMinDistance.value} km` : 'Any')
+const draftDurLabel = computed(() => draftMinDuration.value > 0 ? `${draftMinDuration.value} min` : 'Any')
+
+/** Opens a chip's panel, seeding its draft from the currently applied values; toggles closed if already open */
+function toggleLogPanel(panel: Exclude<LogPanel, null>) {
+  if (activeLogPanel.value === panel) {
+    activeLogPanel.value = null
+    return
+  }
+  draftMinTSS.value = logMinTSS.value
+  draftMinDistance.value = logMinDistance.value
+  draftMinDuration.value = logMinDuration.value
+  draftDateFrom.value = logDateFrom.value
+  draftDateTo.value = logDateTo.value
+  activeLogPanel.value = panel
+}
+
+function closeLogPanel() {
+  activeLogPanel.value = null
+}
+
+/** Type filter commits and closes immediately — no draft/Apply step */
+function setLogType(type: LogFilterType) {
+  logFilterType.value = type
+  activeLogPanel.value = null
+}
+
+function applyLogPanel() {
+  if (activeLogPanel.value === 'tss') logMinTSS.value = draftMinTSS.value
+  else if (activeLogPanel.value === 'dist') logMinDistance.value = draftMinDistance.value
+  else if (activeLogPanel.value === 'dur') logMinDuration.value = draftMinDuration.value
+  else if (activeLogPanel.value === 'dates') {
+    logDateFrom.value = draftDateFrom.value
+    logDateTo.value = draftDateTo.value
+  }
+  activeLogPanel.value = null
+}
+
+function resetTSSDraft() {
+  draftMinTSS.value = 0
+}
+
+function resetDistDraft() {
+  draftMinDistance.value = 0
+}
+
+function resetDurDraft() {
+  draftMinDuration.value = 0
+}
+
+function resetDatesDraft() {
+  draftDateFrom.value = ''
+  draftDateTo.value = ''
+}
+
+/** Clears every filter (search text, type, TSS, distance, duration, dates) and closes any open panel */
+function clearLogFilters() {
+  logSearch.value = ''
+  logFilterType.value = 'all'
+  logMinTSS.value = 0
+  logMinDistance.value = 0
+  logMinDuration.value = 0
+  logDateFrom.value = ''
+  logDateTo.value = ''
+  activeLogPanel.value = null
+}
+
+/** Closes an open filter panel when the user clicks anywhere outside the chip group */
+function onDocumentClickForLogPanel(event: MouseEvent) {
+  if (activeLogPanel.value === null) return
+  if (logFilterGroupRef.value && !logFilterGroupRef.value.contains(event.target as Node)) {
+    activeLogPanel.value = null
+  }
+}
+
+onMounted(() => document.addEventListener('click', onDocumentClickForLogPanel))
+onUnmounted(() => document.removeEventListener('click', onDocumentClickForLogPanel))
 </script>
 
 <template>
@@ -271,17 +399,307 @@ async function onPageChange(page: number) {
            grouped so their shared spacing can be tightened on narrow/vertical
            screens independently of the rest of main's space-y-10 rhythm. -->
       <div class="!mt-4 sm:!mt-10 space-y-4 sm:space-y-10">
+        
+      <!-- Filter bar: search + filter chips + Add workout button -->
+      <div class="flex flex-wrap items-center gap-2.5" style="margin: 32px 0 16px;">
+        <div class="relative min-w-[140px] flex-1 basis-[160px]">
+          <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-stone-400">⌕</span>
+          <input
+            v-model="logSearch"
+            type="text"
+            placeholder="Search workouts…"
+            class="w-full rounded-xl border-[1.5px] border-stone-200 bg-stone-50 py-3 pl-10 pr-4 text-[15px] text-stone-900 outline-none"
+          >
+        </div>
 
-      <!-- Section header + Add button -->
-      <div class="flex items-center justify-between">
-        <h2 class="text-xs font-semibold uppercase tracking-widest text-stone-400">
-          Training log
-        </h2>
+        <div ref="logFilterGroupRef" class="relative flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            class="whitespace-nowrap rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold"
+            :class="logFilterType !== 'all'
+              ? 'border-orange-300 bg-orange-50 text-orange-600'
+              : 'border-stone-200 bg-white text-stone-600'"
+            @click="toggleLogPanel('type')"
+          >
+            {{ typeChipLabel }}
+          </button>
+          <button
+            type="button"
+            class="whitespace-nowrap rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold"
+            :class="logMinTSS > 0
+              ? 'border-orange-300 bg-orange-50 text-orange-600'
+              : 'border-stone-200 bg-white text-stone-600'"
+            @click="toggleLogPanel('tss')"
+          >
+            {{ tssChipLabel }}
+          </button>
+          <button
+            type="button"
+            class="whitespace-nowrap rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold"
+            :class="logMinDistance > 0
+              ? 'border-orange-300 bg-orange-50 text-orange-600'
+              : 'border-stone-200 bg-white text-stone-600'"
+            @click="toggleLogPanel('dist')"
+          >
+            {{ distChipLabel }}
+          </button>
+          <button
+            type="button"
+            class="whitespace-nowrap rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold"
+            :class="logMinDuration > 0
+              ? 'border-orange-300 bg-orange-50 text-orange-600'
+              : 'border-stone-200 bg-white text-stone-600'"
+            @click="toggleLogPanel('dur')"
+          >
+            {{ durChipLabel }}
+          </button>
+          <button
+            type="button"
+            class="whitespace-nowrap rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold"
+            :class="(logDateFrom || logDateTo)
+              ? 'border-orange-300 bg-orange-50 text-orange-600'
+              : 'border-stone-200 bg-white text-stone-600'"
+            @click="toggleLogPanel('dates')"
+          >
+            {{ datesChipLabel }}
+          </button>
+          <button
+            type="button"
+            title="Reset all filters"
+            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[#f5f4f2] text-[15px]"
+            :class="hasActiveLogFilters ? 'text-stone-600' : 'text-[#cbc8c4]'"
+            @click="clearLogFilters"
+          >
+            ↺
+          </button>
+
+          <!-- Type panel — commits and closes immediately, no draft step -->
+          <div
+            v-if="activeLogPanel === 'type'"
+            class="absolute left-0 top-[calc(100%+8px)] z-20 w-[260px] rounded-2xl border border-[#f0eeec] bg-white p-3.5 shadow-[0_16px_40px_rgba(28,25,23,.18)]"
+          >
+            <button
+              type="button"
+              class="mb-0.5 block w-full rounded-[10px] px-3 py-2.5 text-left text-[13px] font-semibold"
+              :class="logFilterType === 'all' ? 'bg-[#faf9f7] text-orange-600' : 'text-stone-600'"
+              @click="setLogType('all')"
+            >
+              All
+            </button>
+            <button
+              type="button"
+              class="mb-0.5 block w-full rounded-[10px] px-3 py-2.5 text-left text-[13px] font-semibold"
+              :class="logFilterType === 'zwift' ? 'bg-[#faf9f7] text-orange-600' : 'text-stone-600'"
+              @click="setLogType('zwift')"
+            >
+              Zwift
+            </button>
+            <button
+              type="button"
+              class="block w-full rounded-[10px] px-3 py-2.5 text-left text-[13px] font-semibold"
+              :class="logFilterType === 'outdoor' ? 'bg-[#faf9f7] text-orange-600' : 'text-stone-600'"
+              @click="setLogType('outdoor')"
+            >
+              Outdoor
+            </button>
+          </div>
+
+          <!-- TSS panel -->
+          <div
+            v-if="activeLogPanel === 'tss'"
+            class="absolute left-0 top-[calc(100%+8px)] z-20 w-[300px] rounded-2xl border border-[#f0eeec] bg-white p-5 shadow-[0_16px_40px_rgba(28,25,23,.18)]"
+          >
+            <p class="mb-1 text-[15px] font-bold text-stone-900">
+              Minimum TSS
+            </p>
+            <p class="mb-[18px] text-sm font-semibold text-orange-600">
+              {{ draftTSSLabel }}
+            </p>
+            <input
+              v-model.number="draftMinTSS"
+              type="range"
+              min="0"
+              max="150"
+              step="5"
+              class="mb-5 w-full accent-orange-600"
+            >
+            <div class="flex items-center justify-between">
+              <button
+                type="button"
+                class="rounded-[9px] border-[1.5px] border-orange-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-orange-600"
+                @click="resetTSSDraft"
+              >
+                Reset
+              </button>
+              <div class="flex gap-2.5">
+                <button
+                  type="button"
+                  class="rounded-[9px] bg-[#f5f4f2] px-4 py-2.5 text-[13px] font-semibold text-stone-500"
+                  @click="closeLogPanel"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  class="rounded-[9px] bg-orange-600 px-[18px] py-2.5 text-[13px] font-bold text-white"
+                  @click="applyLogPanel"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Distance panel -->
+          <div
+            v-if="activeLogPanel === 'dist'"
+            class="absolute left-0 top-[calc(100%+8px)] z-20 w-[300px] rounded-2xl border border-[#f0eeec] bg-white p-5 shadow-[0_16px_40px_rgba(28,25,23,.18)]"
+          >
+            <p class="mb-1 text-[15px] font-bold text-stone-900">
+              Minimum distance
+            </p>
+            <p class="mb-[18px] text-sm font-semibold text-orange-600">
+              {{ draftDistLabel }}
+            </p>
+            <input
+              v-model.number="draftMinDistance"
+              type="range"
+              min="0"
+              max="60"
+              step="1"
+              class="mb-5 w-full accent-orange-600"
+            >
+            <div class="flex items-center justify-between">
+              <button
+                type="button"
+                class="rounded-[9px] border-[1.5px] border-orange-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-orange-600"
+                @click="resetDistDraft"
+              >
+                Reset
+              </button>
+              <div class="flex gap-2.5">
+                <button
+                  type="button"
+                  class="rounded-[9px] bg-[#f5f4f2] px-4 py-2.5 text-[13px] font-semibold text-stone-500"
+                  @click="closeLogPanel"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  class="rounded-[9px] bg-orange-600 px-[18px] py-2.5 text-[13px] font-bold text-white"
+                  @click="applyLogPanel"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Duration panel -->
+          <div
+            v-if="activeLogPanel === 'dur'"
+            class="absolute left-0 top-[calc(100%+8px)] z-20 w-[300px] rounded-2xl border border-[#f0eeec] bg-white p-5 shadow-[0_16px_40px_rgba(28,25,23,.18)]"
+          >
+            <p class="mb-1 text-[15px] font-bold text-stone-900">
+              Minimum duration
+            </p>
+            <p class="mb-[18px] text-sm font-semibold text-orange-600">
+              {{ draftDurLabel }}
+            </p>
+            <input
+              v-model.number="draftMinDuration"
+              type="range"
+              min="0"
+              max="150"
+              step="5"
+              class="mb-5 w-full accent-orange-600"
+            >
+            <div class="flex items-center justify-between">
+              <button
+                type="button"
+                class="rounded-[9px] border-[1.5px] border-orange-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-orange-600"
+                @click="resetDurDraft"
+              >
+                Reset
+              </button>
+              <div class="flex gap-2.5">
+                <button
+                  type="button"
+                  class="rounded-[9px] bg-[#f5f4f2] px-4 py-2.5 text-[13px] font-semibold text-stone-500"
+                  @click="closeLogPanel"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  class="rounded-[9px] bg-orange-600 px-[18px] py-2.5 text-[13px] font-bold text-white"
+                  @click="applyLogPanel"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dates panel -->
+          <div
+            v-if="activeLogPanel === 'dates'"
+            class="absolute left-0 top-[calc(100%+8px)] z-20 w-[300px] rounded-2xl border border-[#f0eeec] bg-white p-5 shadow-[0_16px_40px_rgba(28,25,23,.18)]"
+          >
+            <p class="mb-4 text-[15px] font-bold text-stone-900">
+              Date range
+            </p>
+            <div class="mb-5 flex flex-col gap-3">
+              <div>
+                <label class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-stone-400">From</label>
+                <input
+                  v-model="draftDateFrom"
+                  type="date"
+                  class="w-full rounded-[9px] border-[1.5px] border-stone-200 bg-stone-50 px-2.5 py-2.5 text-sm text-stone-900 outline-none"
+                >
+              </div>
+              <div>
+                <label class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-stone-400">To</label>
+                <input
+                  v-model="draftDateTo"
+                  type="date"
+                  class="w-full rounded-[9px] border-[1.5px] border-stone-200 bg-stone-50 px-2.5 py-2.5 text-sm text-stone-900 outline-none"
+                >
+              </div>
+            </div>
+            <div class="flex items-center justify-between">
+              <button
+                type="button"
+                class="rounded-[9px] border-[1.5px] border-orange-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-orange-600"
+                @click="resetDatesDraft"
+              >
+                Reset
+              </button>
+              <div class="flex gap-2.5">
+                <button
+                  type="button"
+                  class="rounded-[9px] bg-[#f5f4f2] px-4 py-2.5 text-[13px] font-semibold text-stone-500"
+                  @click="closeLogPanel"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  class="rounded-[9px] bg-orange-600 px-[18px] py-2.5 text-[13px] font-bold text-white"
+                  @click="applyLogPanel"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <button
-          class="flex items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-orange-600/20 transition-colors hover:bg-orange-700"
+          class="shrink-0 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-orange-600/20 transition-colors hover:bg-orange-700"
           @click="openAddWorkout"
         >
-          <UIcon name="i-heroicons-plus" class="h-4 w-4" />
           Add workout
         </button>
       </div>
