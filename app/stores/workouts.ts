@@ -45,6 +45,8 @@ export interface DayEntry {
   date: string
   isRestDay: boolean
   metrics: DayMetrics
+  /** Previous calendar day's metrics (for trend arrows) — null at the start of the series */
+  prevMetrics: DayMetrics | null
   workout: WorkoutDetail | null
 }
 
@@ -59,6 +61,27 @@ export interface Pagination {
   limit: number
   totalDays: number
   totalPages: number
+}
+
+/** Training-log filter bar state — mirrors the GET /api/workouts filter query params */
+export interface LogFilters {
+  name: string
+  type: 'all' | 'zwift' | 'outdoor'
+  minTss: number
+  minDistance: number
+  minDuration: number
+  dateFrom: string
+  dateTo: string
+}
+
+export const DEFAULT_LOG_FILTERS: LogFilters = {
+  name: '',
+  type: 'all',
+  minTss: 0,
+  minDistance: 0,
+  minDuration: 0,
+  dateFrom: '',
+  dateTo: '',
 }
 
 export interface NewWorkoutPayload {
@@ -84,20 +107,32 @@ export const useWorkoutsStore = defineStore('workouts', () => {
   const pagination = ref<Pagination>({ page: 1, limit: 14, totalDays: 0, totalPages: 0 })
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  const filters = ref<LogFilters>({ ...DEFAULT_LOG_FILTERS })
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
   /**
-   * Fetches a page of the day list from GET /api/workouts.
-   * Updates all reactive state including weekly stats and today's metrics.
+   * Fetches a page of the day list from GET /api/workouts, applying the
+   * current `filters` state. Only non-default filter values are sent, so an
+   * unfiltered fetch is identical to the original calendar-day request.
    */
   async function fetchPage(page: number = 1) {
     isLoading.value = true
     error.value = null
 
+    const f = filters.value
+    const query: Record<string, string | number> = { page, limit: pagination.value.limit }
+    if (f.name) query.name = f.name
+    if (f.type !== 'all') query.type = f.type
+    if (f.minTss > 0) query.minTss = f.minTss
+    if (f.minDistance > 0) query.minDistance = f.minDistance
+    if (f.minDuration > 0) query.minDuration = f.minDuration
+    if (f.dateFrom) query.dateFrom = f.dateFrom
+    if (f.dateTo) query.dateTo = f.dateTo
+
     try {
       const data = await $fetch('/api/workouts', {
-        query: { page, limit: pagination.value.limit },
+        query,
       }) as {
         days: DayEntry[]
         weeklyStats: WeeklyStats
@@ -151,6 +186,15 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     await fetchPage(page)
   }
 
+  /**
+   * Replaces the active filter set and re-fetches from page 1 so the list
+   * updates live as the filter bar changes.
+   */
+  async function setFilters(next: LogFilters) {
+    filters.value = next
+    await fetchPage(1)
+  }
+
   return {
     // State
     days,
@@ -160,10 +204,12 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     pagination,
     isLoading,
     error,
+    filters,
     // Actions
     fetchPage,
     addWorkout,
     deleteWorkout,
     goToPage,
+    setFilters,
   }
 })
