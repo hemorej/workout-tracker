@@ -186,8 +186,8 @@ function confirmDelete() {
     with divide-y so the borders render between rows, not around each one.
   -->
   <div
-    class="relative grid items-start px-6 py-[18px] transition-colors hover:bg-stone-50"
-    :class="day.isRestDay && !isPlannedDay ? 'opacity-50 !py-2.5 !gap-x-3' : 'gap-x-5'"
+    class="relative grid items-start px-6 py-[18px] gap-x-5 transition-colors hover:bg-stone-50"
+    :class="day.isRestDay && !isPlannedDay ? 'opacity-50 !py-2.5' : ''"
     :style="day.isRestDay && !isPlannedDay
       ? 'grid-template-columns: 84px 1fr;'
       : 'grid-template-columns: 84px minmax(160px,1fr) 232px;'"

@@ -78,8 +78,10 @@ const addWorkoutForm = ref<{ reset: () => void } | null>(null)
 const pendingPrefill = ref<WorkoutPrefill | null>(null)
 const workoutBuilderRef = ref<{ setName: (name: string) => void } | null>(null)
 
-/** "Planned" icon on a planned day — switch to the builder tab pre-filled with the plan's name */
+/** "Planned" icon on a planned day — switch to the builder tab pre-filled with the plan's name.
+ *  Builder tab is hidden below `lg` (see nav below), so skip on phone-sized viewports. */
 async function goToBuilder() {
+  if (window.innerWidth < 1024) return
   const name = todayPlan.value?.plan?.name ?? ''
   activeTab.value = 'builder'
   await nextTick()
@@ -376,13 +378,17 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
         </div>
       </header>
 
-      <!-- Tab navigation — full-width justified 4-up bar -->
-      <nav class="grid grid-cols-4 bg-white border-b border-stone-100">
+      <!-- Tab navigation — full-width justified bar. Workout builder needs
+           real screen space for its timeline, so it's dropped below `lg`
+           (covers phones in both portrait and landscape); the remaining
+           3 tabs re-space evenly via grid-cols-3, going to 4-up at lg+. -->
+      <nav class="grid grid-cols-3 lg:grid-cols-4 bg-white border-b border-stone-100">
         <button
           v-for="(tab, i) in tabs"
           :key="tab.id"
           class="px-2 py-3.5 text-center text-[13px] sm:text-[15px] whitespace-nowrap border-b-[3px] transition-colors"
           :class="[
+            tab.id === 'builder' ? 'hidden lg:block' : '',
             i > 0 ? 'border-l border-l-[#f5f4f2]' : '',
             activeTab === tab.id
               ? 'font-bold text-stone-900 border-b-orange-600'
