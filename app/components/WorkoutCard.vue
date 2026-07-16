@@ -52,15 +52,23 @@ const formattedDate = computed(() => {
   if (date.getTime() === today.getTime()) return 'Today'
   if (date.getTime() === yesterday.getTime()) return 'Yesterday'
 
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  })
+  return date.toLocaleDateString('en-US', { weekday: 'long' })
 })
 
-/** Full ISO date shown as a subtitle */
-const isoDate = computed(() => props.day.date)
+/** "Jul 13 2026" — shown as a second line under the weekday, omitted for Today/Yesterday */
+const formattedMonthDayYear = computed(() => {
+  const date = new Date(`${props.day.date}T00:00`)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+
+  if (date.getTime() === today.getTime() || date.getTime() === yesterday.getTime()) return null
+
+  const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return `${monthDay} ${date.getFullYear()}`
+})
 
 /** Duration formatted as "Xh Ym" */
 const durationDisplay = computed(() => {
@@ -178,9 +186,11 @@ function confirmDelete() {
     with divide-y so the borders render between rows, not around each one.
   -->
   <div
-    class="relative grid items-start gap-x-5 px-6 py-[18px] transition-colors hover:bg-stone-50"
-    style="grid-template-columns: 84px minmax(160px,1fr) 232px;"
-    :class="day.isRestDay && !isPlannedDay ? 'opacity-50' : ''"
+    class="relative grid items-start px-6 py-[18px] transition-colors hover:bg-stone-50"
+    :class="day.isRestDay && !isPlannedDay ? 'opacity-50 !py-2.5 !gap-x-3' : 'gap-x-5'"
+    :style="day.isRestDay && !isPlannedDay
+      ? 'grid-template-columns: 84px 1fr;'
+      : 'grid-template-columns: 84px minmax(160px,1fr) 232px;'"
   >
     <!-- Left accent line — orange for logged workouts, violet for planned -->
     <div
@@ -195,16 +205,22 @@ function confirmDelete() {
     <!-- Column 1: date — fixed width, right-aligned -->
     <div class="text-right pt-0.5">
       <p class="text-sm font-semibold text-stone-600">{{ formattedDate }}</p>
-      <p class="text-xs text-stone-500 mt-0.5">{{ isoDate }}</p>
+      <p v-if="formattedMonthDayYear" class="text-xs text-stone-500 mt-0.5">{{ formattedMonthDayYear }}</p>
     </div>
 
     <!-- Column 2: title/duration + notes + metrics — absorbs variable-length text -->
     <div class="min-w-0">
 
-      <!-- Rest day -->
-      <p v-if="day.isRestDay && !isPlannedDay" class="text-sm text-stone-400 italic pt-0.5">
-        Rest
-      </p>
+      <!-- Rest day — CTL/TSB chips share the line with the label to stay compact -->
+      <div v-if="day.isRestDay && !isPlannedDay" class="flex flex-wrap items-center gap-1.5 text-[11px] font-medium tabular">
+        <span class="text-sm text-stone-400 italic mr-1">Rest</span>
+        <span class="rounded-[7px] border px-2 py-[3px]" :class="ctlChipClass">
+          CTL <b>{{ displayMetrics.ctl.toFixed(1) }}<template v-if="ctlTrend"> {{ ctlTrend.symbol }}</template></b>
+        </span>
+        <span class="rounded-[7px] border px-2 py-[3px]" :class="tsbChipClass">
+          TSB <b>{{ tsbDisplay }}<template v-if="tsbTrend"> {{ tsbTrend.symbol }}</template></b>
+        </span>
+      </div>
 
       <!-- Planned workout (today, not yet logged) -->
       <div v-else-if="isPlannedDay">
@@ -253,8 +269,9 @@ function confirmDelete() {
         </div>
       </div>
 
-      <!-- Metrics row — CTL / TSB as small tinted chips, tint follows trend direction -->
-      <div class="flex flex-wrap gap-1.5 mt-1.5 text-[11px] font-medium tabular">
+      <!-- Metrics row — CTL / TSB as small tinted chips, tint follows trend direction.
+           Rest days show these inline with the "Rest" label above instead. -->
+      <div v-if="!(day.isRestDay && !isPlannedDay)" class="flex flex-wrap gap-1.5 mt-1.5 text-[11px] font-medium tabular">
         <span class="rounded-[7px] border px-2 py-[3px]" :class="ctlChipClass">
           CTL <b>{{ displayMetrics.ctl.toFixed(1) }}<template v-if="ctlTrend"> {{ ctlTrend.symbol }}</template></b>
         </span>
