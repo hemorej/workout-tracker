@@ -238,13 +238,17 @@ function confirmDelete() {
 
       <!-- Workout day -->
       <div v-else>
-        <!-- Name row -->
+        <!-- Name row — on narrow viewports the duration/distance group is forced onto its
+             own second line (w-full) instead of wrapping wherever the title happens to
+             break; at sm+ it collapses back into the same flex row via sm:contents. -->
         <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
           <span class="text-base font-semibold text-stone-800 truncate max-w-xs">
             {{ day.workout?.name }}
           </span>
-          <span class="text-sm text-stone-400">{{ durationDisplay }}</span>
-          <span v-if="distanceDisplay" class="text-sm text-stone-400">{{ distanceDisplay }}</span>
+          <div class="flex items-baseline gap-x-2.5 w-full sm:w-auto sm:contents">
+            <span class="text-sm text-stone-400">{{ durationDisplay }}</span>
+            <span v-if="distanceDisplay" class="text-sm text-stone-400">{{ distanceDisplay }}</span>
+          </div>
           <!-- FTP update indicator -->
           <span
             v-if="hasFtp"
