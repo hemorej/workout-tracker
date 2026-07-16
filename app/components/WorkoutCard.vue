@@ -211,15 +211,19 @@ function confirmDelete() {
     <!-- Column 2: title/duration + notes + metrics — absorbs variable-length text -->
     <div class="min-w-0">
 
-      <!-- Rest day — CTL/TSB chips share the line with the label to stay compact -->
+      <!-- Rest day — CTL/TSB chips share the line with the label to stay compact.
+           The two chips are grouped in their own nowrap flex so they wrap as a pair
+           (never split from each other) if the row runs out of horizontal room. -->
       <div v-if="day.isRestDay && !isPlannedDay" class="flex flex-wrap items-center gap-1.5 text-[11px] font-medium tabular">
         <span class="text-sm text-stone-400 italic mr-1">Rest</span>
-        <span class="rounded-[7px] border px-2 py-[3px]" :class="ctlChipClass">
-          CTL <b>{{ displayMetrics.ctl.toFixed(1) }}<template v-if="ctlTrend"> {{ ctlTrend.symbol }}</template></b>
-        </span>
-        <span class="rounded-[7px] border px-2 py-[3px]" :class="tsbChipClass">
-          TSB <b>{{ tsbDisplay }}<template v-if="tsbTrend"> {{ tsbTrend.symbol }}</template></b>
-        </span>
+        <div class="flex items-center gap-1.5">
+          <span class="rounded-[7px] border px-2 py-[3px] whitespace-nowrap" :class="ctlChipClass">
+            CTL <b>{{ displayMetrics.ctl.toFixed(1) }}<template v-if="ctlTrend"> {{ ctlTrend.symbol }}</template></b>
+          </span>
+          <span class="rounded-[7px] border px-2 py-[3px] whitespace-nowrap" :class="tsbChipClass">
+            TSB <b>{{ tsbDisplay }}<template v-if="tsbTrend"> {{ tsbTrend.symbol }}</template></b>
+          </span>
+        </div>
       </div>
 
       <!-- Planned workout (today, not yet logged) -->
