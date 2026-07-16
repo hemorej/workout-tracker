@@ -433,19 +433,31 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
            screens independently of the rest of main's space-y-10 rhythm. -->
       <div class="!mt-4 sm:!mt-10 space-y-4 sm:space-y-10">
         
-      <!-- Filter bar: search + filter chips + Add workout button -->
-      <div class="flex flex-nowrap items-center gap-2.5" style="margin: 32px 0 16px;">
-        <div class="relative min-w-0 flex-1 basis-[160px]">
-          <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-stone-400">⌕</span>
-          <input
-            v-model="logSearch"
-            type="text"
-            placeholder="Search workouts…"
-            class="w-full rounded-xl border-[1.5px] border-stone-200 bg-stone-50 py-3 pl-10 pr-4 text-[15px] text-stone-900 outline-none"
+      <!-- Filter bar: search + filter chips + Add workout button.
+           On narrow/vertical screens this stacks into two rows: search + Add
+           workout on row 1, filter chips evenly spaced on row 2. From `sm`
+           up it collapses back into a single row via `sm:contents`. -->
+      <div class="flex flex-col gap-2.5 sm:flex-row sm:flex-nowrap sm:items-center" style="margin: 32px 0 16px;">
+        <div class="flex items-center gap-2.5 sm:contents">
+          <div class="relative min-w-0 flex-1 basis-[160px] sm:order-1">
+            <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-stone-400">⌕</span>
+            <input
+              v-model="logSearch"
+              type="text"
+              placeholder="Search workouts…"
+              class="w-full rounded-xl border-[1.5px] border-stone-200 bg-stone-50 py-3 pl-10 pr-4 text-[15px] text-stone-900 outline-none"
+            >
+          </div>
+
+          <button
+            class="shrink-0 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-orange-600/20 transition-colors hover:bg-orange-700 sm:order-3"
+            @click="openAddWorkout"
           >
+            Add workout
+          </button>
         </div>
 
-        <div ref="logFilterGroupRef" class="relative flex flex-wrap items-center gap-2">
+        <div ref="logFilterGroupRef" class="relative flex w-full items-center justify-between gap-2 sm:order-2 sm:w-auto sm:flex-wrap sm:justify-start">
           <button
             type="button"
             :title="typeChipLabel"
@@ -733,13 +745,6 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
             </div>
           </div>
         </div>
-
-        <button
-          class="shrink-0 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-orange-600/20 transition-colors hover:bg-orange-700"
-          @click="openAddWorkout"
-        >
-          Add workout
-        </button>
       </div>
 
       <!-- ── Loading state ─────────────────────────────────────────── -->
