@@ -18,6 +18,7 @@ import {
   date,
   timestamp,
   uniqueIndex,
+  index,
   check,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
@@ -130,9 +131,21 @@ export const workouts = pgTable(
     /**
      * Enforces one workout per user per day at the database level.
      * Attempting to insert a duplicate (userId, date) will throw a
-     * unique constraint violation.
+     * unique constraint violation. Also serves as the index backing
+     * date-range filtering and the default newest-first ordering.
      */
     uniqueIndex('workouts_user_id_date_idx').on(table.userId, table.date),
+
+    /**
+     * Composite indexes backing the training-log filter bar's "minimum X"
+     * boundary filters (tss/distance/duration) and the ride-type chip, so
+     * those queries stay index-scans instead of full table scans as the
+     * log grows.
+     */
+    index('workouts_user_id_tss_idx').on(table.userId, table.tss),
+    index('workouts_user_id_distance_km_idx').on(table.userId, table.distanceKm),
+    index('workouts_user_id_duration_minutes_idx').on(table.userId, table.durationMinutes),
+    index('workouts_user_id_ride_type_idx').on(table.userId, table.rideType),
 
     /**
      * CHECK constraint: RPE must be between 1 and 10 when provided.

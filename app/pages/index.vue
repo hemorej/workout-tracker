@@ -26,7 +26,7 @@
  */
 
 import { useAuthStore } from '~/stores/auth'
-import { useWorkoutsStore } from '~/stores/workouts'
+import { useWorkoutsStore, type LogFilters } from '~/stores/workouts'
 import { usePlanningStore } from '~/stores/planning'
 import type { WorkoutPrefill } from '~/components/AddWorkoutModal.vue'
 
@@ -262,6 +262,7 @@ function closeLogPanel() {
 function setLogType(type: LogFilterType) {
   logFilterType.value = type
   activeLogPanel.value = null
+  applyLogFiltersToStore()
 }
 
 function applyLogPanel() {
@@ -273,6 +274,7 @@ function applyLogPanel() {
     logDateTo.value = draftDateTo.value
   }
   activeLogPanel.value = null
+  applyLogFiltersToStore()
 }
 
 function resetTSSDraft() {
@@ -302,6 +304,7 @@ function clearLogFilters() {
   logDateFrom.value = ''
   logDateTo.value = ''
   activeLogPanel.value = null
+  applyLogFiltersToStore()
 }
 
 /** Closes an open filter panel when the user clicks anywhere outside the chip group */
@@ -314,6 +317,36 @@ function onDocumentClickForLogPanel(event: MouseEvent) {
 
 onMounted(() => document.addEventListener('click', onDocumentClickForLogPanel))
 onUnmounted(() => document.removeEventListener('click', onDocumentClickForLogPanel))
+
+// ── Push the filter bar's applied state to the store — this drives the ──────
+// live list update. Search text is debounced so we don't hit the API on
+// every keystroke; every other filter commits immediately (type on select,
+// TSS/distance/duration/dates on Apply, everything on reset-all).
+function currentLogFilters(): LogFilters {
+  return {
+    name: logSearch.value.trim(),
+    type: logFilterType.value,
+    minTss: logMinTSS.value,
+    minDistance: logMinDistance.value,
+    minDuration: logMinDuration.value,
+    dateFrom: logDateFrom.value,
+    dateTo: logDateTo.value,
+  }
+}
+
+function applyLogFiltersToStore() {
+  workouts.setFilters(currentLogFilters())
+}
+
+const SEARCH_DEBOUNCE_MS = 300
+let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(logSearch, () => {
+  clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(applyLogFiltersToStore, SEARCH_DEBOUNCE_MS)
+})
+
+onUnmounted(() => clearTimeout(searchDebounceTimer))
 </script>
 
 <template>
@@ -401,8 +434,8 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClickForLogPan
       <div class="!mt-4 sm:!mt-10 space-y-4 sm:space-y-10">
         
       <!-- Filter bar: search + filter chips + Add workout button -->
-      <div class="flex flex-wrap items-center gap-2.5" style="margin: 32px 0 16px;">
-        <div class="relative min-w-[140px] flex-1 basis-[160px]">
+      <div class="flex flex-nowrap items-center gap-2.5" style="margin: 32px 0 16px;">
+        <div class="relative min-w-0 flex-1 basis-[160px]">
           <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-stone-400">⌕</span>
           <input
             v-model="logSearch"
@@ -415,62 +448,67 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClickForLogPan
         <div ref="logFilterGroupRef" class="relative flex flex-wrap items-center gap-2">
           <button
             type="button"
-            class="whitespace-nowrap rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold"
+            :title="typeChipLabel"
+            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border-[1.5px]"
             :class="logFilterType !== 'all'
               ? 'border-orange-300 bg-orange-50 text-orange-600'
               : 'border-stone-200 bg-white text-stone-600'"
             @click="toggleLogPanel('type')"
           >
-            {{ typeChipLabel }}
+            <UIcon name="i-heroicons-tag" class="h-4 w-4" />
           </button>
           <button
             type="button"
-            class="whitespace-nowrap rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold"
+            :title="tssChipLabel"
+            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border-[1.5px]"
             :class="logMinTSS > 0
               ? 'border-orange-300 bg-orange-50 text-orange-600'
               : 'border-stone-200 bg-white text-stone-600'"
             @click="toggleLogPanel('tss')"
           >
-            {{ tssChipLabel }}
+            <UIcon name="i-heroicons-bolt" class="h-4 w-4" />
           </button>
           <button
             type="button"
-            class="whitespace-nowrap rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold"
+            :title="distChipLabel"
+            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border-[1.5px]"
             :class="logMinDistance > 0
               ? 'border-orange-300 bg-orange-50 text-orange-600'
               : 'border-stone-200 bg-white text-stone-600'"
             @click="toggleLogPanel('dist')"
           >
-            {{ distChipLabel }}
+            <UIcon name="i-heroicons-map-pin" class="h-4 w-4" />
           </button>
           <button
             type="button"
-            class="whitespace-nowrap rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold"
+            :title="durChipLabel"
+            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border-[1.5px]"
             :class="logMinDuration > 0
               ? 'border-orange-300 bg-orange-50 text-orange-600'
               : 'border-stone-200 bg-white text-stone-600'"
             @click="toggleLogPanel('dur')"
           >
-            {{ durChipLabel }}
+            <UIcon name="i-heroicons-clock" class="h-4 w-4" />
           </button>
           <button
             type="button"
-            class="whitespace-nowrap rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold"
+            :title="datesChipLabel"
+            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border-[1.5px]"
             :class="(logDateFrom || logDateTo)
               ? 'border-orange-300 bg-orange-50 text-orange-600'
               : 'border-stone-200 bg-white text-stone-600'"
             @click="toggleLogPanel('dates')"
           >
-            {{ datesChipLabel }}
+            <UIcon name="i-heroicons-calendar-days" class="h-4 w-4" />
           </button>
           <button
             type="button"
             title="Reset all filters"
-            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[#f5f4f2] text-[15px]"
+            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[#f5f4f2]"
             :class="hasActiveLogFilters ? 'text-stone-600' : 'text-[#cbc8c4]'"
             @click="clearLogFilters"
           >
-            ↺
+            <UIcon name="i-heroicons-arrow-path" class="h-4 w-4" />
           </button>
 
           <!-- Type panel — commits and closes immediately, no draft step -->
@@ -718,7 +756,18 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClickForLogPan
         :description="workouts.error"
       />
 
-      <!-- ── Empty state ───────────────────────────────────────────── -->
+      <!-- ── Empty state — no matches for the active filters ──────────── -->
+      <div
+        v-else-if="workouts.days.length === 0 && hasActiveLogFilters"
+        class="text-center py-20"
+      >
+        <p class="text-sm font-medium text-stone-500">No workouts match these filters</p>
+        <p class="text-xs text-stone-400 mt-1.5">
+          Try widening your date range or clearing a filter.
+        </p>
+      </div>
+
+      <!-- ── Empty state — no workouts logged at all ──────────────────── -->
       <div
         v-else-if="workouts.days.length === 0"
         class="text-center py-20"
@@ -733,10 +782,10 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClickForLogPan
       <!-- ── Day list — rendered as a seamless list, not individual cards ── -->
       <div v-else class="bg-white rounded-xl border border-stone-100 overflow-hidden divide-y divide-[#f7f5f3]">
         <WorkoutCard
-          v-for="(day, index) in workouts.days"
+          v-for="day in workouts.days"
           :key="day.date"
           :day="day"
-          :prev-metrics="workouts.days[index + 1]?.metrics ?? null"
+          :prev-metrics="day.prevMetrics"
           :planned-workout="day.date === todayStr ? todayPlan : null"
           @delete="onDeleteWorkout"
           @mark-completed="onMarkCompleted"
