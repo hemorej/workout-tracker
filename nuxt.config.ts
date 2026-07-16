@@ -44,9 +44,9 @@ export default defineNuxtConfig({
          * maxAge controls how long the encrypted cookie lives (in seconds).
          * The encryption key comes from NUXT_SESSION_PASSWORD env var.
          */
-        // session: {
-        //     maxAge: 60 * 60 * 24 * 7, // 7 days — override with NUXT_SESSION_MAX_AGE
-        // },
+        session: {
+            maxAge: 60 * 60 * 24 * 30, // 30 days — override with NUXT_SESSION_MAX_AGE
+        },
     },
 
     /**
