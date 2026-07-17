@@ -164,9 +164,10 @@ const mobileTitle = computed(() => {
   return props.day.workout?.name
 })
 
-const mobileDuration = computed(() =>
-  isPlannedDay.value ? plannedDurationDisplay.value : durationDisplay.value,
-)
+const mobileDuration = computed(() => {
+  if (props.day.isRestDay && !isPlannedDay.value) return null
+  return isPlannedDay.value ? plannedDurationDisplay.value : durationDisplay.value
+})
 
 // ── Delete confirmation ──────────────────────────────────────────────────
 const showDeleteConfirm = ref(false)
@@ -204,14 +205,14 @@ function confirmDelete() {
     :class="day.isRestDay && !isPlannedDay ? 'opacity-50' : ''"
   >
     <!-- Panel 1: resting state -->
-    <div class="relative snap-start shrink-0 w-full flex items-center gap-3 px-6 py-3">
+    <div class="relative snap-start shrink-0 w-full flex items-center gap-3 px-6 py-2">
       <div
         v-if="!day.isRestDay"
-        class="absolute left-0 top-3 bottom-3 w-[3px] bg-orange-600 rounded-full"
+        class="absolute left-0 top-2 bottom-2 w-[3px] bg-orange-600 rounded-full"
       />
       <div
         v-else-if="isPlannedDay"
-        class="absolute left-0 top-3 bottom-3 w-[3px] bg-violet-400 rounded-full"
+        class="absolute left-0 top-2 bottom-2 w-[3px] bg-violet-400 rounded-full"
       />
       <div class="min-w-0 flex-1">
         <p
@@ -230,81 +231,86 @@ function confirmDelete() {
       </svg>
     </div>
 
-    <!-- Panel 2: reveal — CTL/TSB chips, PR badge, TSS, RPE, actions -->
-    <div class="snap-start shrink-0 w-full flex items-center justify-end flex-wrap gap-1.5 px-6 py-3 bg-stone-50">
-      <span class="rounded-[7px] border px-2 py-[3px] text-[11px] font-medium tabular whitespace-nowrap" :class="ctlChipClass">
-        CTL <b>{{ displayMetrics.ctl.toFixed(1) }}<template v-if="ctlTrend"> {{ ctlTrend.symbol }}</template></b>
-      </span>
-      <span class="rounded-[7px] border px-2 py-[3px] text-[11px] font-medium tabular whitespace-nowrap" :class="tsbChipClass">
-        TSB <b>{{ tsbDisplay }}<template v-if="tsbTrend"> {{ tsbTrend.symbol }}</template></b>
-      </span>
-      <span
-        v-if="hasPowerBests"
-        class="inline-flex items-center gap-0.5 shrink-0 text-xs text-amber-600 font-semibold bg-amber-50 rounded-full px-2 py-0.5"
-        :title="`${day.workout?.powerBests?.length} power best${(day.workout?.powerBests?.length ?? 0) > 1 ? 's' : ''} recorded`"
-      >
-        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-        </svg>
-        {{ day.workout?.powerBests?.length }}
-      </span>
-      <span
-        v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
-        class="inline-block shrink-0 text-xs text-sky-600 font-semibold bg-sky-50 rounded-full px-2.5 py-0.5 whitespace-nowrap"
-      >
-        {{ isPlannedDay ? plannedPlan?.tss : day.workout?.tss }} TSS
-      </span>
-      <span
-        v-if="day.workout?.rpe"
-        class="inline-block text-xs text-stone-500 font-semibold bg-stone-100 rounded-full px-2.5 py-0.5 whitespace-nowrap"
-      >
-        RPE {{ day.workout?.rpe }}/10
-      </span>
-      <button
-        v-else-if="isPlannedDay"
-        title="Go to workout builder"
-        class="inline-block text-xs text-violet-600 font-semibold bg-violet-100 border border-violet-200 rounded-full px-2.5 py-0.5 whitespace-nowrap cursor-pointer transition-colors hover:bg-violet-200"
-        @click="emit('go-to-builder')"
-      >
-        Planned
-      </button>
-      <button
-        v-if="isPlannedDay"
-        title="Mark as completed"
-        aria-label="Mark as completed"
-        class="flex items-center justify-center shrink-0 w-9 h-9 rounded-full border-none bg-transparent text-violet-300 opacity-65 transition-all hover:opacity-100 hover:text-violet-600 hover:bg-violet-100"
-        @click="emit('mark-completed')"
-      >
-        <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M8 12l3 3 5-6" />
-        </svg>
-      </button>
-      <template v-if="!day.isRestDay && !isPlannedDay">
-        <button
-          v-if="!showDeleteConfirm"
-          title="Delete workout"
-          aria-label="Delete workout"
-          class="flex items-center justify-center shrink-0 w-10 h-10 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-rose-600 hover:bg-rose-50"
-          @click="requestDelete"
+    <!-- Panel 2: reveal — row 1: CTL/TSB, row 2: PR badge, TSS, RPE, actions
+         evenly spaced across the full width -->
+    <div class="snap-start shrink-0 w-full flex flex-col justify-center gap-1.5 px-6 py-2 bg-stone-50">
+      <div class="flex items-center justify-end gap-1.5">
+        <span class="rounded-[7px] border px-2 py-[3px] text-[11px] font-medium tabular whitespace-nowrap" :class="ctlChipClass">
+          CTL <b>{{ displayMetrics.ctl.toFixed(1) }}<template v-if="ctlTrend"> {{ ctlTrend.symbol }}</template></b>
+        </span>
+        <span class="rounded-[7px] border px-2 py-[3px] text-[11px] font-medium tabular whitespace-nowrap" :class="tsbChipClass">
+          TSB <b>{{ tsbDisplay }}<template v-if="tsbTrend"> {{ tsbTrend.symbol }}</template></b>
+        </span>
+      </div>
+      <div class="flex items-center justify-between gap-1.5">
+        <span
+          v-if="hasPowerBests"
+          class="inline-flex items-center gap-0.5 shrink-0 text-xs text-amber-600 font-semibold bg-amber-50 rounded-full px-2 py-0.5"
+          :title="`${day.workout?.powerBests?.length} power best${(day.workout?.powerBests?.length ?? 0) > 1 ? 's' : ''} recorded`"
         >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 6h18" />
-            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-            <path d="M10 11v6" />
-            <path d="M14 11v6" />
+          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+          </svg>
+          {{ day.workout?.powerBests?.length }}
+        </span>
+        <span
+          v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
+          class="inline-block shrink-0 text-xs text-sky-600 font-semibold bg-sky-50 rounded-full px-2.5 py-0.5 whitespace-nowrap"
+        >
+          {{ isPlannedDay ? plannedPlan?.tss : day.workout?.tss }} TSS
+        </span>
+        <span
+          v-if="day.workout?.rpe"
+          class="inline-block text-xs text-stone-500 font-semibold bg-stone-100 rounded-full px-2.5 py-0.5 whitespace-nowrap"
+        >
+          RPE {{ day.workout?.rpe }}/10
+        </span>
+        <button
+          v-else-if="isPlannedDay"
+          title="Go to workout builder"
+          class="inline-block text-xs text-violet-600 font-semibold bg-violet-100 border border-violet-200 rounded-full px-2.5 py-0.5 whitespace-nowrap cursor-pointer transition-colors hover:bg-violet-200"
+          @click="emit('go-to-builder')"
+        >
+          Planned
+        </button>
+        <button
+          v-if="isPlannedDay"
+          title="Mark as completed"
+          aria-label="Mark as completed"
+          class="flex items-center justify-center shrink-0 w-9 h-9 rounded-full border-none bg-transparent text-violet-300 opacity-65 transition-all hover:opacity-100 hover:text-violet-600 hover:bg-violet-100"
+          @click="emit('mark-completed')"
+        >
+          <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M8 12l3 3 5-6" />
           </svg>
         </button>
-        <div v-else class="flex items-center gap-2">
-          <button class="text-xs text-rose-500 hover:text-rose-600 font-semibold" @click="confirmDelete">
-            Confirm
+        <template v-if="!day.isRestDay && !isPlannedDay">
+          <button
+            v-if="!showDeleteConfirm"
+            title="Delete workout"
+            aria-label="Delete workout"
+            class="flex items-center justify-center shrink-0 w-10 h-10 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-rose-600 hover:bg-rose-50"
+            @click="requestDelete"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18" />
+              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
           </button>
-          <button class="text-xs text-stone-300 hover:text-stone-500" @click="showDeleteConfirm = false">
-            Cancel
-          </button>
-        </div>
-      </template>
+          <div v-else class="flex items-center gap-2">
+            <button class="text-xs text-rose-500 hover:text-rose-600 font-semibold" @click="confirmDelete">
+              Confirm
+            </button>
+            <button class="text-xs text-stone-300 hover:text-stone-500" @click="showDeleteConfirm = false">
+              Cancel
+            </button>
+          </div>
+        </template>
+      </div>
     </div>
   </div>
 
