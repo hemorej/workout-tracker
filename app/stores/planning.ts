@@ -58,12 +58,18 @@ export const usePlanningStore = defineStore('planning', () => {
   /**
    * Loads the 4-week plan grid from GET /api/planned-workouts.
    * Populates plans, currentCtl, and currentAtl.
+   *
+   * `fetcher` defaults to the global `$fetch` for ordinary client-triggered
+   * calls. The initial page load passes `useRequestFetch()` instead so the
+   * call can run during SSR — plain `$fetch` in a server context doesn't
+   * forward the incoming request's session cookie, so `requireUserSession`
+   * would 401.
    */
-  async function fetchPlans() {
+  async function fetchPlans(fetcher: ReturnType<typeof useRequestFetch> = $fetch) {
     isLoading.value = true
     error.value = null
     try {
-      const data = await $fetch<{ plans: PlannedDay[], currentCtl: number, currentAtl: number }>(
+      const data = await fetcher<{ plans: PlannedDay[], currentCtl: number, currentAtl: number }>(
         '/api/planned-workouts',
       )
       plans.value = data.plans

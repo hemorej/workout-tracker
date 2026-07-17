@@ -115,8 +115,14 @@ export const useWorkoutsStore = defineStore('workouts', () => {
    * Fetches a page of the day list from GET /api/workouts, applying the
    * current `filters` state. Only non-default filter values are sent, so an
    * unfiltered fetch is identical to the original calendar-day request.
+   *
+   * `fetcher` defaults to the global `$fetch` for ordinary client-triggered
+   * calls (pagination, filters, refresh-after-mutation). The initial page
+   * load passes `useRequestFetch()` instead so the call can run during SSR —
+   * plain `$fetch` in a server context doesn't forward the incoming
+   * request's session cookie, so `requireUserSession` would 401.
    */
-  async function fetchPage(page: number = 1) {
+  async function fetchPage(page: number = 1, fetcher: ReturnType<typeof useRequestFetch> = $fetch) {
     isLoading.value = true
     error.value = null
 
@@ -131,7 +137,7 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     if (f.dateTo) query.dateTo = f.dateTo
 
     try {
-      const data = await $fetch('/api/workouts', {
+      const data = await fetcher('/api/workouts', {
         query,
       }) as {
         days: DayEntry[]

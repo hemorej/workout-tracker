@@ -158,9 +158,17 @@ function selectActivity(activity: StravaRideSummary) {
 
 // ── Lifecycle ────────────────────────────────────────────────────────────
 
-onMounted(() => {
-  workouts.fetchPage(1)
-  planning.fetchPlans()
+// Initial load runs during SSR so the dashboard's first paint already has
+// data — no client-side loading flash, no extra round trips after hydration.
+// useRequestFetch() forwards the incoming request's session cookie, which
+// plain $fetch doesn't do automatically in a server context.
+const requestFetch = useRequestFetch()
+await useAsyncData('dashboard-initial-load', async () => {
+  await Promise.all([
+    workouts.fetchPage(1, requestFetch),
+    planning.fetchPlans(requestFetch),
+  ])
+  return true
 })
 
 // ── Actions ──────────────────────────────────────────────────────────────

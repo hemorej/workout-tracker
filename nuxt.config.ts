@@ -61,9 +61,10 @@ export default defineNuxtConfig({
      * usage), rather than the module's broader auto-detected defaults.
      */
     fonts: {
-        families: [
-            { name: 'Hanken Grotesk', provider: 'google', weights: [400, 500, 600, 700, 800], subsets: ['latin'] },
-        ],
+        defaults: {
+            weights: [400, 500, 600, 700, 800],
+            subsets: ['latin'],
+        },
     },
 
     /**
@@ -113,9 +114,19 @@ export default defineNuxtConfig({
      * Route-level caching. The login page has no per-user data, so it can
      * be prerendered to a static file at build time. Everything else stays
      * dynamic — the dashboard (/) is per-user and must not be cached.
+     *
+     * The icon files under `public/` have no content hash in their filename
+     * (unlike `_nuxt/` assets), so unlike the self-hosted fonts they don't
+     * get Nitro's automatic long-lived cache headers — they were serving
+     * with no cache-control at all. A week is long enough to skip most
+     * repeat-visit requests but short enough that a real icon change won't
+     * stick around for a year like `immutable` would.
      */
     routeRules: {
         '/login': { prerender: true },
+        '/favicon.svg': { headers: { 'cache-control': 'public, max-age=604800' } },
+        '/apple-touch-icon.png': { headers: { 'cache-control': 'public, max-age=604800' } },
+        '/site.webmanifest': { headers: { 'cache-control': 'public, max-age=604800' } },
     },
 
     vite: {
