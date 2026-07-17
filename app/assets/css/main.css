@@ -58,3 +58,18 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Hide scrollbar for swipe rows ─────────────────────────────────────── */
+
+/*
+ * .no-scrollbar
+ * Used on the mobile swipe-row scroll containers (WorkoutCard.vue) so the
+ * native scrollbar doesn't show during the horizontal scroll-snap gesture.
+ */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
