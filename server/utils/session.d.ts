@@ -1,8 +1,11 @@
 /**
- * nuxt-auth-utils UserSession type augmentation.
+ * nuxt-auth-utils `User` type augmentation.
  *
  * Tells TypeScript the exact shape of the data we store in the encrypted
- * session cookie. Without this, `session.user` would be typed as `unknown`.
+ * session cookie. Must augment `User` (not `UserSession.user`) — helpers
+ * like `requireUserSession()` type their return as `UserSessionRequired`,
+ * which is declared as `UserSession & { user: User }`, so an override on
+ * `UserSession.user` alone gets shadowed there.
  *
  * This file is picked up automatically by Nuxt's type system because it
  * lives inside the `server/` directory.
@@ -11,12 +14,10 @@
  */
 
 declare module '#auth-utils' {
-  interface UserSession {
-    user: {
-      id: number
-      email: string
-      username: string
-    }
+  interface User {
+    id: number
+    email: string
+    username: string
   }
 }
 

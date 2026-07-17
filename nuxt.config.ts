@@ -42,15 +42,33 @@ export default defineNuxtConfig({
         /**
          * nuxt-auth-utils session configuration.
          * maxAge controls how long the encrypted cookie lives (in seconds).
-         * The encryption key comes from NUXT_SESSION_PASSWORD env var.
+         * password is read from NUXT_SESSION_PASSWORD at runtime — declared
+         * here only to satisfy h3's SessionConfig type (password is required).
          */
         session: {
             maxAge: 60 * 60 * 24 * 30, // 30 days — override with NUXT_SESSION_MAX_AGE
+            password: process.env.NUXT_SESSION_PASSWORD ?? '',
         },
     },
 
     /**
-     * Global CSS — base typography, font import, page transition.
+     * `@nuxt/fonts` (auto-installed by `@nuxt/ui`) self-hosts fonts referenced
+     * via `font-family` in our CSS instead of loading them from Google/Bunny/
+     * Fontshare at request time — it downloads the woff2 files at build time
+     * and serves them from our own origin, generating size-matched fallback
+     * metrics to avoid layout shift. Pinned here to the exact weights and
+     * subset the app actually uses (see `font-bold`/`font-extrabold` etc.
+     * usage), rather than the module's broader auto-detected defaults.
+     */
+    fonts: {
+        families: [
+            { name: 'Hanken Grotesk', provider: 'google', weights: [400, 500, 600, 700, 800], subsets: ['latin'] },
+        ],
+    },
+
+    /**
+     * Global CSS — base typography, page transition. Font family is declared
+     * here but self-hosted via the `fonts` config above, not a remote import.
      */
     app: {
         head: {

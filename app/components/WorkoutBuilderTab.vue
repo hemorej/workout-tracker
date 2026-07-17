@@ -139,6 +139,41 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
 })
 
+// The edit popover is absolutely positioned inside the chart wrapper, so its
+// own height doesn't naturally reserve space — for tall popovers (intervals,
+// with 7 rows) that pushed the popover bottom past the wrapper, forcing the
+// whole page to scroll. We measure its real rendered height and grow the
+// wrapper to fit, so the timeline card just gets taller instead.
+const popoverEl = ref<HTMLElement | null>(null)
+const popoverHeight = ref(0)
+const POPOVER_TOP = 12
+let popoverResizeObserver: ResizeObserver | null = null
+
+watch(popoverEl, (el) => {
+  popoverResizeObserver?.disconnect()
+  popoverResizeObserver = null
+  if (!el) {
+    popoverHeight.value = 0
+    return
+  }
+  popoverResizeObserver = new ResizeObserver((entries) => {
+    const height = entries[0]?.contentRect.height
+    if (height) popoverHeight.value = height
+  })
+  popoverResizeObserver.observe(el)
+})
+
+onBeforeUnmount(() => {
+  popoverResizeObserver?.disconnect()
+})
+
+const chartAreaMinHeight = computed(() => {
+  const rulerHeight = 28
+  const baseHeight = chartHeight + rulerHeight
+  if (!selectedBlock.value) return baseHeight
+  return Math.max(baseHeight, POPOVER_TOP + popoverHeight.value + 16)
+})
+
 const scaleMax = computed(() => {
   const maxPower = segments.value.reduce((m, x) => Math.max(m, x.powerStart, x.powerEnd), 0.5)
   return Math.max(1.3, maxPower + 0.15)
@@ -246,6 +281,73 @@ function bumpCadence(id: number, field: string, delta: number) {
   if (!b) return
   const cur = (b[field] as number) || 80
   b[field] = Math.max(0, Math.min(140, cur + delta))
+}
+
+// ── Direct input editing (duration in seconds, power in absolute watts) ──
+
+function powerWatts(power: number) {
+  return Math.round(power * ftp.value)
+}
+
+function powerPercentLabel(power: number) {
+  return `${Math.round(power * 100)}%`
+}
+
+// Bounds are only enforced on commit (blur/Enter), not on every keystroke —
+// clamping mid-typing would snap "120" down to the minimum after the first
+// digit and make it impossible to type a value below the previous one.
+function setDurationSeconds(id: number, field: string, seconds: number, commit: boolean) {
+  if (!Number.isFinite(seconds)) return
+  const b = blocks.value.find(x => x.id === id) as Record<string, unknown> | undefined
+  if (!b) return
+  const rounded = Math.round(seconds)
+  b[field] = commit ? Math.max(5, rounded) : rounded
+}
+
+function onDurationInput(e: Event, id: number, field: string) {
+  setDurationSeconds(id, field, (e.target as HTMLInputElement).valueAsNumber, false)
+}
+
+function onDurationCommit(e: Event, id: number, field: string) {
+  setDurationSeconds(id, field, (e.target as HTMLInputElement).valueAsNumber, true)
+}
+
+// Power is stored as a fraction of FTP rounded to the nearest 1% — writing
+// every keystroke straight into the block would round small in-progress
+// watt values (e.g. the "1" in "120") down to 0%, snapping the field back
+// to 0W mid-type. So the live-typed watts live in a draft here and only
+// commit into the block (with min/max clamping) on blur — the draft still
+// drives the % readout so it updates as you type.
+interface PowerDraft { id: number, field: string, watts: number }
+const powerDraft = ref<PowerDraft | null>(null)
+
+function isPowerDraft(id: number, field: string) {
+  return powerDraft.value?.id === id && powerDraft.value?.field === field
+}
+
+function powerInputValue(power: number, id: number, field: string) {
+  return isPowerDraft(id, field) ? powerDraft.value!.watts : powerWatts(power)
+}
+
+function powerPercentDisplay(power: number, id: number, field: string) {
+  if (!isPowerDraft(id, field)) return powerPercentLabel(power)
+  const pct = ftp.value > 0 ? Math.round((powerDraft.value!.watts / ftp.value) * 100) : 0
+  return `${pct}%`
+}
+
+function onPowerWattsInput(e: Event, id: number, field: string) {
+  const watts = (e.target as HTMLInputElement).valueAsNumber
+  powerDraft.value = { id, field, watts: Number.isFinite(watts) ? Math.round(watts) : 0 }
+}
+
+function onPowerWattsCommit(e: Event, id: number, field: string) {
+  const watts = (e.target as HTMLInputElement).valueAsNumber
+  const b = blocks.value.find(x => x.id === id) as Record<string, unknown> | undefined
+  if (b && Number.isFinite(watts)) {
+    const fraction = ftp.value > 0 ? Math.round(watts) / ftp.value : 0
+    b[field] = Math.round(Math.min(2.0, Math.max(0.2, fraction)) * 100) / 100
+  }
+  powerDraft.value = null
 }
 
 function bumpReps(id: number, delta: number) {
@@ -408,7 +510,12 @@ function download() {
         </div>
 
         <!-- Chart + popover wrapper -->
-        <div ref="chartScrollEl" class="relative flex-1 min-w-0 no-scrollbar" style="overflow-x: auto;">
+        <div
+          ref="chartScrollEl"
+          class="relative flex-1 min-w-0 no-scrollbar"
+          style="overflow-x: auto;"
+          :style="{ minHeight: `${chartAreaMinHeight}px` }"
+        >
           <!-- Bars -->
           <div
             class="relative"
@@ -449,9 +556,10 @@ function download() {
           <!-- Block edit popover -->
           <div
             v-if="selectedBlock"
+            ref="popoverEl"
             class="absolute"
             style="background: #292524; border-radius: 14px; padding: 16px 18px; box-shadow: 0 16px 34px rgba(0,0,0,.3); z-index: 10;"
-            :style="{ left: `${popoverLeft}px`, top: '12px', width: `${POPOVER_WIDTH}px` }"
+            :style="{ left: `${popoverLeft}px`, top: `${POPOVER_TOP}px`, width: `${POPOVER_WIDTH}px` }"
             @click.stop
           >
             <!-- Action row -->
@@ -496,7 +604,13 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Duration</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'duration', -15)">–</button>
-                  <span class="tabular stepper-value" style="min-width: 56px;">{{ fmtClock(selectedBlock.duration) }}</span>
+                  <input
+                    type="number" step="1" min="5" class="tabular stepper-input"
+                    :value="selectedBlock.duration"
+                    @input="onDurationInput($event, selectedBlock.id, 'duration')"
+                    @change="onDurationCommit($event, selectedBlock.id, 'duration')"
+                  >
+                  <span class="tabular stepper-suffix">{{ fmtClock(selectedBlock.duration) }}</span>
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'duration', 15)">+</button>
                 </div>
               </div>
@@ -504,7 +618,13 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Power</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'power', -0.01)">–</button>
-                  <span class="tabular stepper-value" style="min-width: 80px;">{{ powerLabel(selectedBlock.power) }}</span>
+                  <input
+                    type="number" step="1" min="0" class="tabular stepper-input"
+                    :value="powerInputValue(selectedBlock.power, selectedBlock.id, 'power')"
+                    @input="onPowerWattsInput($event, selectedBlock.id, 'power')"
+                    @blur="onPowerWattsCommit($event, selectedBlock.id, 'power')"
+                  >
+                  <span class="tabular stepper-suffix">W · {{ powerPercentDisplay(selectedBlock.power, selectedBlock.id, 'power') }}</span>
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'power', 0.01)">+</button>
                 </div>
               </div>
@@ -524,7 +644,13 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Duration</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'duration', -15)">–</button>
-                  <span class="tabular stepper-value" style="min-width: 56px;">{{ fmtClock(selectedBlock.duration) }}</span>
+                  <input
+                    type="number" step="1" min="5" class="tabular stepper-input"
+                    :value="selectedBlock.duration"
+                    @input="onDurationInput($event, selectedBlock.id, 'duration')"
+                    @change="onDurationCommit($event, selectedBlock.id, 'duration')"
+                  >
+                  <span class="tabular stepper-suffix">{{ fmtClock(selectedBlock.duration) }}</span>
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'duration', 15)">+</button>
                 </div>
               </div>
@@ -532,7 +658,13 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Start power</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'powerStart', -0.01)">–</button>
-                  <span class="tabular stepper-value" style="min-width: 80px;">{{ powerLabel(selectedBlock.powerStart) }}</span>
+                  <input
+                    type="number" step="1" min="0" class="tabular stepper-input"
+                    :value="powerInputValue(selectedBlock.powerStart, selectedBlock.id, 'powerStart')"
+                    @input="onPowerWattsInput($event, selectedBlock.id, 'powerStart')"
+                    @blur="onPowerWattsCommit($event, selectedBlock.id, 'powerStart')"
+                  >
+                  <span class="tabular stepper-suffix">W · {{ powerPercentDisplay(selectedBlock.powerStart, selectedBlock.id, 'powerStart') }}</span>
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'powerStart', 0.01)">+</button>
                 </div>
               </div>
@@ -540,7 +672,13 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">End power</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'powerEnd', -0.01)">–</button>
-                  <span class="tabular stepper-value" style="min-width: 80px;">{{ powerLabel(selectedBlock.powerEnd) }}</span>
+                  <input
+                    type="number" step="1" min="0" class="tabular stepper-input"
+                    :value="powerInputValue(selectedBlock.powerEnd, selectedBlock.id, 'powerEnd')"
+                    @input="onPowerWattsInput($event, selectedBlock.id, 'powerEnd')"
+                    @blur="onPowerWattsCommit($event, selectedBlock.id, 'powerEnd')"
+                  >
+                  <span class="tabular stepper-suffix">W · {{ powerPercentDisplay(selectedBlock.powerEnd, selectedBlock.id, 'powerEnd') }}</span>
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'powerEnd', 0.01)">+</button>
                 </div>
               </div>
@@ -572,16 +710,36 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Duration</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'onDuration', -15)">–</button>
-                  <span class="tabular stepper-value" style="min-width: 56px;">{{ fmtClock(selectedBlock.onDuration) }}</span>
+                  <input
+                    type="number" step="1" min="5" class="tabular stepper-input"
+                    :value="selectedBlock.onDuration"
+                    @input="onDurationInput($event, selectedBlock.id, 'onDuration')"
+                    @change="onDurationCommit($event, selectedBlock.id, 'onDuration')"
+                  >
+                  <span class="tabular stepper-suffix">{{ fmtClock(selectedBlock.onDuration) }}</span>
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'onDuration', 15)">+</button>
                 </div>
               </div>
-              <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center justify-between mb-2">
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Power</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'onPower', -0.01)">–</button>
-                  <span class="tabular stepper-value" style="min-width: 80px;">{{ powerLabel(selectedBlock.onPower) }}</span>
+                  <input
+                    type="number" step="1" min="0" class="tabular stepper-input"
+                    :value="powerInputValue(selectedBlock.onPower, selectedBlock.id, 'onPower')"
+                    @input="onPowerWattsInput($event, selectedBlock.id, 'onPower')"
+                    @blur="onPowerWattsCommit($event, selectedBlock.id, 'onPower')"
+                  >
+                  <span class="tabular stepper-suffix">W · {{ powerPercentDisplay(selectedBlock.onPower, selectedBlock.id, 'onPower') }}</span>
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'onPower', 0.01)">+</button>
+                </div>
+              </div>
+              <div class="flex items-center justify-between mb-3">
+                <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Cadence</span>
+                <div class="flex items-center gap-2">
+                  <button class="stepper-btn" @click="bumpCadence(selectedBlock.id, 'onCadence', -5)">–</button>
+                  <span class="tabular stepper-value" style="min-width: 56px;">{{ cadenceLabel(selectedBlock.onCadence) }}</span>
+                  <button class="stepper-btn" @click="bumpCadence(selectedBlock.id, 'onCadence', 5)">+</button>
                 </div>
               </div>
 
@@ -592,25 +750,36 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Duration</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'offDuration', -15)">–</button>
-                  <span class="tabular stepper-value" style="min-width: 56px;">{{ fmtClock(selectedBlock.offDuration) }}</span>
+                  <input
+                    type="number" step="1" min="5" class="tabular stepper-input"
+                    :value="selectedBlock.offDuration"
+                    @input="onDurationInput($event, selectedBlock.id, 'offDuration')"
+                    @change="onDurationCommit($event, selectedBlock.id, 'offDuration')"
+                  >
+                  <span class="tabular stepper-suffix">{{ fmtClock(selectedBlock.offDuration) }}</span>
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'offDuration', 15)">+</button>
                 </div>
               </div>
-              <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center justify-between mb-2">
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Power</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'offPower', -0.01)">–</button>
-                  <span class="tabular stepper-value" style="min-width: 80px;">{{ powerLabel(selectedBlock.offPower) }}</span>
+                  <input
+                    type="number" step="1" min="0" class="tabular stepper-input"
+                    :value="powerInputValue(selectedBlock.offPower, selectedBlock.id, 'offPower')"
+                    @input="onPowerWattsInput($event, selectedBlock.id, 'offPower')"
+                    @blur="onPowerWattsCommit($event, selectedBlock.id, 'offPower')"
+                  >
+                  <span class="tabular stepper-suffix">W · {{ powerPercentDisplay(selectedBlock.offPower, selectedBlock.id, 'offPower') }}</span>
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'offPower', 0.01)">+</button>
                 </div>
               </div>
-
               <div class="flex items-center justify-between">
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Cadence</span>
                 <div class="flex items-center gap-2">
-                  <button class="stepper-btn" @click="bumpCadence(selectedBlock.id, 'onCadence', -5)">–</button>
-                  <span class="tabular stepper-value" style="min-width: 56px;">{{ cadenceLabel(selectedBlock.onCadence) }}</span>
-                  <button class="stepper-btn" @click="bumpCadence(selectedBlock.id, 'onCadence', 5)">+</button>
+                  <button class="stepper-btn" @click="bumpCadence(selectedBlock.id, 'offCadence', -5)">–</button>
+                  <span class="tabular stepper-value" style="min-width: 56px;">{{ cadenceLabel(selectedBlock.offCadence) }}</span>
+                  <button class="stepper-btn" @click="bumpCadence(selectedBlock.id, 'offCadence', 5)">+</button>
                 </div>
               </div>
             </template>
@@ -727,6 +896,34 @@ function download() {
   color: #fff;
   text-align: center;
   display: inline-block;
+}
+.stepper-input {
+  width: 46px;
+  font: 700 15px 'Hanken Grotesk';
+  color: #fff;
+  text-align: center;
+  background: #1c1917;
+  border: 1px solid #44403c;
+  border-radius: 6px;
+  padding: 2px 0;
+  outline: none;
+}
+.stepper-input:focus {
+  border-color: #78716c;
+}
+/* Hide native spinner arrows — the –/+ buttons already cover stepping. */
+.stepper-input::-webkit-outer-spin-button,
+.stepper-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.stepper-input[type='number'] {
+  -moz-appearance: textfield;
+}
+.stepper-suffix {
+  font: 500 12px 'Hanken Grotesk';
+  color: #a8a29e;
+  white-space: nowrap;
 }
 
 /* Timeline chart stays scrollable but hides the visible scrollbar chrome. */
