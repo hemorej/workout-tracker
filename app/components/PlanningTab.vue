@@ -119,6 +119,49 @@ function cycleType(date: string) {
   save(date)
 }
 
+// ── Swap with day above ──────────────────────────────────────────────────────
+// Swaps the workout content (name/type/tss/duration) with the previous row,
+// keeping each row's own date fixed. Projections are recomputed via savePlan.
+
+function canSwapUp(date: string) {
+  const idx = planning.plans.findIndex(d => d.date === date)
+  if (idx <= 0) return false
+  return !planning.plans[idx]!.isPast && !planning.plans[idx - 1]!.isPast
+}
+
+async function swapWithAbove(date: string) {
+  const idx = planning.plans.findIndex(d => d.date === date)
+  if (idx <= 0) return
+  const day = planning.plans[idx]!
+  const aboveDay = planning.plans[idx - 1]!
+  if (day.isPast || aboveDay.isPast) return
+
+  const current = getDraft(date)
+  const above = getDraft(aboveDay.date)
+  const temp = { ...current }
+  current.name = above.name
+  current.type = above.type
+  current.tss = above.tss
+  current.durationMinutes = above.durationMinutes
+  above.name = temp.name
+  above.type = temp.type
+  above.tss = temp.tss
+  above.durationMinutes = temp.durationMinutes
+
+  saving[date] = true
+  saving[aboveDay.date] = true
+  try {
+    await Promise.all([
+      planning.savePlan(date, { ...current }),
+      planning.savePlan(aboveDay.date, { ...above }),
+    ])
+  }
+  finally {
+    saving[date] = false
+    saving[aboveDay.date] = false
+  }
+}
+
 // ── Live projections ─────────────────────────────────────────────────────────
 // Recomputes CTL/TSB for every future day using draft TSS values so the
 // numbers update as the user types, before the field is saved.
@@ -201,7 +244,7 @@ function tsbColor(tsb: number) {
             v-for="day in week.days"
             :key="day.date"
             :class="[
-              'flex items-center gap-3 px-4 py-2.5',
+              'group flex items-center gap-3 px-4 py-2.5',
               day.isPast ? 'opacity-50' : '',
             ]"
           >
@@ -231,6 +274,18 @@ function tsbColor(tsb: number) {
               @blur="save(day.date)"
               @keydown.enter="($event.target as HTMLInputElement).blur()"
             >
+
+            <!-- Swap with day above -->
+            <button
+              v-if="canSwapUp(day.date)"
+              type="button"
+              class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-stone-300 opacity-0 group-hover:opacity-100 hover:text-stone-500 hover:bg-stone-50 transition-colors cursor-pointer"
+              title="Swap with day above"
+              @click="swapWithAbove(day.date)"
+            >
+              <UIcon name="i-heroicons-arrows-up-down" class="w-3.5 h-3.5" />
+            </button>
+            <div v-else class="w-5 shrink-0" />
 
             <!-- TSS -->
             <div class="flex items-center gap-1 shrink-0">
