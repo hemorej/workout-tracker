@@ -4,16 +4,26 @@
  * Returns aggregated training history grouped by the requested period,
  * plus a power-bests panel (last 8 weeks vs all time) and current FTP.
  *
+ * The power-bests panel merges two sources: manually-entered bests tied to
+ * a logged workout (`power_bests`), and bests derived from Strava activity
+ * power streams (`strava_power_bests`, populated by
+ * scripts/sync-power-bests.ts). They're kept as separate tables — Strava's
+ * own power numbers don't always match the bike computer — but shown
+ * together here as "best known value from either source".
+ *
  * Response shape:
  * {
  *   periods:          PeriodEntry[]
- *   powerBestsPanel:  { last8Weeks: Record<duration, watts>, allTime: Record<duration, watts> }
+ *   powerBestsPanel:  {
+ *     last8Weeks: Record<duration, watts>,     // single best value
+ *     allTime:    Record<duration, watts[]>,   // top 3, descending
+ *   }
  *   currentFtp:       number | null
  * }
  */
 
 import { eq, asc, inArray } from 'drizzle-orm'
-import { workouts, powerBests as powerBestsTable, POWER_BEST_DURATIONS } from '../../db/schema'
+import { workouts, powerBests as powerBestsTable, stravaPowerBests, POWER_BEST_DURATIONS } from '../../db/schema'
 import { useDB } from '../../db'
 
 type GroupBy = 'week' | 'month' | 'year'
@@ -151,23 +161,41 @@ export default defineEventHandler(async (event) => {
 
   const workoutDateById = new Map(allWorkouts.map((w) => [w.id, w.date]))
 
-  const last8wBests: Record<string, number> = {}
-  const allTimeBests: Record<string, number> = {}
+  // Merge candidates from both sources — manual entries (tied to a workout date)
+  // and Strava-derived bests (tied to an activity date) — before ranking.
+  const candidatesByDuration = new Map<string, { watts: number; date: string }[]>()
+  function addCandidate(duration: string, watts: number, date: string) {
+    const list = candidatesByDuration.get(duration)
+    if (list) list.push({ watts, date })
+    else candidatesByDuration.set(duration, [{ watts, date }])
+  }
 
   for (const pb of allPowerBests) {
     const date = workoutDateById.get(pb.workoutId)
-    if (!date) continue
+    if (date) addCandidate(pb.duration, pb.watts, date)
+  }
 
-    const prevAll = allTimeBests[pb.duration]
-    if (prevAll === undefined || pb.watts > prevAll) {
-      allTimeBests[pb.duration] = pb.watts
-    }
-    if (date >= cutoffStr) {
-      const prev8w = last8wBests[pb.duration]
-      if (prev8w === undefined || pb.watts > prev8w) {
-        last8wBests[pb.duration] = pb.watts
-      }
-    }
+  const allStravaBests = await db
+    .select({
+      duration: stravaPowerBests.duration,
+      watts: stravaPowerBests.watts,
+      achievedAt: stravaPowerBests.achievedAt,
+    })
+    .from(stravaPowerBests)
+
+  for (const sb of allStravaBests) {
+    addCandidate(sb.duration, sb.watts, sb.achievedAt)
+  }
+
+  const last8wBests: Record<string, number> = {}
+  const allTimeTop3: Record<string, number[]> = {}
+
+  for (const [duration, candidates] of candidatesByDuration) {
+    const sorted = [...candidates].sort((a, b) => b.watts - a.watts)
+    allTimeTop3[duration] = sorted.slice(0, 3).map((c) => c.watts)
+
+    const best8w = sorted.find((c) => c.date >= cutoffStr)
+    if (best8w) last8wBests[duration] = best8w.watts
   }
 
   // Current FTP: most recent non-null ftpWatts (allWorkouts sorted asc, so last wins)
@@ -175,14 +203,14 @@ export default defineEventHandler(async (event) => {
 
   // Surface which durations have any data for the panel
   const durationsWithData = POWER_BEST_DURATIONS.filter(
-    (d) => allTimeBests[d] !== undefined,
+    (d) => allTimeTop3[d]?.length,
   )
 
   return {
     periods,
     powerBestsPanel: {
       last8Weeks: last8wBests,
-      allTime: allTimeBests,
+      allTime: allTimeTop3,
       durations: durationsWithData,
     },
     currentFtp,

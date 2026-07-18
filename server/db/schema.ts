@@ -14,6 +14,8 @@ import {
   serial,
   text,
   integer,
+  bigint,
+  boolean,
   real,
   date,
   timestamp,
@@ -219,6 +221,70 @@ export const plannedWorkouts = pgTable(
 )
 
 // ---------------------------------------------------------------------------
+// strava_power_bests
+//
+// Best rolling-average watts per duration, derived from Strava activity
+// power streams (Strava's own power-curve UI has no public API — this is
+// computed locally by scripts/sync-power-bests.ts). Distinct from
+// `power_bests` above, which holds manually-entered per-workout bests.
+//
+// Only rows still relevant to either the all-time top 3 or the trailing
+// 8-week window are retained — the sync script prunes everything else, so
+// "all-time best" and "8-week best" are always plain queries against this
+// table rather than separately maintained values.
+// ---------------------------------------------------------------------------
+
+export const stravaPowerBests = pgTable(
+  'strava_power_bests',
+  {
+    id: serial('id').primaryKey(),
+
+    /** Strava activity ID (exceeds int32 range, hence bigint) */
+    activityId: bigint('activity_id', { mode: 'number' }).notNull(),
+
+    duration: text('duration').notNull(),
+
+    /** Best rolling-average power for this duration within the activity */
+    watts: integer('watts').notNull(),
+
+    /** The activity's date — what the 8-week rolling window filters on */
+    achievedAt: date('achieved_at').notNull(),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('strava_power_bests_activity_id_duration_idx').on(table.activityId, table.duration),
+
+    /** Backs both the all-time top-3 query and the prune step's ranking */
+    index('strava_power_bests_duration_watts_idx').on(table.duration, table.watts),
+
+    /** Backs the 8-week rolling-window query */
+    index('strava_power_bests_duration_achieved_at_idx').on(table.duration, table.achievedAt),
+
+    check('strava_pb_watts_positive', sql`${table.watts} > 0`),
+    check(
+      'strava_pb_duration_valid',
+      sql`${table.duration} IN (${sql.raw(POWER_BEST_DURATIONS.map((d) => `'${d}'`).join(', '))})`,
+    ),
+  ],
+)
+
+// ---------------------------------------------------------------------------
+// strava_synced_activities
+//
+// Bookkeeping so the sync script doesn't re-fetch streams for activities
+// it has already processed — including rides with no power meter data,
+// which otherwise leave no trace in strava_power_bests and would be
+// re-checked forever.
+// ---------------------------------------------------------------------------
+
+export const stravaSyncedActivities = pgTable('strava_synced_activities', {
+  activityId: bigint('activity_id', { mode: 'number' }).primaryKey(),
+  hadPower: boolean('had_power').notNull(),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+// ---------------------------------------------------------------------------
 // Relations (used by Drizzle's relational query API)
 // ---------------------------------------------------------------------------
 
@@ -258,9 +324,13 @@ export type User = typeof users.$inferSelect
 export type Workout = typeof workouts.$inferSelect
 export type PlannedWorkout = typeof plannedWorkouts.$inferSelect
 export type PowerBest = typeof powerBests.$inferSelect
+export type StravaPowerBest = typeof stravaPowerBests.$inferSelect
+export type StravaSyncedActivity = typeof stravaSyncedActivities.$inferSelect
 
 /** Insert types (id and createdAt are optional / auto-generated) */
 export type NewUser = typeof users.$inferInsert
 export type NewWorkout = typeof workouts.$inferInsert
 export type NewPlannedWorkout = typeof plannedWorkouts.$inferInsert
 export type NewPowerBest = typeof powerBests.$inferInsert
+export type NewStravaPowerBest = typeof stravaPowerBests.$inferInsert
+export type NewStravaSyncedActivity = typeof stravaSyncedActivities.$inferInsert

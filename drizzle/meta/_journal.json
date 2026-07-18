@@ -43,6 +43,13 @@
       "when": 1784219520002,
       "tag": "0005_ancient_roxanne_simpson",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784405580120,
+      "tag": "0006_chubby_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

@@ -169,9 +169,12 @@ function formatHours(h: number): string {
               </span>
               <span v-else class="text-stone-200">—</span>
             </td>
-            <td class="px-5 py-2.5 text-right tabular-nums font-semibold text-stone-700">
-              <span v-if="data?.powerBestsPanel?.allTime?.[dur]">
-                {{ data.powerBestsPanel.allTime[dur] }}
+            <td class="px-5 py-2.5 text-right tabular-nums">
+              <span v-if="data?.powerBestsPanel?.allTime?.[dur]?.length" class="font-semibold text-stone-700">
+                <template v-for="(watts, i) in data.powerBestsPanel.allTime[dur]" :key="i">
+                  <span v-if="i > 0" class="mx-1 font-normal text-stone-300">/</span>
+                  <span :class="i > 0 ? 'font-normal text-stone-400' : ''">{{ watts }}</span>
+                </template>
               </span>
               <span v-else class="text-stone-200">—</span>
             </td>

@@ -19,7 +19,8 @@
         "db:studio": "drizzle-kit studio",
         "start": "node .output/server/index.mjs",
         "reset-password": "pnpm dlx dotenv-cli -e .env -- node --experimental-strip-types scripts/reset-password.ts",
-        "zwift-tss": "node --experimental-strip-types scripts/zwift-workout-tss.ts"
+        "zwift-tss": "node --experimental-strip-types scripts/zwift-workout-tss.ts",
+        "sync-power-bests": "pnpm dlx dotenv-cli -e .env -- node --experimental-strip-types scripts/sync-power-bests.ts"
     },
     "dependencies": {
         "@adonisjs/hash": "^9.1.1",
