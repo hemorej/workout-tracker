@@ -32,7 +32,7 @@
         "pg": "8.22.0",
         "pinia": "^3.0.1",
         "vue": "^3.5.39",
-        "vue-router": "^4.5.0"
+        "vue-router": "^5.2.0"
     },
     "devDependencies": {
         "@iconify-json/heroicons": "^1.2.3",
