@@ -23,7 +23,7 @@
         "sync-power-bests": "pnpm dlx dotenv-cli -e .env -- node --experimental-strip-types scripts/sync-power-bests.ts"
     },
     "dependencies": {
-        "@adonisjs/hash": "^9.1.1",
+        "@adonisjs/hash": "^10.1.0",
         "@nuxt/ui": "^3.0.0",
         "@pinia/nuxt": "^0.11.0",
         "drizzle-orm": "0.45.2",
