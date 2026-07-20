@@ -6435,21 +6435,6 @@ snapshots:
       '@vue/compiler-core': 3.5.40
       '@vue/shared': 3.5.40
 
-<<<<<<< HEAD
-=======
-  '@vue/compiler-sfc@3.5.39':
-    dependencies:
-      '@babel/parser': 7.29.7
-      '@vue/compiler-core': 3.5.39
-      '@vue/compiler-dom': 3.5.39
-      '@vue/compiler-ssr': 3.5.39
-      '@vue/shared': 3.5.39
-      estree-walker: 2.0.2
-      magic-string: 0.30.21
-      postcss: 8.5.19
-      source-map-js: 1.2.1
-
->>>>>>> main
   '@vue/compiler-sfc@3.5.40':
     dependencies:
       '@babel/parser': 7.29.7
