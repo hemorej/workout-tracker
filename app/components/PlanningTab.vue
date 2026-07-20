@@ -230,10 +230,10 @@ function tsbColor(tsb: number) {
               </span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-xs uppercase tracking-widest text-stone-400">TSS</span>
               <span class="text-base font-semibold tabular text-stone-700 min-w-[2.5rem] text-right">
                 {{ weekTss(week.days) }}
               </span>
+              <span class="text-xs uppercase tracking-widest text-stone-400">TSS</span>
             </div>
           </div>
         </div>
@@ -244,12 +244,12 @@ function tsbColor(tsb: number) {
             v-for="day in week.days"
             :key="day.date"
             :class="[
-              'group flex items-center gap-3 px-4 py-2.5',
+              'group flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5',
               day.isPast ? 'opacity-50' : '',
             ]"
           >
             <!-- Date label -->
-            <span class="w-16 shrink-0 text-sm text-stone-500 tabular">
+            <span class="w-12 sm:w-16 shrink-0 text-sm text-stone-500 tabular">
               {{ formatDate(day.date) }}
             </span>
 
@@ -264,13 +264,20 @@ function tsbColor(tsb: number) {
               {{ getDraft(day.date).type ? ZONES.find(z => z.value === getDraft(day.date).type)?.label : '·' }}
             </button>
 
-            <!-- Workout name -->
+            <!-- Workout name: compact truncated text in narrow/vertical layouts,
+                 editable input from `sm` up -->
+            <span
+              class="sm:hidden flex-1 min-w-0 truncate text-[13px] px-1.5"
+              :class="getDraft(day.date).name ? 'text-stone-700' : 'text-stone-300'"
+            >
+              {{ getDraft(day.date).name || 'Workout name' }}
+            </span>
             <input
               v-model="getDraft(day.date).name"
               type="text"
               placeholder="Workout name"
               :disabled="day.isPast"
-              class="flex-1 min-w-0 text-sm text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1.5 py-1 -mx-1.5 transition-colors disabled:cursor-default"
+              class="hidden sm:block flex-1 min-w-0 text-sm text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1.5 py-1 -mx-1.5 transition-colors disabled:cursor-default"
               @blur="save(day.date)"
               @keydown.enter="($event.target as HTMLInputElement).blur()"
             >
@@ -279,50 +286,62 @@ function tsbColor(tsb: number) {
             <button
               v-if="canSwapUp(day.date)"
               type="button"
-              class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-stone-300 opacity-0 group-hover:opacity-100 hover:text-stone-500 hover:bg-stone-50 transition-colors cursor-pointer"
+              class="hidden sm:flex shrink-0 w-5 h-5 items-center justify-center rounded text-stone-300 opacity-0 group-hover:opacity-100 hover:text-stone-500 hover:bg-stone-50 transition-colors cursor-pointer"
               title="Swap with day above"
               @click="swapWithAbove(day.date)"
             >
               <UIcon name="i-heroicons-arrows-up-down" class="w-3.5 h-3.5" />
             </button>
-            <div v-else class="w-5 shrink-0" />
+            <div v-else class="hidden sm:block w-5 shrink-0" />
 
-            <!-- TSS -->
-            <div class="flex items-center gap-1 shrink-0">
-              <input
-                v-model.number="getDraft(day.date).tss"
-                type="number"
-                inputmode="numeric"
-                min="0"
-                max="999"
-                placeholder="—"
-                :disabled="day.isPast"
-                class="w-16 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-1 -mx-1 tabular transition-colors disabled:cursor-default"
-                @blur="save(day.date)"
-                @keydown.enter="($event.target as HTMLInputElement).blur()"
-              >
-              <span class="text-xs text-stone-300">TSS</span>
+            <!-- TSS: compact read-only text in narrow/vertical layouts,
+                 editable input from `sm` up -->
+            <div class="shrink-0">
+              <span class="sm:hidden text-xs tabular" :class="getDraft(day.date).tss ? 'text-stone-500' : 'text-stone-300'">
+                {{ getDraft(day.date).tss ?? '—' }}<span class="text-stone-300"> TSS</span>
+              </span>
+              <div class="hidden sm:flex items-center gap-1">
+                <input
+                  v-model.number="getDraft(day.date).tss"
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  max="999"
+                  placeholder="—"
+                  :disabled="day.isPast"
+                  class="w-16 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-1 -mx-1 tabular transition-colors disabled:cursor-default"
+                  @blur="save(day.date)"
+                  @keydown.enter="($event.target as HTMLInputElement).blur()"
+                >
+                <span class="text-xs text-stone-300">TSS</span>
+              </div>
             </div>
 
-            <!-- Duration -->
-            <div class="flex items-center gap-1 shrink-0">
-              <input
-                v-model.number="getDraft(day.date).durationMinutes"
-                type="number"
-                inputmode="numeric"
-                min="0"
-                max="999"
-                placeholder="—"
-                :disabled="day.isPast"
-                class="w-14 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-1 -mx-1 tabular transition-colors disabled:cursor-default"
-                @blur="save(day.date)"
-                @keydown.enter="($event.target as HTMLInputElement).blur()"
-              >
-              <span class="text-xs text-stone-300">min</span>
+            <!-- Duration: compact read-only text in narrow/vertical layouts,
+                 editable input from `sm` up -->
+            <div class="shrink-0">
+              <span class="sm:hidden text-xs tabular" :class="getDraft(day.date).durationMinutes ? 'text-stone-500' : 'text-stone-300'">
+                {{ getDraft(day.date).durationMinutes ?? '—' }}<span class="text-stone-300"> min</span>
+              </span>
+              <div class="hidden sm:flex items-center gap-1">
+                <input
+                  v-model.number="getDraft(day.date).durationMinutes"
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  max="999"
+                  placeholder="—"
+                  :disabled="day.isPast"
+                  class="w-14 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-1 -mx-1 tabular transition-colors disabled:cursor-default"
+                  @blur="save(day.date)"
+                  @keydown.enter="($event.target as HTMLInputElement).blur()"
+                >
+                <span class="text-xs text-stone-300">min</span>
+              </div>
             </div>
 
             <!-- Projected CTL -->
-            <div class="flex items-center gap-1 shrink-0">
+            <div class="hidden sm:flex items-center gap-1 shrink-0">
               <span class="text-xs text-stone-300">CTL</span>
               <span class="w-10 text-sm text-right tabular text-stone-500">
                 {{ liveProjections[day.date]?.ctl ?? '—' }}
@@ -330,7 +349,7 @@ function tsbColor(tsb: number) {
             </div>
 
             <!-- Projected TSB -->
-            <div class="flex items-center gap-1 shrink-0">
+            <div class="hidden sm:flex items-center gap-1 shrink-0">
               <span class="text-xs text-stone-300">TSB</span>
               <span
                 class="w-10 text-sm text-right tabular"
