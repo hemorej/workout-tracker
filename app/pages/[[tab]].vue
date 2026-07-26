@@ -42,14 +42,34 @@ interface StravaRideSummary {
 definePageMeta({ middleware: 'auth' })
 
 // ── Tab navigation ────────────────────────────────────────────────────────
-const activeTab = ref<'log' | 'planning' | 'builder' | 'history'>('log')
-
+// This page matches both `/` and `/:tab` (optional catch-all route file
+// `[[tab]].vue`), so the active tab is driven by the URL — `/planning` loads
+// straight into the planning tab, and clicking a tab pushes a matching URL.
 const tabs = [
   { id: 'log', label: 'Training log' },
   { id: 'planning', label: 'Planning' },
   { id: 'builder', label: 'Workout builder' },
   { id: 'history', label: 'History' },
 ] as const
+
+type TabId = typeof tabs[number]['id']
+const tabIds = tabs.map(t => t.id)
+
+const route = useRoute()
+const routeTab = computed<TabId>(() => {
+  const param = route.params.tab
+  const value = Array.isArray(param) ? param[0] : param
+  return tabIds.includes(value as TabId) ? (value as TabId) : 'log'
+})
+
+const activeTab = ref<TabId>(routeTab.value)
+watch(routeTab, (tab) => { activeTab.value = tab })
+
+/** Sets the active tab and pushes the matching URL (`/` for the default log tab) */
+function setTab(id: TabId) {
+  activeTab.value = id
+  navigateTo(id === 'log' ? '/' : `/${id}`)
+}
 
 const auth = useAuthStore()
 const workouts = useWorkoutsStore()
@@ -83,7 +103,7 @@ const workoutBuilderRef = ref<{ setName: (name: string) => void } | null>(null)
 async function goToBuilder() {
   if (window.innerWidth < 1024) return
   const name = todayPlan.value?.plan?.name ?? ''
-  activeTab.value = 'builder'
+  setTab('builder')
   await nextTick()
   workoutBuilderRef.value?.setName(name)
 }
@@ -402,7 +422,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
               ? 'font-bold text-stone-900 border-b-orange-600'
               : 'font-medium text-stone-500 border-b-transparent hover:text-stone-700',
           ]"
-          @click="activeTab = tab.id"
+          @click="setTab(tab.id)"
         >
           {{ tab.label }}
         </button>
