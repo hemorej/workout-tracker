@@ -138,9 +138,13 @@ export default defineNuxtConfig({
              */
             rollupOptions: {
                 output: {
-                    manualChunks: {
-                        vue: ['vue', 'vue-router'],
-                        pinia: ['pinia'],
+                    // Object form only ever worked under Rollup; the Vite/Nitro
+                    // bump switched the build to rolldown, whose manualChunks
+                    // only accepts a function.
+                    manualChunks(id) {
+                        if (!id.includes('node_modules')) return
+                        if (id.includes('node_modules/vue/') || id.includes('node_modules/vue-router/')) return 'vue'
+                        if (id.includes('node_modules/pinia/')) return 'pinia'
                     },
                 },
             },
