@@ -1,5 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+    compatibilityDate: '2026-07-29',
+
     /**
      * Nuxt 4 compatibility mode — enables the new `app/` source directory layout
      * and other forward-looking defaults.
@@ -87,7 +89,7 @@ export default defineNuxtConfig({
         },
     },
 
-    css: ['./app/assets/css/main.css'],
+    css: ['./assets/css/main.css'],
 
     devtools: {enabled: true},
 

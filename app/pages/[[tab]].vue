@@ -783,7 +783,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
 
       <!-- ── Loading state ─────────────────────────────────────────── -->
       <div v-if="workouts.isLoading" class="flex justify-center py-16">
-        <UIcon name="i-heroicons-arrow-path" class="animate-spin text-stone-300 text-2xl" />
+        <BikeSpinner :size="24" class="text-stone-300" />
       </div>
 
       <!-- ── Error state ───────────────────────────────────────────── -->
@@ -946,7 +946,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
 
           <!-- Loading -->
           <div v-if="activityPickerLoading" class="flex justify-center py-10">
-            <UIcon name="i-heroicons-arrow-path" class="animate-spin text-stone-300 text-2xl" />
+            <BikeSpinner :size="24" class="text-stone-300" />
           </div>
 
           <!-- Error -->

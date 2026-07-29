@@ -64,7 +64,7 @@ function formatHours(h: number): string {
 
     <!-- Loading -->
     <div v-if="pending" class="flex justify-center py-16">
-      <UIcon name="i-heroicons-arrow-path" class="animate-spin text-stone-300 text-2xl" />
+      <BikeSpinner :size="24" class="text-stone-300" />
     </div>
 
     <!-- ── Period rows (week / month / year) ──────────────────────────── -->
