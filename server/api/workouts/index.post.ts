@@ -149,6 +149,8 @@ export default defineEventHandler(async (event) => {
   // Invalidate the metrics cache so the next GET recomputes with the new workout
   invalidateMetrics(user.id)
 
+  getLogger('workouts').info('workouts.created', { requestId: event.context.requestId, workoutId: newWorkout.id })
+
   setResponseStatus(event, 201)
   return { workout: newWorkout }
 })

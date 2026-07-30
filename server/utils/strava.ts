@@ -24,21 +24,29 @@ interface StravaTokenResponse {
 async function refreshAccessToken(): Promise<CachedToken> {
   const config = useRuntimeConfig()
 
-  const response = await $fetch<StravaTokenResponse>('https://www.strava.com/oauth/token', {
-    method: 'POST',
-    body: {
-      client_id: config.stravaClientId,
-      client_secret: config.stravaClientSecret,
-      refresh_token: config.stravaRefreshToken,
-      grant_type: 'refresh_token',
-    },
-  })
+  let response: StravaTokenResponse
+  try {
+    response = await $fetch<StravaTokenResponse>('https://www.strava.com/oauth/token', {
+      method: 'POST',
+      body: {
+        client_id: config.stravaClientId,
+        client_secret: config.stravaClientSecret,
+        refresh_token: config.stravaRefreshToken,
+        grant_type: 'refresh_token',
+      },
+    })
+  } catch (err: unknown) {
+    const e = err as Record<string, any>
+    getLogger('strava').error('strava.token_refresh_failed', { status: e?.status ?? e?.response?.status })
+    throw err
+  }
 
   const token: CachedToken = {
     accessToken: response.access_token,
     expiresAt: response.expires_at,
   }
   _cachedToken = token
+  getLogger('strava').info('strava.token_refreshed', { expiresAt: token.expiresAt })
   return token
 }
 

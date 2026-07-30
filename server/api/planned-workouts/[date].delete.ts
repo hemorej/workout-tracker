@@ -19,5 +19,7 @@ export default defineEventHandler(async (event) => {
     .delete(plannedWorkouts)
     .where(and(eq(plannedWorkouts.userId, user.id), eq(plannedWorkouts.date, date)))
 
+  getLogger('planned_workouts').info('planned_workouts.deleted', { requestId: event.context.requestId, date })
+
   return { ok: true }
 })

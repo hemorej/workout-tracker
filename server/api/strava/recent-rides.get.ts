@@ -20,7 +20,13 @@ export default defineEventHandler(async (event) => {
     const activities = await fetchRecentRides(3)
     return { activities }
   }
-  catch {
+  catch (err: unknown) {
+    const e = err as Record<string, any>
+    getLogger('strava').error('strava.fetch_recent_rides_failed', {
+      requestId: event.context.requestId,
+      status: e?.status ?? e?.response?.status,
+      err: e?.message,
+    })
     throw createError({ statusCode: 502, statusMessage: 'Failed to fetch recent rides from Strava.' })
   }
 })

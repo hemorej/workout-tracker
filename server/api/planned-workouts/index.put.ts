@@ -36,5 +36,7 @@ export default defineEventHandler(async (event) => {
     durationMinutes: durationMinutes != null ? Number(durationMinutes) : null,
   })
 
+  getLogger('planned_workouts').info('planned_workouts.upserted', { requestId: event.context.requestId, date })
+
   return { ok: true }
 })

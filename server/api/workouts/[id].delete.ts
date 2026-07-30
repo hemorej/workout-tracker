@@ -41,5 +41,7 @@ export default defineEventHandler(async (event) => {
   // Invalidate the metrics cache so the next GET recomputes without this workout
   invalidateMetrics(user.id)
 
+  getLogger('workouts').info('workouts.deleted', { requestId: event.context.requestId, workoutId: id })
+
   return { ok: true }
 })

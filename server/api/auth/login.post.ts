@@ -42,6 +42,7 @@ export default defineEventHandler(async (event) => {
     : await verifyPassword('$scrypt$n=16384,r=8,p=1$invalidsaltfortimingprotection$invalidhashfortimingprotection', body.password)
 
   if (!user || !passwordMatch) {
+    getLogger('auth').warn('auth.login_failed', { requestId: event.context.requestId, email: body.email })
     throw createError({
       statusCode: 401,
       statusMessage: 'Invalid email or password.',
@@ -56,6 +57,8 @@ export default defineEventHandler(async (event) => {
       username: user.username,
     },
   })
+
+  getLogger('auth').info('auth.login_succeeded', { requestId: event.context.requestId, userId: user.id })
 
   // Return the public user object (never return passwordHash)
   return {
