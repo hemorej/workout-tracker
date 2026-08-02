@@ -45,11 +45,17 @@ function zoneFor(pct: number) {
 const title = ref('')
 const ftp = ref(240)
 
-function setName(name: string) {
-  title.value = name
+// Prefilled by the "Planned" shortcut on the training log (see goToBuilder()
+// in [[tab]].vue) via a query param rather than a parent-called setter —
+// switching to this tab remounts the page, so a ref call from the old
+// instance can't reach the one that survives. Read once, then scrub the
+// param so it doesn't linger in the URL or reapply on a later remount.
+const route = useRoute()
+if (typeof route.query.planName === 'string') {
+  title.value = route.query.planName
+  navigateTo({ query: { ...route.query, planName: undefined } }, { replace: true })
 }
 
-defineExpose({ setName })
 const nextId = ref(1)
 const selectedId = ref<number | null>(null)
 const blocks = ref<Block[]>([])
