@@ -70,6 +70,8 @@ export interface StravaRideSummary {
   startDateLocal: string
   movingTimeSeconds: number
   distanceMeters: number
+  /** Mirrors workouts.ride_type: 'trainer' for Strava's VirtualRide, 'outdoor' for Ride. */
+  rideType: 'trainer' | 'outdoor'
 }
 
 interface StravaActivity {
@@ -100,5 +102,6 @@ export async function fetchRecentRides(limit = 3): Promise<StravaRideSummary[]> 
       startDateLocal: a.start_date_local,
       movingTimeSeconds: a.moving_time,
       distanceMeters: a.distance,
+      rideType: (a.type === 'VirtualRide' ? 'trainer' : 'outdoor') as 'trainer' | 'outdoor',
     }))
 }

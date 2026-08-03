@@ -91,6 +91,7 @@ export interface NewWorkoutPayload {
   rpe?: number | null
   notes?: string | null
   ftpWatts?: number | null
+  rideType?: 'trainer' | 'outdoor' | null
   powerBests?: PowerBestEntry[]
 }
 

@@ -45,6 +45,15 @@ function zoneFor(pct: number) {
 const title = ref('')
 const ftp = ref(240)
 
+// Seed FTP from the athlete's most recent logged value (same field HistoryTab
+// shows) so the builder doesn't default to a stale/generic number. Still a
+// plain local ref after that — the user can override it and it won't be
+// clobbered, matching this component's "local state only" design.
+const { data: currentFtpData } = useFetch<{ currentFtp: number | null }>('/api/history')
+watch(currentFtpData, (data) => {
+  if (data?.currentFtp) ftp.value = data.currentFtp
+}, { immediate: true })
+
 // Prefilled by the "Planned" shortcut on the training log (see goToBuilder()
 // in [[tab]].vue) via a query param rather than a parent-called setter —
 // switching to this tab remounts the page, so a ref call from the old

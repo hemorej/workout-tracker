@@ -36,6 +36,7 @@ interface StravaRideSummary {
   startDateLocal: string
   movingTimeSeconds: number
   distanceMeters: number
+  rideType: 'trainer' | 'outdoor'
 }
 
 // Protect this page — unauthenticated users are sent to /login
@@ -198,6 +199,7 @@ function selectActivity(activity: StravaRideSummary) {
     durationMinutes: Math.round(activity.movingTimeSeconds / 60),
     distanceKm: Math.round((activity.distanceMeters / 1000) * 10) / 10,
     tss: todayPlan.value?.plan?.tss ?? null,
+    rideType: activity.rideType,
   }
   showActivityPicker.value = false
   showAddWorkout.value = true

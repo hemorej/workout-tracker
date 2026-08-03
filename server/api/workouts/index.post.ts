@@ -13,6 +13,7 @@
  *   rpe?:            number   — optional, 1–10
  *   notes?:          string   — optional free text
  *   ftpWatts?:       number   — optional, positive integer (watts)
+ *   rideType?:       string   — optional, 'trainer' | 'outdoor'
  *   powerBests?:     { duration: string; watts: number }[]
  * }
  *
@@ -81,6 +82,14 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  let rideType: 'trainer' | 'outdoor' | null = null
+  if (body.rideType !== undefined && body.rideType !== null) {
+    if (body.rideType !== 'trainer' && body.rideType !== 'outdoor') {
+      throw createError({ statusCode: 400, statusMessage: "Ride type must be 'trainer' or 'outdoor'." })
+    }
+    rideType = body.rideType
+  }
+
   const validDurations = new Set(POWER_BEST_DURATIONS as readonly string[])
   const pbInput: { duration: string; watts: number }[] = []
   if (Array.isArray(body.powerBests)) {
@@ -132,6 +141,7 @@ export default defineEventHandler(async (event) => {
       rpe,
       notes,
       ftpWatts,
+      rideType,
     })
     .returning()
 

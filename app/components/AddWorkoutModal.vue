@@ -20,6 +20,8 @@ export interface WorkoutPrefill {
   distanceKm?: number | null
   /** Pre-filled from the day's planned workout TSS, if any. */
   tss?: number | null
+  /** Pre-filled from a matched Strava activity's type, if any. */
+  rideType?: 'trainer' | 'outdoor' | null
 }
 
 const props = defineProps<{
@@ -53,6 +55,9 @@ const form = reactive({
   tss: props.prefill?.tss ?? null as number | null,
   rpe: null as number | null,
 })
+
+// Not user-editable — carried straight through from the matched Strava activity, if any.
+const rideType = ref<'trainer' | 'outdoor' | null>(props.prefill?.rideType ?? null)
 
 const optionalExpanded = ref(false)
 const notes = ref('')
@@ -90,6 +95,7 @@ function reset() {
   form.rpe = null
   notes.value = ''
   ftpWatts.value = null
+  rideType.value = null
   powerBestRows.value = []
   optionalExpanded.value = false
   validationError.value = null
@@ -145,6 +151,7 @@ async function handleSubmit() {
     rpe: form.rpe,
     notes: notes.value.trim() || null,
     ftpWatts: ftpWatts.value ? Math.round(ftpWatts.value) : null,
+    rideType: rideType.value,
     powerBests: validPowerBests.length > 0 ? validPowerBests : undefined,
   }
 
