@@ -205,6 +205,16 @@ function confirmDelete() {
         {{ day.workout?.powerBests?.length }}
       </span>
       <span
+        v-if="hasFtp"
+        class="inline-flex items-center gap-0.5 shrink-0 text-[10px] text-violet-600 font-semibold bg-violet-50 rounded-full px-1 py-[1px]"
+        :title="`FTP updated to ${day.workout?.ftpWatts}W`"
+      >
+        <svg class="w-2 h-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+        {{ day.workout?.ftpWatts }}W
+      </span>
+      <span
         v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
         class="inline-block shrink-0 text-[10px] text-sky-600 font-semibold bg-sky-50 rounded-full px-1.5 py-[1px] whitespace-nowrap"
       >
