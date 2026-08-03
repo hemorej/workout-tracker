@@ -398,6 +398,13 @@ function addBlock(type: 'warmup' | 'cooldown' | 'interval') {
   selectedId.value = block.id
 }
 
+function addSweetSpot() {
+  const block: Block = { id: nextId.value, type: 'interval', reps: 3, onDuration: 600, onPower: 0.91, onCadence: null, offDuration: 300, offPower: 0.5, offCadence: null }
+  blocks.value = [...blocks.value, block]
+  nextId.value += 1
+  selectedId.value = block.id
+}
+
 function addSteady(pct: number) {
   const block: Block = { id: nextId.value, type: 'steady', duration: 300, power: pct, cadence: null }
   blocks.value = [...blocks.value, block]
@@ -797,7 +804,7 @@ function download() {
     <!-- ── Toolbar + download — same narrow width as row 1, same row ──── -->
     <!-- Download is icon-only so the row fits without wrapping or scrolling;
          its right edge lines up with the FTP stat card above. -->
-    <div class="max-w-3xl mx-auto flex items-center gap-3">
+    <div class="max-w-3xl mx-auto flex items-center gap-3" style="padding-bottom: 44px;">
       <div class="flex flex-wrap items-center gap-2 min-w-0">
         <button
           title="Warm up"
@@ -831,17 +838,30 @@ function download() {
 
         <div style="width: 1px; height: 22px; background: #e7e5e4; margin: 0 4px;" />
 
-        <button
-          v-for="z in ZONES"
-          :key="z.label"
-          :title="`${z.label} · ${z.name} · ${z.range}`"
-          class="inline-flex items-center cursor-pointer shrink-0"
-          style="gap: 7px; font: 600 13px 'Hanken Grotesk'; color: #57534e; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px; padding: 8px 14px 8px 10px;"
-          @click="addSteady(z.midpoint)"
-        >
-          <span class="inline-block rounded-full" style="width: 11px; height: 11px;" :style="{ background: z.color }" />
-          {{ z.label }}
-        </button>
+        <template v-for="z in ZONES" :key="z.label">
+          <div class="relative inline-flex shrink-0">
+            <button
+              :title="`${z.label} · ${z.name} · ${z.range}`"
+              class="inline-flex items-center cursor-pointer shrink-0"
+              style="gap: 7px; font: 600 13px 'Hanken Grotesk'; color: #57534e; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px; padding: 8px 14px 8px 10px;"
+              @click="addSteady(z.midpoint)"
+            >
+              <span class="inline-block rounded-full" style="width: 11px; height: 11px;" :style="{ background: z.color }" />
+              {{ z.label }}
+            </button>
+
+            <button
+              v-if="z.label === 'Z4'"
+              title="Sweet spot · 88–94% FTP"
+              class="absolute inline-flex items-center cursor-pointer whitespace-nowrap"
+              style="top: 100%; left: 0; margin-top: 6px; gap: 7px; font: 600 13px 'Hanken Grotesk'; color: #57534e; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px; padding: 8px 14px 8px 10px;"
+              @click="addSweetSpot"
+            >
+              <span class="inline-block rounded-full" style="width: 11px; height: 11px; background: #FBBF24;" />
+              SS
+            </button>
+          </div>
+        </template>
 
         <div style="width: 1px; height: 22px; background: #e7e5e4; margin: 0 4px;" />
 

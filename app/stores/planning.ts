@@ -22,7 +22,7 @@ import { defineStore } from 'pinia'
 export interface PlanEntry {
   id?: number
   name: string | null
-  /** Training zone: 'zone2' | 'zone4' | 'zone5' | 'zone6' | 'rest' */
+  /** Training zone: 'zone2' | 'zone4' | 'zone5' | 'zone6' | 'rest' | 'outdoor' */
   type: string | null
   tss: number | null
   durationMinutes: number | null

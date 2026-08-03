@@ -14,6 +14,7 @@ const ZONES = [
   { value: 'zone5', label: 'Z5', color: 'orange' },
   { value: 'zone6', label: 'Z6', color: 'red' },
   { value: 'rest', label: 'REST', color: 'pink' },
+  { value: 'outdoor', label: 'OUT', color: 'emerald' },
 ]
 
 const ZONE_CLASSES: Record<string, string> = {
@@ -22,6 +23,7 @@ const ZONE_CLASSES: Record<string, string> = {
   zone5: 'bg-orange-100 text-orange-700 border-orange-200',
   zone6: 'bg-red-100 text-red-700 border-red-200',
   rest: 'bg-pink-100 text-pink-600 border-pink-200',
+  outdoor: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   '': 'bg-stone-100 text-stone-500 border-stone-200',
 }
 
@@ -113,7 +115,7 @@ async function save(date: string) {
 
 function cycleType(date: string) {
   const draft = getDraft(date)
-  const zones = [null, 'zone2', 'zone4', 'zone5', 'zone6', 'rest']
+  const zones = [null, 'zone2', 'zone4', 'zone5', 'zone6', 'rest', 'outdoor']
   const idx = zones.indexOf(draft.type)
   draft.type = zones[(idx + 1) % zones.length] ?? null
   save(date)
