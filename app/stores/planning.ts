@@ -26,6 +26,7 @@ export interface PlanEntry {
   type: string | null
   tss: number | null
   durationMinutes: number | null
+  notes: string | null
 }
 
 /** One day in the 4-week planning grid */

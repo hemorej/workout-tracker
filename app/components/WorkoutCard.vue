@@ -10,21 +10,18 @@
  *   - Workout name (or "Rest day" badge)
  *   - Duration + distance + TSS + optional RPE
  *   - Optional notes (truncated, expandable)
- *   - CTL, TSB metrics for that day, as trend-tinted chips
  *   - A delete button for workout days
  *
  * Emits:
  *   delete — when the user confirms deletion (parent calls the store)
  */
 
-import type { DayEntry, DayMetrics } from '~/stores/workouts'
+import type { DayEntry } from '~/stores/workouts'
 import type { PlannedDay } from '~/stores/planning'
 
 interface Props {
   day: DayEntry
   plannedWorkout?: PlannedDay | null
-  /** Previous chronological day's metrics, used to compute trend arrows */
-  prevMetrics?: DayMetrics | null
 }
 
 const props = defineProps<Props>()
@@ -114,48 +111,9 @@ const plannedDurationDisplay = computed(() => {
   return `${h}h ${m}m`
 })
 
-// When showing a planned workout, use the projected CTL/ATL/TSB from the planning store
-const displayMetrics = computed(() => {
-  if (isPlannedDay.value && props.plannedWorkout) {
-    const ctl = props.plannedWorkout.projectedCtl
-    const tsb = props.plannedWorkout.projectedTsb
-    return { ctl, atl: Math.round((ctl - tsb) * 10) / 10, tsb }
-  }
-  return props.day.metrics
-})
-
 // ── Power data indicators ────────────────────────────────────────────────
 const hasFtp = computed(() => !!props.day.workout?.ftpWatts)
 const hasPowerBests = computed(() => (props.day.workout?.powerBests?.length ?? 0) > 0)
-
-const tsbDisplay = computed(() => {
-  const v = displayMetrics.value.tsb
-  return v >= 0 ? `+${v.toFixed(1)}` : v.toFixed(1)
-})
-
-// ── Trend arrows — CTL/TSB direction vs. the previous entry ──────────────
-const ctlTrend = computed(() => trendArrow(displayMetrics.value.ctl, props.prevMetrics?.ctl))
-const tsbTrend = computed(() => trendArrow(displayMetrics.value.tsb, props.prevMetrics?.tsb))
-
-/**
- * Chip tint follows trend direction, identically for CTL and TSB:
- *   up (▲)   → green
- *   down (▼) → amber
- *   no trend → neutral gray
- */
-const CHIP_TINTS = {
-  up: 'text-emerald-600 bg-emerald-50 border-emerald-200',
-  down: 'text-amber-600 bg-amber-50 border-amber-200',
-  neutral: 'text-stone-500 bg-[#faf9f7] border-[#f0eeec]',
-} as const
-
-function chipTint(trend: ReturnType<typeof trendArrow>) {
-  if (!trend) return CHIP_TINTS.neutral
-  return trend.symbol === '▲' ? CHIP_TINTS.up : CHIP_TINTS.down
-}
-
-const ctlChipClass = computed(() => chipTint(ctlTrend.value))
-const tsbChipClass = computed(() => chipTint(tsbTrend.value))
 
 // ── Mobile swipe-row summary (panel 1) ───────────────────────────────────
 const mobileTitle = computed(() => {
@@ -236,12 +194,6 @@ function confirmDelete() {
          flex-wrap stays as a safety net in case a row runs out of space
          (e.g. long delete-confirm text), but sizes are tuned to fit on one line. -->
     <div class="snap-start shrink-0 w-full flex items-center justify-between flex-wrap gap-0.5 px-4 py-2 bg-stone-50">
-      <span class="rounded-[6px] border px-1 py-[1px] text-[10px] font-medium tabular whitespace-nowrap" :class="ctlChipClass">
-        CTL <b>{{ displayMetrics.ctl.toFixed(1) }}<template v-if="ctlTrend"> {{ ctlTrend.symbol }}</template></b>
-      </span>
-      <span class="rounded-[6px] border px-1 py-[1px] text-[10px] font-medium tabular whitespace-nowrap" :class="tsbChipClass">
-        TSB <b>{{ tsbDisplay }}<template v-if="tsbTrend"> {{ tsbTrend.symbol }}</template></b>
-      </span>
       <span
         v-if="hasPowerBests"
         class="inline-flex items-center gap-0.5 shrink-0 text-[10px] text-amber-600 font-semibold bg-amber-50 rounded-full px-1 py-[1px]"
@@ -338,19 +290,9 @@ function confirmDelete() {
     <!-- Column 2: title/duration + notes + metrics — absorbs variable-length text -->
     <div class="min-w-0">
 
-      <!-- Rest day — CTL/TSB chips share the line with the label to stay compact.
-           The two chips are grouped in their own nowrap flex so they wrap as a pair
-           (never split from each other) if the row runs out of horizontal room. -->
+      <!-- Rest day -->
       <div v-if="day.isRestDay && !isPlannedDay" class="flex flex-wrap items-center gap-1.5 text-[11px] font-medium tabular">
         <span class="text-sm text-stone-400 italic mr-1">Rest</span>
-        <div class="flex items-center gap-1.5">
-          <span class="rounded-[7px] border px-2 py-[3px] whitespace-nowrap" :class="ctlChipClass">
-            CTL <b>{{ displayMetrics.ctl.toFixed(1) }}<template v-if="ctlTrend"> {{ ctlTrend.symbol }}</template></b>
-          </span>
-          <span class="rounded-[7px] border px-2 py-[3px] whitespace-nowrap" :class="tsbChipClass">
-            TSB <b>{{ tsbDisplay }}<template v-if="tsbTrend"> {{ tsbTrend.symbol }}</template></b>
-          </span>
-        </div>
       </div>
 
       <!-- Planned workout (today, not yet logged) -->
@@ -402,17 +344,6 @@ function confirmDelete() {
             {{ notesExpanded ? 'less' : 'more' }}
           </button>
         </div>
-      </div>
-
-      <!-- Metrics row — CTL / TSB as small tinted chips, tint follows trend direction.
-           Rest days show these inline with the "Rest" label above instead. -->
-      <div v-if="!(day.isRestDay && !isPlannedDay)" class="flex flex-wrap gap-1.5 mt-1.5 text-[11px] font-medium tabular">
-        <span class="rounded-[7px] border px-2 py-[3px]" :class="ctlChipClass">
-          CTL <b>{{ displayMetrics.ctl.toFixed(1) }}<template v-if="ctlTrend"> {{ ctlTrend.symbol }}</template></b>
-        </span>
-        <span class="rounded-[7px] border px-2 py-[3px]" :class="tsbChipClass">
-          TSB <b>{{ tsbDisplay }}<template v-if="tsbTrend"> {{ tsbTrend.symbol }}</template></b>
-        </span>
       </div>
     </div>
 

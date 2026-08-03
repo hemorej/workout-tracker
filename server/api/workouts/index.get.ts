@@ -45,13 +45,6 @@ function escapeLikePattern(input: string): string {
   return input.replace(/[\\%_]/g, (ch) => `\\${ch}`)
 }
 
-/** Returns the ISO date string for the calendar day before `dateStr` */
-function isoDateMinusOne(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00Z`)
-  d.setUTCDate(d.getUTCDate() - 1)
-  return d.toISOString().slice(0, 10)
-}
-
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export default defineEventHandler(async (event) => {
@@ -121,18 +114,12 @@ export default defineEventHandler(async (event) => {
     setCachedMetrics(user.id, series)
   }
 
-  // O(1) date → metrics lookups, used for both branches below (row metrics
-  // and previous-day metrics for trend arrows).
+  // O(1) date → metrics lookups, used for both branches below.
   const seriesByDate = new Map<string, DayMetrics>(series.map((d) => [d.date, d]))
 
   function metricsForDate(date: string) {
     const entry = seriesByDate.get(date)
     return entry ? { ctl: entry.ctl, atl: entry.atl, tsb: entry.tsb } : { ctl: 0, atl: 0, tsb: 0 }
-  }
-
-  function prevMetricsForDate(date: string) {
-    const entry = seriesByDate.get(isoDateMinusOne(date))
-    return entry ? { ctl: entry.ctl, atl: entry.atl, tsb: entry.tsb } : null
   }
 
   // ── Weekly / today / yesterday stats — always global, unaffected by filters ─
@@ -241,7 +228,6 @@ export default defineEventHandler(async (event) => {
       date: workout.date,
       isRestDay: false,
       metrics: metricsForDate(workout.date),
-      prevMetrics: prevMetricsForDate(workout.date),
       workout: buildWorkoutDetail(workout, pbByWorkoutId),
     }))
   }
@@ -286,7 +272,6 @@ export default defineEventHandler(async (event) => {
         date: day.date,
         isRestDay: day.isRestDay,
         metrics: { ctl: day.ctl, atl: day.atl, tsb: day.tsb },
-        prevMetrics: prevMetricsForDate(day.date),
         workout: workout ? buildWorkoutDetail(workout, pbByWorkoutId) : null,
       }
     })

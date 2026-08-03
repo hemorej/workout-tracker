@@ -97,6 +97,29 @@ const showAddWorkout = ref(false)
 const addWorkoutForm = ref<{ reset: () => void } | null>(null)
 const pendingPrefill = ref<WorkoutPrefill | null>(null)
 
+// ── CTL/TSB history chart modal ──────────────────────────────────────────
+const showHistoryChart = ref(false)
+const historyLoading = ref(false)
+const historySeries = ref<{ date: string, ctl: number, tsb: number }[]>([])
+
+async function openHistoryChart() {
+  showHistoryChart.value = true
+  historyLoading.value = true
+  try {
+    const data = await $fetch<{ series: { date: string, ctl: number, tsb: number }[] }>('/api/metrics/series', {
+      query: { weeks: 8 },
+    })
+    historySeries.value = data.series
+  }
+  finally {
+    historyLoading.value = false
+  }
+}
+
+function closeHistoryChart() {
+  showHistoryChart.value = false
+}
+
 /** "Planned" icon on a planned day — switch to the builder tab pre-filled with the plan's name.
  *  Builder tab is hidden below `lg` (see nav below), so skip on phone-sized viewports.
  *
@@ -464,6 +487,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
         :today-t-s-b="workouts.todayMetrics.tsb"
         :yesterday-c-t-l="workouts.yesterdayMetrics?.ctl"
         :yesterday-t-s-b="workouts.yesterdayMetrics?.tsb"
+        @open-history="openHistoryChart"
       />
 
       <!-- Section header + Add button, and the content directly below it —
@@ -828,7 +852,6 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           v-for="day in workouts.days"
           :key="day.date"
           :day="day"
-          :prev-metrics="day.prevMetrics"
           :planned-workout="day.date === todayStr ? todayPlan : null"
           @delete="onDeleteWorkout"
           @mark-completed="onMarkCompleted"
@@ -994,6 +1017,43 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
               </button>
             </li>
           </ul>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ── CTL/TSB history chart ─────────────────────────────────────── -->
+    <Teleport to="body">
+      <div
+        v-if="showHistoryChart"
+        class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-label="CTL/TSB history"
+      >
+        <div
+          class="fixed inset-0 bg-black/25 backdrop-blur-sm"
+          @click="closeHistoryChart"
+        />
+
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 my-8">
+          <div class="flex items-start justify-between mb-6">
+            <div>
+              <h2 class="text-lg font-semibold text-stone-900">CTL / TSB history</h2>
+              <p class="text-sm text-stone-400 mt-0.5">Last 8 weeks.</p>
+            </div>
+            <button
+              class="text-stone-300 hover:text-stone-600 transition-colors ml-4 mt-0.5"
+              aria-label="Close"
+              @click="closeHistoryChart"
+            >
+              <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+            </button>
+          </div>
+
+          <div v-if="historyLoading" class="flex justify-center py-16">
+            <BikeSpinner :size="24" class="text-stone-300" />
+          </div>
+          <MetricsHistoryChart v-else :series="historySeries" />
         </div>
       </div>
     </Teleport>

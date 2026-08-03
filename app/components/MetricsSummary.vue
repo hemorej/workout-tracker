@@ -27,6 +27,8 @@ interface Props {
 
 const props = defineProps<Props>()
 
+const emit = defineEmits<{ (e: 'open-history'): void }>()
+
 /** Trend arrows (CTL/TSB vs. yesterday) shown next to the big numbers */
 const ctlTrend = computed(() => trendArrow(props.todayCTL, props.yesterdayCTL))
 const tsbTrend = computed(() => trendArrow(props.todayTSB, props.yesterdayTSB))
@@ -89,7 +91,12 @@ const tsbDisplay = computed(() =>
       </div>
 
       <!-- Today -->
-      <div>
+      <button
+        type="button"
+        class="text-left cursor-pointer w-full rounded-lg -m-1 p-1 transition-colors hover:bg-stone-50"
+        title="View CTL/TSB history"
+        @click="emit('open-history')"
+      >
         <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 pb-[10px] border-b-2 border-[#e7e5e0] mb-2.5">
           Today
         </p>
@@ -111,7 +118,7 @@ const tsbDisplay = computed(() =>
             <p class="text-[11px] text-stone-500 mt-1">{{ formZone.label }}</p>
           </div>
         </div>
-      </div>
+      </button>
 
     </div>
   </div>

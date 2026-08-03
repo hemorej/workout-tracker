@@ -3,14 +3,16 @@
  *
  * Returns 4 weeks of planned workouts starting from the current Monday,
  * plus projected CTL and TSB values for each day based on:
- *   - current CTL/ATL from the user's actual training history
- *   - planned TSS values for each future day
+ *   - CTL/ATL as of the end of yesterday, from the user's actual training history
+ *   - planned TSS values for each future day (or the actual logged TSS for
+ *     today, once a workout has been logged — that day's row then reuses the
+ *     historical series value directly instead of re-projecting)
  *
  * Response shape:
  * {
  *   plans: PlannedDay[]   — 28 days, Monday–Sunday × 4 weeks
- *   currentCtl: number
- *   currentAtl: number
+ *   currentCtl: number    — seed CTL for future projections (yesterday's value)
+ *   currentAtl: number    — seed ATL for future projections (yesterday's value)
  * }
  */
 
@@ -24,7 +26,8 @@ export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
   const db = useDB()
 
-  // Get current CTL/ATL from the metrics series (cache or full compute)
+  // Get the metrics series (cache or full compute) — includes today, reflecting
+  // any workout already logged today
   let series = getCachedMetrics(user.id)
   if (!series) {
     const [userRow] = await db
@@ -45,10 +48,6 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const lastDay = series.at(-1)
-  const currentCtl = lastDay?.ctl ?? 0
-  const currentAtl = lastDay?.atl ?? 0
-
   // Build 4 weeks of dates starting from current week's Monday
   const today = new Date()
   const todayUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()))
@@ -62,6 +61,40 @@ export default defineEventHandler(async (event) => {
     const d = new Date(monday)
     d.setUTCDate(monday.getUTCDate() + i)
     dates.push(d.toISOString().slice(0, 10))
+  }
+
+  const todayStr = todayUtc.toISOString().slice(0, 10)
+  const yesterdayUtc = new Date(todayUtc)
+  yesterdayUtc.setUTCDate(yesterdayUtc.getUTCDate() - 1)
+  const yesterdayStr = yesterdayUtc.toISOString().slice(0, 10)
+
+  // Today counts as "logged" (and therefore read-only, like a past day) once
+  // an actual workout exists for it — otherwise its row is still projected
+  // from the planned TSS like any future day.
+  const todayEntry = series.find(d => d.date === todayStr)
+  const isTodayLogged = !!todayEntry && !todayEntry.isRestDay
+
+  // Seed for future-day projections is CTL/ATL as of the END of yesterday —
+  // using today's own series entry here would double-count today's load
+  // once it's logged, since the projection loop below applies today's TSS
+  // (planned or actual) itself.
+  const yesterdayEntry = series.find(d => d.date === yesterdayStr)
+  let currentCtl: number
+  let currentAtl: number
+  if (yesterdayEntry) {
+    currentCtl = yesterdayEntry.ctl
+    currentAtl = yesterdayEntry.atl
+  }
+  else {
+    // No training history through yesterday (e.g. earliest workout is today
+    // or later) — fall back to the user's initial seed values.
+    const [userRow] = await db
+      .select({ initialCtl: users.initialCtl, initialAtl: users.initialAtl })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1)
+    currentCtl = userRow?.initialCtl ?? 0
+    currentAtl = userRow?.initialAtl ?? currentCtl
   }
 
   // Fetch existing planned workouts for this window
@@ -80,13 +113,11 @@ export default defineEventHandler(async (event) => {
   let ctl = currentCtl
   let atl = currentAtl
 
-  const todayStr = todayUtc.toISOString().slice(0, 10)
-
   const plans = dates.map((date) => {
     const plan = planByDate.get(date)
-    const isPast = date < todayStr
+    const isPast = date < todayStr || (date === todayStr && isTodayLogged)
 
-    // For past days in the current week, use actual series data if available
+    // For past days (and today, once logged), use actual series data if available
     let projCtl = ctl
     let projAtl = atl
 
@@ -110,7 +141,7 @@ export default defineEventHandler(async (event) => {
       date,
       isPast,
       plan: plan
-        ? { id: plan.id, name: plan.name, type: plan.type, tss: plan.tss, durationMinutes: plan.durationMinutes }
+        ? { id: plan.id, name: plan.name, type: plan.type, tss: plan.tss, durationMinutes: plan.durationMinutes, notes: plan.notes }
         : null,
       projectedCtl: projCtl,
       projectedTsb: Math.round((projCtl - projAtl) * 10) / 10,

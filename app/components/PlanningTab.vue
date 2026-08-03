@@ -83,6 +83,7 @@ function getDraft(date: string): PlanEntry {
       type: plan?.type ?? null,
       tss: plan?.tss ?? null,
       durationMinutes: plan?.durationMinutes ?? null,
+      notes: plan?.notes ?? null,
     }
   }
   return drafts[date]!
@@ -97,6 +98,7 @@ function isDirty(date: string) {
     || draft.type !== (original?.type ?? null)
     || draft.tss !== (original?.tss ?? null)
     || draft.durationMinutes !== (original?.durationMinutes ?? null)
+    || draft.notes !== (original?.notes ?? null)
   )
 }
 
@@ -195,12 +197,22 @@ const liveProjections = computed(() => {
   return result
 })
 
-function tsbColor(tsb: number) {
-  if (tsb > 25) return 'text-sky-400'
-  if (tsb > 10) return 'text-emerald-400'
-  if (tsb > -10) return 'text-stone-400'
-  if (tsb > -30) return 'text-amber-400'
-  return 'text-rose-400'
+// ── Note popup ───────────────────────────────────────────────────────────────
+
+const noteModalDate = ref<string | null>(null)
+
+function openNoteModal(date: string) {
+  noteModalDate.value = date
+}
+
+function closeNoteModal() {
+  noteModalDate.value = null
+}
+
+async function saveNote() {
+  if (!noteModalDate.value) return
+  await save(noteModalDate.value)
+  closeNoteModal()
 }
 </script>
 
@@ -296,6 +308,21 @@ function tsbColor(tsb: number) {
             </button>
             <div v-else class="hidden sm:block w-5 shrink-0" />
 
+            <!-- Note (hover-revealed when empty, persistently visible once a note exists) -->
+            <button
+              v-if="!day.isPast"
+              type="button"
+              class="hidden sm:flex shrink-0 w-5 h-5 items-center justify-center rounded transition-colors cursor-pointer"
+              :class="getDraft(day.date).notes
+                ? 'opacity-100 text-amber-500 hover:text-amber-600 hover:bg-amber-50'
+                : 'opacity-0 group-hover:opacity-100 text-stone-300 hover:text-stone-500 hover:bg-stone-50'"
+              :title="getDraft(day.date).notes ? 'Edit note' : 'Add note'"
+              @click="openNoteModal(day.date)"
+            >
+              <UIcon name="i-heroicons-pencil-square" class="w-3.5 h-3.5" />
+            </button>
+            <div v-else class="hidden sm:block w-5 shrink-0" />
+
             <!-- TSS: compact read-only text in narrow/vertical layouts,
                  editable input from `sm` up -->
             <div class="shrink-0">
@@ -350,17 +377,6 @@ function tsbColor(tsb: number) {
               </span>
             </div>
 
-            <!-- Projected TSB -->
-            <div class="hidden sm:flex items-center gap-1 shrink-0">
-              <span class="text-xs text-stone-300">TSB</span>
-              <span
-                class="w-10 text-sm text-right tabular"
-                :class="liveProjections[day.date] ? tsbColor(liveProjections[day.date]!.tsb) : 'text-stone-300'"
-              >
-                {{ liveProjections[day.date]?.tsb ?? '—' }}
-              </span>
-            </div>
-
             <!-- Save indicator -->
             <div class="w-4 shrink-0 flex justify-center">
               <UIcon
@@ -381,6 +397,37 @@ function tsbColor(tsb: number) {
       <p class="text-sm font-medium text-stone-500">No training history yet</p>
       <p class="text-xs text-stone-400 mt-1.5">Log some workouts first to enable planning.</p>
     </div>
+
+    <!-- Note popup -->
+    <Teleport to="body">
+      <div
+        v-if="noteModalDate"
+        class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Day note"
+      >
+        <div class="fixed inset-0 bg-black/25 backdrop-blur-sm" @click="closeNoteModal" />
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 my-8">
+          <div class="flex items-start justify-between mb-4">
+            <h2 class="text-lg font-semibold text-stone-900">Note — {{ formatDate(noteModalDate) }}</h2>
+            <button class="text-stone-300 hover:text-stone-600 ml-4 mt-0.5 cursor-pointer" aria-label="Close" @click="closeNoteModal">
+              <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+            </button>
+          </div>
+          <textarea
+            v-model="getDraft(noteModalDate).notes"
+            rows="4"
+            placeholder="Add a note for this day…"
+            class="w-full text-sm text-stone-700 placeholder-stone-300 border border-stone-200 rounded-lg p-3 outline-none focus:border-stone-400 resize-none"
+          />
+          <div class="flex justify-end gap-3 mt-4">
+            <button class="text-sm text-stone-400 hover:text-stone-600 cursor-pointer" @click="closeNoteModal">Cancel</button>
+            <button class="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 cursor-pointer" @click="saveNote">Save</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
   </div>
 </template>

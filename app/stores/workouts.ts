@@ -45,8 +45,6 @@ export interface DayEntry {
   date: string
   isRestDay: boolean
   metrics: DayMetrics
-  /** Previous calendar day's metrics (for trend arrows) — null at the start of the series */
-  prevMetrics: DayMetrics | null
   workout: WorkoutDetail | null
 }
 
