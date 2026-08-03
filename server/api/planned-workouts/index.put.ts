@@ -4,7 +4,7 @@
  * Upserts a planned workout for a given date.
  * If name/type/tss/durationMinutes are all null/empty, deletes the row instead.
  *
- * Body: { date, name?, type?, tss?, durationMinutes? }
+ * Body: { date, name?, type?, tss?, durationMinutes?, notes? }
  */
 
 import { eq, and } from 'drizzle-orm'
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
   const body = await readBody(event)
 
-  const { date, name, type, tss, durationMinutes } = body ?? {}
+  const { date, name, type, tss, durationMinutes, notes } = body ?? {}
   if (!date || typeof date !== 'string') {
     throw createError({ statusCode: 400, message: 'date is required' })
   }
@@ -34,6 +34,7 @@ export default defineEventHandler(async (event) => {
     type: type || null,
     tss: tss != null ? Number(tss) : null,
     durationMinutes: durationMinutes != null ? Number(durationMinutes) : null,
+    notes: notes || null,
   })
 
   getLogger('planned_workouts').info('planned_workouts.upserted', { requestId: event.context.requestId, date })
