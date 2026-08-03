@@ -145,7 +145,7 @@ function confirmDelete() {
 <template>
   <!--
     Each day is a fixed-column grid row, not a card:
-      84px date | flexible title/metrics | 74px TSS pill | 132px [RPE-or-Planned pill + action icon]
+      84px date | flexible title/metrics | 210px [PR badge + TSS pill + RPE-or-Planned pill + action icon]
     The TSS column is separate so every TSS pill's right edge lines up
     regardless of digit count. The last column groups the RPE/Planned pill
     with the row's action icon in a single flex-end row with a small gap,
@@ -269,7 +269,7 @@ function confirmDelete() {
     :class="day.isRestDay && !isPlannedDay ? 'opacity-50 !py-2.5' : ''"
     :style="day.isRestDay && !isPlannedDay
       ? 'grid-template-columns: 84px 1fr;'
-      : 'grid-template-columns: 84px minmax(160px,1fr) 232px;'"
+      : 'grid-template-columns: 84px minmax(160px,1fr) 210px;'"
   >
     <!-- Left accent line — orange for logged workouts, violet for planned -->
     <div
@@ -288,7 +288,7 @@ function confirmDelete() {
     </div>
 
     <!-- Column 2: title/duration + notes + metrics — absorbs variable-length text -->
-    <div class="min-w-0">
+    <div class="min-w-0 pt-0.5">
 
       <!-- Rest day -->
       <div v-if="day.isRestDay && !isPlannedDay" class="flex flex-wrap items-center gap-1.5 text-[11px] font-medium tabular">
@@ -350,7 +350,7 @@ function confirmDelete() {
     <!-- Column 3: PR badge, TSS pill, RPE-or-Planned pill, and action icon — all on
          one row, evenly spaced and right-aligned as a single group so every row's
          icon (and, absent a PR badge, every pill) lines up horizontally -->
-    <div class="pt-0.5 flex items-center justify-end gap-2">
+    <div class="pt-0.5 flex items-start justify-end gap-2">
       <span
         v-if="hasPowerBests"
         class="inline-flex items-center gap-0.5 shrink-0 text-xs text-amber-600 font-semibold bg-amber-50 rounded-full px-2 py-0.5"
@@ -388,7 +388,7 @@ function confirmDelete() {
         v-if="isPlannedDay"
         title="Mark as completed"
         aria-label="Mark as completed"
-        class="flex items-center justify-center shrink-0 w-9 h-9 rounded-full border-none bg-transparent text-violet-300 opacity-65 transition-all hover:opacity-100 hover:text-violet-600 hover:bg-violet-100"
+        class="flex items-center justify-center self-center shrink-0 w-9 h-9 rounded-full border-none bg-transparent text-violet-300 opacity-65 transition-all hover:opacity-100 hover:text-violet-600 hover:bg-violet-100"
         @click="emit('mark-completed')"
       >
         <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -403,7 +403,7 @@ function confirmDelete() {
           v-if="!showDeleteConfirm"
           title="Delete workout"
           aria-label="Delete workout"
-          class="flex items-center justify-center shrink-0 w-10 h-10 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-rose-600 hover:bg-rose-50"
+          class="flex items-center justify-center self-center shrink-0 w-10 h-10 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-rose-600 hover:bg-rose-50"
           @click="requestDelete"
         >
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -415,7 +415,7 @@ function confirmDelete() {
           </svg>
         </button>
         <!-- Inline confirmation -->
-        <div v-else class="flex items-center gap-2">
+        <div v-else class="flex items-center self-center gap-2">
           <button class="text-xs text-rose-500 hover:text-rose-600 font-semibold" @click="confirmDelete">
             Confirm
           </button>
