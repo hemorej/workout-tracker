@@ -117,17 +117,51 @@ const segments = computed(() => buildSegments(blocks.value))
 const totalDuration = computed(() => segments.value.reduce((s, x) => s + x.duration, 0))
 const totalDurationLabel = computed(() => fmtClock(totalDuration.value))
 
+// Real Normalized Power, not a per-segment RMS approximation — a duration-
+// weighted mean of instantaneous power² is exact for flat blocks but badly
+// underestimates high/low interval workouts, since it lacks NP's 30s
+// smoothing + 4th-power weighting that disproportionately counts sustained
+// hard efforts over recovery valleys. So: materialize a 1Hz power stream
+// (fraction of FTP, ramps interpolated), take a trailing 30s rolling
+// average, mean the 4th power of that, then 4th-root — matching how
+// Zwift/TrainingPeaks derive NP from a real power stream.
+const NP_WINDOW_SEC = 30
+
 const totalTSS = computed(() => {
-  const raw = segments.value.reduce((s, x) => {
-    // Mean of power^2 over a linear ramp from powerStart to powerEnd —
-    // (a²+ab+b²)/3 — not the square of the mean. For flat segments
-    // (powerStart === powerEnd) this reduces to power², same as before;
-    // for ramps it's larger, matching how NP weights the higher end of
-    // the ramp more heavily than a simple average would.
-    const meanSquare = (x.powerStart ** 2 + x.powerStart * x.powerEnd + x.powerEnd ** 2) / 3
-    return s + (x.duration / 3600) * meanSquare * 100
-  }, 0)
-  return Math.round(raw)
+  const totalSec = Math.round(totalDuration.value)
+  if (totalSec <= 0) return 0
+
+  const series = new Float64Array(totalSec)
+  let cursor = 0
+  for (const seg of segments.value) {
+    const dur = Math.round(seg.duration)
+    for (let i = 0; i < dur && cursor + i < totalSec; i++) {
+      const t = dur > 0 ? i / dur : 0
+      series[cursor + i] = seg.powerStart + (seg.powerEnd - seg.powerStart) * t
+    }
+    cursor += dur
+  }
+
+  let windowSum = 0
+  let quarticSum = 0
+  let sampleCount = 0
+  for (let i = 0; i < totalSec; i++) {
+    windowSum += series[i] ?? 0
+    if (i >= NP_WINDOW_SEC) windowSum -= series[i - NP_WINDOW_SEC] ?? 0
+    if (i >= NP_WINDOW_SEC - 1) {
+      const rollingAvg = windowSum / NP_WINDOW_SEC
+      quarticSum += rollingAvg ** 4
+      sampleCount++
+    }
+  }
+
+  // Workouts shorter than the smoothing window have no defined NP — fall
+  // back to a plain average of instantaneous power.
+  const intensity = sampleCount > 0
+    ? (quarticSum / sampleCount) ** 0.25
+    : series.reduce((s, p) => s + p, 0) / totalSec
+
+  return Math.round((totalSec / 3600) * intensity * intensity * 100)
 })
 
 // ── Chart geometry ───────────────────────────────────────────────────────
