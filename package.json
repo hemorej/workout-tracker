@@ -20,6 +20,7 @@
         "start": "node .output/server/index.mjs",
         "reset-password": "pnpm dlx dotenv-cli -e .env -- node --experimental-strip-types scripts/reset-password.ts",
         "zwift-tss": "node --experimental-strip-types scripts/zwift-workout-tss.ts",
+        "workout-search": "node --experimental-strip-types scripts/workout-search.ts",
         "sync-power-bests": "pnpm dlx dotenv-cli -e .env -- node --experimental-strip-types scripts/sync-power-bests.ts"
     },
     "dependencies": {

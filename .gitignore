@@ -3,6 +3,8 @@
 .env
 .env.*
 !.env.example
+scripts/.trainerroad-session
+scripts/.trainerroad-credentials
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
