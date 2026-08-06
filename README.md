@@ -1,5 +1,7 @@
 # Sprocket
 
+[![Laravel Forge Site Deployment Status](https://img.shields.io/endpoint?url=https%3A%2F%2Fforge.laravel.com%2Fsite-badges%2Fa0b639e9-8525-463d-afcd-29ef34240d2e&style=plastic)](https://forge.laravel.com/jerome-zpm/resilient-bird/3264841)
+
 A personal workout logging app built to practice the modern Nuxt 4 + Vue 3.5 + TypeScript stack.
 
 Track your daily training sessions, visualise your fitness and fatigue over time, and understand your "form" at a glance using industry-standard training load metrics.
