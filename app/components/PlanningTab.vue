@@ -124,7 +124,7 @@ function cycleType(date: string) {
 }
 
 // ── Swap with day above ──────────────────────────────────────────────────────
-// Swaps the workout content (name/type/tss/duration) with the previous row,
+// Swaps the workout content (name/type/tss/duration/notes) with the previous row,
 // keeping each row's own date fixed. Projections are recomputed via savePlan.
 
 function canSwapUp(date: string) {
@@ -147,10 +147,12 @@ async function swapWithAbove(date: string) {
   current.type = above.type
   current.tss = above.tss
   current.durationMinutes = above.durationMinutes
+  current.notes = above.notes
   above.name = temp.name
   above.type = temp.type
   above.tss = temp.tss
   above.durationMinutes = temp.durationMinutes
+  above.notes = temp.notes
 
   saving[date] = true
   saving[aboveDay.date] = true
