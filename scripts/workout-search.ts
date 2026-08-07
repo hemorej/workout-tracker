@@ -77,6 +77,7 @@ function ansi(code: string, s: string): string {
 const headerColor = (s: string) => ansi('1;36', s) // bold cyan
 const rowColorA = (s: string) => ansi('37', s) // white
 const rowColorB = (s: string) => ansi('90', s) // grey
+const hintColor = (s: string) => ansi('2;90', s) // dim grey — low-contrast, for hints that shouldn't compete with the prompt
 
 // Each call opens and closes its own readline Interface rather than sharing
 // one for the whole script's lifetime — that keeps it from fighting over
@@ -89,6 +90,72 @@ async function ask(prompt: string): Promise<string> {
   finally {
     rl.close()
   }
+}
+
+// Like ask(), but drives stdin in raw mode (same technique as selectPrompt
+// below) so Esc can cancel the input — plain readline.question() has no way
+// to distinguish Esc from any other keystroke. Returns null on Esc/Ctrl+C-free
+// cancel, or the typed (untrimmed-buffer, trimmed-result) string on Enter.
+// Falls back to the plain readline prompt when stdin isn't a TTY, since raw
+// mode has nothing to attach to there (and Esc can't be detected either way).
+async function askCancelable(promptStr: string): Promise<string | null> {
+  if (!process.stdin.isTTY) {
+    return await ask(promptStr)
+  }
+
+  return await new Promise((resolve) => {
+    let buffer = ''
+    process.stdout.write(promptStr)
+
+    emitKeypressEvents(process.stdin)
+    process.stdin.setRawMode(true)
+    process.stdin.resume()
+
+    function cleanup() {
+      process.stdin.setRawMode(false)
+      process.stdin.pause()
+      process.stdin.off('keypress', onKeypress)
+    }
+
+    function onKeypress(str: string | undefined, key: Key) {
+      if (key.ctrl && key.name === 'c') {
+        cleanup()
+        process.exit(130)
+      }
+      else if (key.name === 'escape') {
+        cleanup()
+        process.stdout.write('\n')
+        resolve(null)
+      }
+      else if (key.name === 'return') {
+        cleanup()
+        process.stdout.write('\n')
+        resolve(buffer.trim())
+      }
+      else if (key.name === 'backspace') {
+        if (buffer.length > 0) {
+          buffer = buffer.slice(0, -1)
+          process.stdout.write('\b \b')
+        }
+      }
+      else if (str && !key.ctrl && !key.meta && str.length === 1 && str >= ' ') {
+        buffer += str
+        process.stdout.write(str)
+      }
+    }
+
+    process.stdin.on('keypress', onKeypress)
+  })
+}
+
+// Prints `question` (colored like the Zone prompt's header) with an optional
+// darker-grey hint, then puts the actual input prompt on its own line below
+// — matching selectPrompt's layout instead of a single inline "Question: " prompt.
+// Returns null if the user hits Esc, so callers can cancel out like the Zone prompt does.
+async function askLine(question: string, hint?: string): Promise<string | null> {
+  const line = hint ? `${headerColor(question)} ${hintColor(hint)}` : headerColor(question)
+  console.log(`\n${line}`)
+  return await askCancelable('> ')
 }
 
 function sleep(ms: number): Promise<void> {
@@ -535,9 +602,6 @@ function wozBuildUrl(criteria: Criteria, page: number): string {
     k: '',
     s: 'sp-asc',
     'o[zc]': '1',
-    'o[zw]': '1',
-    'o[zf]': '1',
-    'o[c]': '1',
     a: 'on',
     dmin: Number.isFinite(criteria.minDuration) && criteria.minDuration > 0 ? String(criteria.minDuration) : '',
     dmax: Number.isFinite(criteria.maxDuration) ? String(criteria.maxDuration) : '',
@@ -706,14 +770,30 @@ async function main() {
   }
   const zone = zoneValue as ZoneName
 
-  const durationStr = await ask('Duration (minutes, blank = no filter): ')
+  const durationStr = await askLine('Duration:', '(min,max or blank = no filter)')
+  if (durationStr === null) {
+    console.log('\nCancelled — exiting.')
+    return
+  }
   const durationParts = durationStr.split(',').map(s => Number(s.trim())).filter(n => !Number.isNaN(n))
   const minDuration = durationParts.length > 0 ? durationParts[0]! : 0
   const maxDuration = durationParts.length > 1 ? durationParts[1]! : Infinity
 
-  const tssMinStr = await ask('TSS (minimum, blank = no filter): ')
-  const tssMin = tssMinStr ? Number(tssMinStr) : undefined
-  const tssMax = tssMin !== undefined ? tssMin + 4 : undefined
+  let tssMin: number
+  while (true) {
+    const tssMinStr = await askLine('TSS:', '(minimum)')
+    if (tssMinStr === null) {
+      console.log('\nCancelled — exiting.')
+      return
+    }
+    const parsed = Number(tssMinStr)
+    if (tssMinStr && !Number.isNaN(parsed)) {
+      tssMin = parsed
+      break
+    }
+    console.log(hintColor('  Please enter a number.'))
+  }
+  const tssMax = tssMin + 4
 
   const sourceOptions: SelectOption[] = PROVIDERS.map(p => ({ label: p.name, value: p.name }))
   const chosenNames = await selectPrompt('Sources: (space to toggle, blank = all)', sourceOptions, { multi: true })
