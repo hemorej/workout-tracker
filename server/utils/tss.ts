@@ -179,19 +179,20 @@ export function computeMetricsSeries(
     const distanceKm = workout?.distanceKm ?? 0
     const isRestDay = !workout
 
+    const ctlDecay = 1 / CTL_DAYS
+    const atlDecay = 1 / ATL_DAYS
+
     /**
      * TSB is computed from yesterday's values (before we apply today's TSS).
      * This represents form at the start of the day.
      */
-    const ctlDecay = 2 / ( CTL_DAYS + 1)
-    const atlDecay = 2 / ( ATL_DAYS + 1)
+    const tsb = ctl - atl
 
     // Update CTL and ATL with today's TSS
     // ctl = ctl + (tss - ctl) / CTL_DAYS
     // atl = atl + (tss - atl) / ATL_DAYS
     ctl = tss*ctlDecay + ctl * (1 - ctlDecay)
     atl = tss*atlDecay + atl * (1 - atlDecay)
-    const tsb = ctl - atl
 
     results.push({
       date: dateStr,
