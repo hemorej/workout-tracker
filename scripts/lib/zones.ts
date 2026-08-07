@@ -6,5 +6,5 @@
  */
 
 // Ordered low-to-high by roughly how much power each zone targets, not alphabetically.
-export const ZONES = ['Endurance', 'Tempo', 'SweetSpot', 'Threshold', 'VO2Max', 'Anaerobic', 'Sprint'] as const
+export const ZONES = ['ActiveRecovery', 'Endurance', 'Tempo', 'SweetSpot', 'Threshold', 'VO2Max', 'Anaerobic', 'Sprint'] as const
 export type ZoneName = typeof ZONES[number]

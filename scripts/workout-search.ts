@@ -39,7 +39,8 @@
  * points, and follows the "Page X of Y" footer to walk all result pages.
  * WoZ's zone taxonomy (z1-z6) doesn't have a Sprint or SweetSpot bucket, so
  * those two TrainerRoad zones are approximated with their nearest WoZ
- * neighbor (Sprint -> Anaerobic, SweetSpot -> Threshold).
+ * neighbor (Sprint -> Anaerobic, SweetSpot -> Threshold). z1 is WoZ's
+ * Active Recovery bucket, mapped 1:1.
  *
  * ── Local Zwift library ──────────────────────────────────────────────────
  * Reuses the .zwo scanning/TSS-estimation logic from
@@ -332,6 +333,7 @@ const TR_LOGIN_URL = 'https://www.trainerroad.com/app/api/login/login'
 
 // Each zone's workout profiles (subcategories), from TrainerRoad's own filter menu.
 const TR_ZONE_PROFILES: Record<ZoneName, string[]> = {
+  ActiveRecovery: [],
   Anaerobic: ['Attacks', 'Intervals', 'Mixed Intervals', 'On-Offs', 'Steps'],
   Endurance: ['Sustained Power', 'With Bursts'],
   Sprint: ['Attacks', 'Max Efforts'],
@@ -546,7 +548,7 @@ const trainerRoadProvider: Provider = {
         if (w.tss >= tssMin && w.tss <= tssMax
           && w.duration >= criteria.minDuration && w.duration <= criteria.maxDuration
           && (!zone || w.powerZones.some(z => z.toLowerCase() === zone.toLowerCase()))
-          && (!profiles || profiles.some(p => p.toLowerCase() === (w.profileName ?? '').toLowerCase()))) {
+          && (!profiles || profiles.length === 0 || profiles.some(p => p.toLowerCase() === (w.profileName ?? '').toLowerCase()))) {
           matches.push({
             source: 'TrainerRoad',
             name: w.workoutName ?? '',
@@ -583,6 +585,7 @@ const WOZ_USER_AGENT = 'Mozilla/5.0 (compatible; sprocket-workout-search/1.0; pe
 // (all-out, short) rounds up to Anaerobic capacity, and SweetSpot (just below
 // threshold) rounds up to Threshold.
 const TR_TO_WOZ_ZONE: Record<ZoneName, string> = {
+  ActiveRecovery: 'z1',
   Anaerobic: 'z6',
   Endurance: 'z2',
   Sprint: 'z6',
