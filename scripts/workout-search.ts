@@ -58,6 +58,7 @@
  */
 
 import type { Key } from 'node:readline'
+import { spawn } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -71,14 +72,21 @@ import { scanZwiftWorkouts } from './lib/zwift-workouts.ts'
 
 const colorEnabled = process.stdout.isTTY && !process.env.NO_COLOR
 
-function ansi(code: string, s: string): string {
-  return colorEnabled ? `\x1b[${code}m${s}\x1b[0m` : s
+// Accepts one or more SGR codes, emitting each as its own escape sequence
+// (rather than joining them as "1;36") so pagers with a strict ANSI color
+// filter — notably macOS's bundled `less`, which is BSD-derived and doesn't
+// reliably pass through combined bold+color codes under `-R` — still
+// recognize and preserve each one individually.
+function ansi(code: string | string[], s: string): string {
+  if (!colorEnabled) return s
+  const codes = Array.isArray(code) ? code : [code]
+  return `${codes.map(c => `\x1b[${c}m`).join('')}${s}\x1b[0m`
 }
 
-const headerColor = (s: string) => ansi('1;36', s) // bold cyan
+const headerColor = (s: string) => ansi(['1', '36'], s) // bold cyan
 const rowColorA = (s: string) => ansi('37', s) // white
 const rowColorB = (s: string) => ansi('90', s) // grey
-const hintColor = (s: string) => ansi('2;90', s) // dim grey — low-contrast, for hints that shouldn't compete with the prompt
+const hintColor = (s: string) => ansi(['2', '90'], s) // dim grey — low-contrast, for hints that shouldn't compete with the prompt
 
 // Each call opens and closes its own readline Interface rather than sharing
 // one for the whole script's lifetime — that keeps it from fighting over
@@ -163,6 +171,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+// Moves the cursor up `n` lines and clears from there to the end of screen —
+// used to collapse a finished prompt's interactive rendering (menu, hints,
+// typed input) down to a single compact recap line. No-op when stdout isn't
+// a TTY, since there's no cursor to move on piped output.
+function eraseLines(n: number): void {
+  if (process.stdout.isTTY && n > 0) process.stdout.write(`\x1b[${n}A\x1b[0J`)
+}
+
+// Prints a one-line "Label: value" recap after a prompt is answered, with
+// just the label colored (matching the header color) so the compact summary
+// stays visually anchored to the original prompt's styling.
+function recap(label: string, value: string): void {
+  console.log(`${headerColor(`${label}:`)} ${value}`)
+}
+
 // ── Interactive select prompt (arrow keys to move, type to filter) ──────
 
 interface SelectOption { label: string, value: string }
@@ -221,7 +244,7 @@ async function selectPrompt(question: string, options: SelectOption[], config: {
         const isCursor = i === cursor
         const mark = multi ? (checked.has(o.index) ? '[x]' : '[ ]') : (isCursor ? '›' : ' ')
         const text = `  ${mark} ${o.label}`
-        lines.push(isCursor ? ansi('1;36', text) : text)
+        lines.push(isCursor ? ansi(['1', '36'], text) : text)
       })
       if (filtered.length === 0) lines.push(ansi('90', '  (no matches)'))
       else if (filtered.length > VISIBLE_LIMIT) lines.push(ansi('90', `  … and ${filtered.length - VISIBLE_LIMIT} more — keep typing to narrow`))
@@ -245,6 +268,13 @@ async function selectPrompt(question: string, options: SelectOption[], config: {
       process.stdin.off('keypress', onKeypress)
     }
 
+    // Collapses the rendered menu (question, options, hint line) back to
+    // nothing, so the caller can print a compact one-line recap in its place.
+    function collapse() {
+      eraseLines(linesRendered)
+      linesRendered = 0
+    }
+
     function onKeypress(str: string | undefined, key: Key) {
       if (key.ctrl && key.name === 'c') {
         cleanup()
@@ -252,6 +282,7 @@ async function selectPrompt(question: string, options: SelectOption[], config: {
       }
       else if (key.name === 'escape') {
         cleanup()
+        collapse()
         resolve([])
       }
       else if (key.name === 'up') {
@@ -272,6 +303,7 @@ async function selectPrompt(question: string, options: SelectOption[], config: {
       }
       else if (key.name === 'return') {
         cleanup()
+        collapse()
         if (multi) {
           resolve(checked.size > 0
             ? [...checked].sort((a, b) => a - b).map(i => options[i]!.value)
@@ -741,9 +773,37 @@ const localZwiftProvider: Provider = {
 
 const PROVIDERS: Provider[] = [trainerRoadProvider, whatsOnZwiftProvider, localZwiftProvider]
 
+// Pipes `text` through the user's pager (`$PAGER`, default `less -RFX`) when
+// stdout is a TTY — `-R` keeps our ANSI colors, `-F` exits immediately (no
+// pager) if the whole table fits on one screen, `-X` skips the alternate
+// screen so the table stays scrolled-back in the normal terminal buffer
+// after quitting. Falls back to a plain console.log when stdout is piped
+// (e.g. into a file or another command), since raw mode/TTY features have
+// nothing to attach to there and the caller likely wants plain text anyway.
+async function page(text: string): Promise<void> {
+  if (!process.stdout.isTTY) {
+    console.log(text)
+    return
+  }
+
+  const [cmd, ...args] = process.env.PAGER?.split(' ') ?? ['less', '-R', '-F', '-X']
+
+  await new Promise<void>((resolve) => {
+    const child = spawn(cmd!, args, { stdio: ['pipe', 'inherit', 'inherit'] })
+    child.on('error', () => {
+      // Pager isn't installed/executable — fall back to plain output.
+      console.log(text)
+      resolve()
+    })
+    child.on('close', () => resolve())
+    child.stdin.write(text)
+    child.stdin.end()
+  })
+}
+
 // ── CLI ────────────────────────────────────────────────────────────────
 
-function printResults(results: NormalizedWorkout[]): void {
+async function printResults(results: NormalizedWorkout[]): Promise<void> {
   if (results.length === 0) {
     console.log('\nNo workouts matched.')
     return
@@ -753,18 +813,23 @@ function printResults(results: NormalizedWorkout[]): void {
 
   const nameWidth = Math.max(4, ...sorted.map(w => w.name.length))
   const sourceWidth = Math.max(6, ...sorted.map(w => w.source.length))
-  console.log(headerColor(`\n${'Workout'.padEnd(nameWidth)}  ${'Source'.padEnd(sourceWidth)}  Zone         Profile              Dur   TSS`))
-  console.log(headerColor(`${'-'.repeat(nameWidth)}  ${'-'.repeat(sourceWidth)}  -----------  -------------------  ----  ---`))
+  const lines: string[] = []
+  lines.push(`\n${headerColor(`${'Workout'.padEnd(nameWidth)}  ${'Source'.padEnd(sourceWidth)}  Zone         Profile              Dur   TSS`)}`)
+  lines.push(headerColor(`${'-'.repeat(nameWidth)}  ${'-'.repeat(sourceWidth)}  -----------  -------------------  ----  ---`))
   sorted.forEach((w, i) => {
     const color = i % 2 === 0 ? rowColorA : rowColorB
-    console.log(color(
+    lines.push(color(
       `${w.name.padEnd(nameWidth)}  ${w.source.padEnd(sourceWidth)}  ${w.zone.padEnd(11)}  ${w.profile.padEnd(19)}  ${String(w.duration).padStart(3)}m  ${w.tss}`,
     ))
   })
-  console.log(`\n${sorted.length} match(es).`)
+  lines.push(`\n${sorted.length} match(es).`)
+
+  await page(lines.join('\n'))
 }
 
 async function main() {
+  if (process.stdout.isTTY) process.stdout.write('\x1b[2J\x1b[3J\x1b[H')
+
   const zoneOptions: SelectOption[] = ZONES.map(z => ({ label: z, value: z }))
   const [zoneValue] = await selectPrompt('Zone:', zoneOptions)
   if (!zoneValue) {
@@ -772,15 +837,18 @@ async function main() {
     return
   }
   const zone = zoneValue as ZoneName
+  recap('Zone', zone)
 
   const durationStr = await askLine('Duration:', '(min,max or blank = no filter)')
   if (durationStr === null) {
     console.log('\nCancelled — exiting.')
     return
   }
+  eraseLines(3)
   const durationParts = durationStr.split(',').map(s => Number(s.trim())).filter(n => !Number.isNaN(n))
   const minDuration = durationParts.length > 0 ? durationParts[0]! : 0
   const maxDuration = durationParts.length > 1 ? durationParts[1]! : Infinity
+  recap('Duration', durationStr || 'no filter')
 
   let tssMin: number
   while (true) {
@@ -792,15 +860,19 @@ async function main() {
     const parsed = Number(tssMinStr)
     if (tssMinStr && !Number.isNaN(parsed)) {
       tssMin = parsed
+      eraseLines(3)
       break
     }
     console.log(hintColor('  Please enter a number.'))
+    eraseLines(4)
   }
   const tssMax = tssMin + 4
+  recap('TSS', String(tssMin))
 
   const sourceOptions: SelectOption[] = PROVIDERS.map(p => ({ label: p.name, value: p.name }))
   const chosenNames = await selectPrompt('Sources: (space to toggle, blank = all)', sourceOptions, { multi: true })
   const providers = PROVIDERS.filter(p => chosenNames.includes(p.name))
+  recap('Sources', chosenNames.length === PROVIDERS.length ? 'All' : chosenNames.join(', '))
 
   const criteria: Criteria = { zone, minDuration, maxDuration, tssMin, tssMax }
 
@@ -819,7 +891,7 @@ async function main() {
     }
   })
 
-  printResults(results)
+  await printResults(results)
 }
 
 main().catch((err) => {
