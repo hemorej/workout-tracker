@@ -18,7 +18,7 @@
  *         A spike in ATL means you've been working hard lately.
  *
  *  TSB   Training Stress Balance (also called "Form").
- *         TSB = CTL(yesterday) − ATL(yesterday)
+ *         TSB = CTL(today) − ATL(today)
  *         Positive TSB → rested / fresh.
  *         Negative TSB → fatigued.
  *         Ideal race form is typically TSB in the range −10 to +25.
@@ -27,7 +27,7 @@
  *
  *  CTL(today) = CTL(yesterday) + ( TSS(today) − CTL(yesterday) ) / 42
  *  ATL(today) = ATL(yesterday) + ( TSS(today) − ATL(yesterday) ) / 7
- *  TSB(today) = CTL(yesterday) − ATL(yesterday)
+ *  TSB(today) = CTL(today) − ATL(today)
  *
  *  These are first-order IIR (infinite impulse response) low-pass filters.
  *  The "/ 42" and "/ 7" terms set the time constants.
@@ -35,9 +35,11 @@
  *
  * ─── Note on TSB timing ─────────────────────────────────────────────────────
  *
- *  TSB is calculated BEFORE adding today's training stress so it reflects
- *  how fresh you are at the START of the day — which is what matters for
- *  race readiness or choosing workout intensity.
+ *  TSB is calculated AFTER folding in today's training stress, so it
+ *  reflects form at the END of the day, once today's session is absorbed.
+ *  This matches how Strava's Fitness/Freshness and Stride report same-day
+ *  numbers, rather than the "start of day, before today's TSS" convention
+ *  some PMC implementations use.
  */
 
 // ---------------------------------------------------------------------------
@@ -67,8 +69,8 @@ export interface DayMetrics {
   atl: number
   /**
    * Training Stress Balance — form.
-   * Calculated from the *previous* day's CTL and ATL so it represents
-   * how fresh you are at the start of the day.
+   * Calculated from *today's* post-workout CTL and ATL, so it represents
+   * how fresh you are at the end of the day, once today's TSS is absorbed.
    */
   tsb: number
   /** True when no workout was logged for this day */
@@ -182,17 +184,18 @@ export function computeMetricsSeries(
     const ctlDecay = 1 / CTL_DAYS
     const atlDecay = 1 / ATL_DAYS
 
-    /**
-     * TSB is computed from yesterday's values (before we apply today's TSS).
-     * This represents form at the start of the day.
-     */
-    const tsb = ctl - atl
-
     // Update CTL and ATL with today's TSS
     // ctl = ctl + (tss - ctl) / CTL_DAYS
     // atl = atl + (tss - atl) / ATL_DAYS
     ctl = tss*ctlDecay + ctl * (1 - ctlDecay)
     atl = tss*atlDecay + atl * (1 - atlDecay)
+
+    /**
+     * TSB is computed from today's post-workout CTL/ATL, matching how
+     * Strava's Fitness/Freshness and Stride report same-day form (i.e.
+     * form after today's training is absorbed, not before).
+     */
+    const tsb = ctl - atl
 
     results.push({
       date: dateStr,
