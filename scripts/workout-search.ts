@@ -44,7 +44,9 @@
  *   pnpm workout-search
  */
 
+import type { Key } from 'node:readline'
 import { readFile, writeFile } from 'node:fs/promises'
+import { emitKeypressEvents } from 'node:readline'
 import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 
@@ -60,19 +62,162 @@ const headerColor = (s: string) => ansi('1;36', s) // bold cyan
 const rowColorA = (s: string) => ansi('37', s) // white
 const rowColorB = (s: string) => ansi('90', s) // grey
 
-const rl = createInterface({ input: process.stdin, output: process.stdout })
-
+// Each call opens and closes its own readline Interface rather than sharing
+// one for the whole script's lifetime — that keeps it from fighting over
+// stdin with selectPrompt() below, which drives the terminal in raw mode.
 async function ask(prompt: string): Promise<string> {
-  return (await rl.question(prompt)).trim()
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    return (await rl.question(prompt)).trim()
+  }
+  finally {
+    rl.close()
+  }
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+// ── Interactive select prompt (arrow keys to move, type to filter) ──────
+
+interface SelectOption { label: string, value: string }
+
+/**
+ * Renders a filterable list in raw terminal mode: ↑/↓ moves the highlight,
+ * typing narrows the list to labels containing the typed text (case
+ * insensitive), Enter confirms, Esc cancels (empty selection). In `multi`
+ * mode, Space toggles the highlighted item and Enter confirms whatever's
+ * checked (or falls back to "all" if nothing was checked, so blank Enter
+ * still means "no filter" like the old numbered prompts did).
+ *
+ * Falls back to the old plain numbered-list + typed-answer flow when stdin
+ * isn't a TTY (e.g. piped input), since raw mode has nothing to attach to.
+ */
+async function selectPrompt(question: string, options: SelectOption[], config: { multi?: boolean } = {}): Promise<string[]> {
+  const { multi = false } = config
+
+  if (!process.stdin.isTTY) {
+    console.log(`\n${question}`)
+    options.forEach((o, i) => console.log(`  ${i + 1}) ${o.label}`))
+    console.log(multi ? '  (blank = all)' : '  (blank = none)')
+    const answer = await ask('> ')
+    const indices = answer
+      ? answer.split(',').map(s => Number(s.trim()) - 1).filter(i => i >= 0 && i < options.length)
+      : []
+    if (multi) {
+      return indices.length > 0 ? indices.map(i => options[i]!.value) : options.map(o => o.value)
+    }
+    return indices.length > 0 ? [options[indices[0]!]!.value] : []
+  }
+
+  return await new Promise((resolve) => {
+    const VISIBLE_LIMIT = 12
+    let query = ''
+    let filtered = options.map((o, i) => ({ ...o, index: i }))
+    let cursor = 0
+    const checked = new Set<number>()
+    let linesRendered = 0
+
+    function refilter() {
+      const q = query.toLowerCase()
+      filtered = options
+        .map((o, i) => ({ ...o, index: i }))
+        .filter(o => o.label.toLowerCase().includes(q))
+      cursor = Math.min(cursor, Math.max(0, filtered.length - 1))
+    }
+
+    function render() {
+      if (linesRendered > 0) process.stdout.write(`\x1b[${linesRendered}A\x1b[0J`)
+
+      const lines: string[] = []
+      lines.push(headerColor(`${question} ${query}`))
+      const visible = filtered.slice(0, VISIBLE_LIMIT)
+      visible.forEach((o, i) => {
+        const isCursor = i === cursor
+        const mark = multi ? (checked.has(o.index) ? '[x]' : '[ ]') : (isCursor ? '›' : ' ')
+        const text = `  ${mark} ${o.label}`
+        lines.push(isCursor ? ansi('1;36', text) : text)
+      })
+      if (filtered.length === 0) lines.push(ansi('90', '  (no matches)'))
+      else if (filtered.length > VISIBLE_LIMIT) lines.push(ansi('90', `  … and ${filtered.length - VISIBLE_LIMIT} more — keep typing to narrow`))
+      lines.push(ansi('90', multi
+        ? '  ↑/↓ move · space toggle · enter confirm · esc cancel'
+        : '  ↑/↓ move · enter select · esc cancel'))
+
+      process.stdout.write(`${lines.join('\n')}\n`)
+      linesRendered = lines.length
+    }
+
+    render()
+
+    emitKeypressEvents(process.stdin)
+    process.stdin.setRawMode(true)
+    process.stdin.resume()
+
+    function cleanup() {
+      process.stdin.setRawMode(false)
+      process.stdin.pause()
+      process.stdin.off('keypress', onKeypress)
+    }
+
+    function onKeypress(str: string | undefined, key: Key) {
+      if (key.ctrl && key.name === 'c') {
+        cleanup()
+        process.exit(130)
+      }
+      else if (key.name === 'escape') {
+        cleanup()
+        resolve([])
+      }
+      else if (key.name === 'up') {
+        cursor = Math.max(0, cursor - 1)
+        render()
+      }
+      else if (key.name === 'down') {
+        cursor = Math.min(Math.max(0, filtered.length - 1), cursor + 1)
+        render()
+      }
+      else if (multi && key.name === 'space') {
+        const opt = filtered[cursor]
+        if (opt) {
+          if (checked.has(opt.index)) checked.delete(opt.index)
+          else checked.add(opt.index)
+        }
+        render()
+      }
+      else if (key.name === 'return') {
+        cleanup()
+        if (multi) {
+          resolve(checked.size > 0
+            ? [...checked].sort((a, b) => a - b).map(i => options[i]!.value)
+            : options.map(o => o.value))
+        }
+        else {
+          const opt = filtered[cursor]
+          resolve(opt ? [opt.value] : [])
+        }
+      }
+      else if (key.name === 'backspace') {
+        query = query.slice(0, -1)
+        refilter()
+        render()
+      }
+      else if (str && !key.ctrl && !key.meta && str.length === 1 && str >= ' ') {
+        query += str
+        refilter()
+        render()
+      }
+    }
+
+    process.stdin.on('keypress', onKeypress)
+  })
+}
+
 // ── Shared search criteria + result shape ────────────────────────────────
 
-const ZONES = ['Anaerobic', 'Endurance', 'Sprint', 'SweetSpot', 'Tempo', 'Threshold', 'VO2Max'] as const
+// Ordered low-to-high by roughly how much power each zone targets, not alphabetically.
+const ZONES = ['Endurance', 'Tempo', 'SweetSpot', 'Threshold', 'VO2Max', 'Anaerobic', 'Sprint'] as const
 type ZoneName = typeof ZONES[number]
 
 interface Criteria {
@@ -512,12 +657,13 @@ function printResults(results: NormalizedWorkout[]): void {
 }
 
 async function main() {
-  console.log('\nZone:')
-  ZONES.forEach((z, i) => console.log(`  ${i + 1}) ${z}`))
-  console.log('  (blank = any)')
-  const zoneChoice = await ask('> ')
-  const zoneIndex = Number(zoneChoice) - 1
-  const zone = zoneChoice && zoneIndex >= 0 && zoneIndex < ZONES.length ? ZONES[zoneIndex]! : null
+  const zoneOptions: SelectOption[] = ZONES.map(z => ({ label: z, value: z }))
+  const [zoneValue] = await selectPrompt('Zone:', zoneOptions)
+  if (!zoneValue) {
+    console.log('\nNo zone selected — exiting.')
+    return
+  }
+  const zone = zoneValue as ZoneName
 
   const durationStr = await ask('Duration (minutes, blank = no filter): ')
   const durationParts = durationStr.split(',').map(s => Number(s.trim())).filter(n => !Number.isNaN(n))
@@ -528,16 +674,9 @@ async function main() {
   const tssMin = tssMinStr ? Number(tssMinStr) : undefined
   const tssMax = tssMin !== undefined ? tssMin + 4 : undefined
 
-  console.log('\nSources:')
-  PROVIDERS.forEach((p, i) => console.log(`  ${i + 1}) ${p.name}`))
-  console.log('  (blank = all)')
-  const sourceChoice = await ask('> ')
-  const chosenIndices = sourceChoice
-    ? sourceChoice.split(',').map(s => Number(s.trim()) - 1).filter(i => i >= 0 && i < PROVIDERS.length)
-    : PROVIDERS.map((_, i) => i)
-  const providers = chosenIndices.length > 0 ? chosenIndices.map(i => PROVIDERS[i]!) : PROVIDERS
-
-  rl.close()
+  const sourceOptions: SelectOption[] = PROVIDERS.map(p => ({ label: p.name, value: p.name }))
+  const chosenNames = await selectPrompt('Sources: (space to toggle, blank = all)', sourceOptions, { multi: true })
+  const providers = PROVIDERS.filter(p => chosenNames.includes(p.name))
 
   const criteria: Criteria = { zone, minDuration, maxDuration, tssMin, tssMax }
 
