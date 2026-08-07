@@ -1,7 +1,8 @@
 /**
- * Searches multiple public workout libraries (TrainerRoad, What's on Zwift)
- * with precise numeric filters (duration range, TSS/stress-points range,
- * power zone) and prints a single merged, sorted table.
+ * Searches multiple workout libraries (TrainerRoad, What's on Zwift, and a
+ * local folder of Zwift .zwo files) with precise numeric filters (duration
+ * range, TSS/stress-points range, power zone) and prints a single merged,
+ * sorted table.
  *
  * Each source is a `Provider` — a small object exposing a `search(criteria)`
  * function that returns `NormalizedWorkout[]`. Adding a new source means
@@ -40,15 +41,30 @@
  * those two TrainerRoad zones are approximated with their nearest WoZ
  * neighbor (Sprint -> Anaerobic, SweetSpot -> Threshold).
  *
+ * ── Local Zwift library ──────────────────────────────────────────────────
+ * Reuses the .zwo scanning/TSS-estimation logic from
+ * scripts/zwift-workout-tss.ts (extracted to scripts/lib/zwift-workouts.ts)
+ * to list workouts already downloaded to disk. No network call. .zwo files
+ * carry no power-zone classification on their own, so zone filtering only
+ * works for files that have been hand-tagged with a `<tag name="zone:X"/>`
+ * entry (see scripts/lib/zwift-workouts.ts); untagged files are excluded
+ * whenever a zone filter is applied, but still show up with an unfiltered
+ * search. Defaults to ~/Documents/Zwift/Workouts; override with the
+ * ZWIFT_WORKOUTS_DIR env var.
+ *
  * Usage:
  *   pnpm workout-search
  */
 
 import type { Key } from 'node:readline'
 import { readFile, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { emitKeypressEvents } from 'node:readline'
 import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
+import { ZONES, type ZoneName } from './lib/zones.ts'
+import { scanZwiftWorkouts } from './lib/zwift-workouts.ts'
 
 // ── Terminal colour (raw ANSI, no dependency) ────────────────────────────
 
@@ -215,10 +231,6 @@ async function selectPrompt(question: string, options: SelectOption[], config: {
 }
 
 // ── Shared search criteria + result shape ────────────────────────────────
-
-// Ordered low-to-high by roughly how much power each zone targets, not alphabetically.
-const ZONES = ['Endurance', 'Tempo', 'SweetSpot', 'Threshold', 'VO2Max', 'Anaerobic', 'Sprint'] as const
-type ZoneName = typeof ZONES[number]
 
 interface Criteria {
   zone: ZoneName | null
@@ -631,7 +643,36 @@ const whatsOnZwiftProvider: Provider = {
   },
 }
 
-const PROVIDERS: Provider[] = [trainerRoadProvider, whatsOnZwiftProvider]
+// ── Local Zwift library provider ─────────────────────────────────────────
+
+const ZWIFT_WORKOUTS_DIR = process.env.ZWIFT_WORKOUTS_DIR ?? join(homedir(), 'Documents/Zwift/Workouts')
+
+const localZwiftProvider: Provider = {
+  name: 'LocalZwift',
+  async search(criteria) {
+    const { results } = await scanZwiftWorkouts(ZWIFT_WORKOUTS_DIR)
+
+    // Unlike TrainerRoad/WhatsOnZwift, this is a floor only, not a
+    // [tssMin, tssMin+4] window — the local library is too small for a
+    // 4-point band to be useful (see criteria.tssMax on the other providers).
+    const tssMin = criteria.tssMin ?? -Infinity
+
+    return results
+      .filter(r => !criteria.zone || r.zone === criteria.zone)
+      .map((r): NormalizedWorkout => ({
+        source: 'LocalZwift',
+        name: r.name,
+        zone: r.zone ?? '',
+        profile: '',
+        duration: Math.round(r.durationSec / 60),
+        tss: r.tss,
+      }))
+      .filter(w => w.tss >= tssMin
+        && w.duration >= criteria.minDuration && w.duration <= criteria.maxDuration)
+  },
+}
+
+const PROVIDERS: Provider[] = [trainerRoadProvider, whatsOnZwiftProvider, localZwiftProvider]
 
 // ── CLI ────────────────────────────────────────────────────────────────
 
