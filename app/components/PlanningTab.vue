@@ -233,9 +233,14 @@ function tsbStyle(tsb: number | null | undefined) {
 // ── Note popup ───────────────────────────────────────────────────────────────
 
 const noteModalDate = ref<string | null>(null)
+const noteTextarea = ref<HTMLTextAreaElement | null>(null)
 
 function openNoteModal(date: string) {
   noteModalDate.value = date
+  // Native `autofocus` isn't reliably honored for elements inserted dynamically
+  // via Teleport (Firefox in particular ignores it here), so focus explicitly
+  // once the textarea has mounted.
+  nextTick(() => noteTextarea.value?.focus())
 }
 
 function closeNoteModal() {
@@ -469,9 +474,9 @@ async function saveNote() {
             </button>
           </div>
           <textarea
+            ref="noteTextarea"
             v-model="getDraft(noteModalDate).notes"
             rows="4"
-            autofocus
             placeholder="Add a note for this day…"
             class="w-full text-sm text-stone-700 placeholder-stone-300 border border-stone-200 rounded-lg p-3 outline-none focus:border-stone-400 resize-none"
           />
