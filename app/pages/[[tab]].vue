@@ -377,6 +377,26 @@ function onDocumentClickForLogPanel(event: MouseEvent) {
 onMounted(() => document.addEventListener('click', onDocumentClickForLogPanel))
 onUnmounted(() => document.removeEventListener('click', onDocumentClickForLogPanel))
 
+// ── Sticky header height ─────────────────────────────────────────────────────
+// Exposes the pinned header+tab-nav bar's height as a CSS var so other sticky
+// elements further down the page (e.g. planning week labels) can offset below it.
+
+const stickyBar = ref<HTMLElement | null>(null)
+let stickyBarObserver: ResizeObserver | undefined
+
+function updateStickyBarHeight() {
+  if (stickyBar.value) {
+    document.documentElement.style.setProperty('--app-sticky-h', `${stickyBar.value.offsetHeight}px`)
+  }
+}
+
+onMounted(() => {
+  updateStickyBarHeight()
+  stickyBarObserver = new ResizeObserver(updateStickyBarHeight)
+  if (stickyBar.value) stickyBarObserver.observe(stickyBar.value)
+})
+onUnmounted(() => stickyBarObserver?.disconnect())
+
 // ── Push the filter bar's applied state to the store — this drives the ──────
 // live list update. Search text is debounced so we don't hit the API on
 // every keystroke; every other filter commits immediately (type on select,
@@ -413,7 +433,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
     <title>Sprocket</title>
 
     <!-- ── Header + tab nav — pinned together to the top on scroll ──── -->
-    <div class="sticky top-0 z-10">
+    <div ref="stickyBar" class="sticky top-0 z-10">
       <!-- Header — minimal, borderless top bar -->
       <header class="bg-white border-b border-stone-100">
         <div class="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
