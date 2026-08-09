@@ -38,7 +38,7 @@
     },
     "devDependencies": {
         "@iconify-json/heroicons": "^1.2.3",
-        "@nuxt/devtools": "^3.2.4",
+        "@nuxt/devtools": "^3.4.1",
         "@types/pg": "^8.20.4",
         "drizzle-kit": "^0.31.10",
         "typescript": "^5.7.0",
