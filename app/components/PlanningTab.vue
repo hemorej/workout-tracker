@@ -420,6 +420,7 @@ async function saveNote() {
           <textarea
             v-model="getDraft(noteModalDate).notes"
             rows="4"
+            autofocus
             placeholder="Add a note for this day…"
             class="w-full text-sm text-stone-700 placeholder-stone-300 border border-stone-200 rounded-lg p-3 outline-none focus:border-stone-400 resize-none"
           />
