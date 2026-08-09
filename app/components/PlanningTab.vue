@@ -269,7 +269,7 @@ async function saveNote() {
              Note: overflow-hidden must stay off this element's ancestors up to the
              page's scroll container, or sticky positioning breaks — the rounded
              clipping is applied per-column below instead. -->
-        <div class="w-16 sm:w-24 shrink-0 rounded-l-xl border-r border-stone-100 bg-stone-50">
+        <div class="shrink-0 whitespace-nowrap rounded-l-xl border-r border-stone-100 bg-stone-50">
           <div
             class="sticky px-2 sm:px-3 py-2.5 text-right"
             style="top: var(--app-sticky-h, 0px)"
@@ -297,8 +297,8 @@ async function saveNote() {
             <span class="w-5 shrink-0" />
             <span class="w-14 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-300">TSS</span>
             <span class="w-12 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-300">Min</span>
-            <span class="w-9 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-300">CTL</span>
-            <span class="w-9 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-300">TSB</span>
+            <span class="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-300">CTL</span>
+            <span class="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-300">TSB</span>
             <span class="w-4 shrink-0" />
           </div>
 
@@ -415,7 +415,7 @@ async function saveNote() {
 
             <!-- Projected CTL -->
             <span
-              class="hidden sm:inline-block w-9 shrink-0 text-sm text-right tabular text-stone-500 rounded px-1 py-0.5 transition-colors"
+              class="hidden sm:inline-block w-9 shrink-0 text-sm text-center tabular text-stone-500 rounded px-1 py-0.5 transition-colors"
               :style="ctlStyle(liveProjections[day.date]?.ctl)"
             >
               {{ liveProjections[day.date]?.ctl ?? '—' }}
@@ -423,7 +423,7 @@ async function saveNote() {
 
             <!-- Projected TSB -->
             <span
-              class="hidden sm:inline-block w-9 shrink-0 text-sm text-right tabular text-stone-500 rounded px-1 py-0.5 transition-colors"
+              class="hidden sm:inline-block w-9 shrink-0 text-sm text-center tabular text-stone-500 rounded px-1 py-0.5 transition-colors"
               :style="tsbStyle(liveProjections[day.date]?.tsb)"
             >
               {{ liveProjections[day.date]?.tsb ?? '—' }}
