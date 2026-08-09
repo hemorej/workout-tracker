@@ -43,9 +43,9 @@ export interface PlannedDay {
   projectedTsb: number
 }
 
-/** EMA decay factors — must match the server-side constants in tss.ts */
-const CTL_DECAY = 2 / 43
-const ATL_DECAY = 2 / 8
+/** EMA decay factors — must match the server-side constants in tss.ts (TrainingPeaks/Coggan PMC standard: TSS delta / N) */
+const CTL_DECAY = 1 / 42
+const ATL_DECAY = 1 / 7
 
 export const usePlanningStore = defineStore('planning', () => {
   const plans = ref<PlannedDay[]>([])

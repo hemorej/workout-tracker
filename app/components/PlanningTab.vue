@@ -172,8 +172,8 @@ async function swapWithAbove(date: string) {
 // Recomputes CTL/TSB for every future day using draft TSS values so the
 // numbers update as the user types, before the field is saved.
 
-const CTL_DECAY = 2 / 43
-const ATL_DECAY = 2 / 8
+const CTL_DECAY = 1 / 42
+const ATL_DECAY = 1 / 7
 
 const liveProjections = computed(() => {
   let ctl = planning.currentCtl

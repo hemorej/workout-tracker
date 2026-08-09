@@ -107,9 +107,10 @@ export default defineEventHandler(async (event) => {
     rows.filter(r => dates.includes(r.date)).map(r => [r.date, r]),
   )
 
-  // Compute projections day by day
-  const CTL_DECAY = 2 / (42 + 1)
-  const ATL_DECAY = 2 / (7 + 1)
+  // Compute projections day by day — must match the decay constants in
+  // server/utils/tss.ts (the TrainingPeaks/Coggan PMC standard: TSS delta / N)
+  const CTL_DECAY = 1 / 42
+  const ATL_DECAY = 1 / 7
   let ctl = currentCtl
   let atl = currentAtl
 
