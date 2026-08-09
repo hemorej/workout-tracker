@@ -199,6 +199,37 @@ const liveProjections = computed(() => {
   return result
 })
 
+// ── CTL/TSB movement colour indicators ──────────────────────────────────────
+// CTL: red as it climbs above the current value (building load), green as it
+// drops below (tapering). TSB: red while negative (fatigued), green once
+// positive (fresh). Both fade in smoothly from neutral rather than snapping.
+
+function clamp01(x: number) {
+  return Math.max(0, Math.min(1, x))
+}
+
+function heatStyle(isRed: boolean, intensity: number) {
+  const t = clamp01(intensity)
+  if (t === 0) return {}
+  const bg = isRed ? `rgba(220, 38, 38, ${0.06 + t * 0.22})` : `rgba(22, 163, 74, ${0.06 + t * 0.22})`
+  const fg = isRed ? `rgba(185, 28, 28, ${0.55 + t * 0.45})` : `rgba(21, 128, 61, ${0.55 + t * 0.45})`
+  return { backgroundColor: bg, color: fg }
+}
+
+const CTL_SWING_CAP = 10
+const TSB_SWING_CAP = 20
+
+function ctlStyle(ctl: number | null | undefined) {
+  if (ctl == null) return {}
+  const diff = ctl - planning.currentCtl
+  return heatStyle(diff > 0, Math.abs(diff) / CTL_SWING_CAP)
+}
+
+function tsbStyle(tsb: number | null | undefined) {
+  if (tsb == null) return {}
+  return heatStyle(tsb < 0, Math.abs(tsb) / TSB_SWING_CAP)
+}
+
 // ── Note popup ───────────────────────────────────────────────────────────────
 
 const noteModalDate = ref<string | null>(null)
@@ -232,35 +263,52 @@ async function saveNote() {
       <div
         v-for="week in weeks"
         :key="week.monday"
-        class="bg-white rounded-xl border border-stone-100 overflow-hidden"
+        class="flex bg-white rounded-xl border border-stone-100"
       >
-        <!-- Week header -->
-        <div class="flex items-center justify-between px-4 py-2.5 bg-stone-50 border-b border-stone-100">
-          <span class="text-xs font-semibold uppercase tracking-widest text-stone-400">
-            Week of {{ weekLabel(week.monday) }}
-          </span>
-          <div class="flex items-center gap-4">
-            <div v-if="weekHours(week.days)" class="flex items-center gap-2">
-              <span class="text-base font-semibold tabular text-stone-700 min-w-[2.5rem] text-right">
-                {{ weekHours(week.days) }}
-              </span>
+        <!-- Week label margin — sticky within this week block as the page scrolls.
+             Note: overflow-hidden must stay off this element's ancestors up to the
+             page's scroll container, or sticky positioning breaks — the rounded
+             clipping is applied per-column below instead. -->
+        <div class="w-16 sm:w-24 shrink-0 rounded-l-xl border-r border-stone-100 bg-stone-50">
+          <div
+            class="sticky px-2 sm:px-3 py-2.5 text-right"
+            style="top: var(--app-sticky-h, 0px)"
+          >
+            <div class="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-stone-400 leading-tight">
+              Week of {{ weekLabel(week.monday) }}
             </div>
-            <div class="flex items-center gap-2">
-              <span class="text-base font-semibold tabular text-stone-700 min-w-[2.5rem] text-right">
-                {{ weekTss(week.days) }}
-              </span>
-              <span class="text-xs uppercase tracking-widest text-stone-400">TSS</span>
+            <div class="mt-1.5 text-sm font-semibold tabular text-stone-700 leading-tight">
+              {{ weekHours(week.days) ?? '—' }}
+            </div>
+            <div class="text-sm font-semibold tabular text-stone-700 leading-tight">
+              {{ weekTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
             </div>
           </div>
         </div>
 
-        <!-- Day rows -->
-        <div class="divide-y divide-stone-50">
+        <!-- Week body -->
+        <div class="flex-1 min-w-0 overflow-hidden rounded-r-xl">
+          <!-- Column headers -->
+          <div class="hidden sm:flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 pt-2 pb-1 border-b border-stone-100">
+            <span class="w-12 sm:w-16 shrink-0" />
+            <span class="w-9 shrink-0" />
+            <span class="flex-1 min-w-0" />
+            <span class="w-5 shrink-0" />
+            <span class="w-5 shrink-0" />
+            <span class="w-14 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-300">TSS</span>
+            <span class="w-12 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-300">Min</span>
+            <span class="w-9 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-300">CTL</span>
+            <span class="w-9 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-300">TSB</span>
+            <span class="w-4 shrink-0" />
+          </div>
+
+          <!-- Day rows -->
+          <div class="divide-y divide-stone-50">
           <div
             v-for="day in week.days"
             :key="day.date"
             :class="[
-              'group flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5',
+              'group flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2',
               day.isPast ? 'opacity-50' : '',
             ]"
           >
@@ -331,21 +379,18 @@ async function saveNote() {
               <span class="sm:hidden text-xs tabular" :class="getDraft(day.date).tss ? 'text-stone-500' : 'text-stone-300'">
                 {{ getDraft(day.date).tss ?? '—' }}<span class="text-stone-300"> TSS</span>
               </span>
-              <div class="hidden sm:flex items-center gap-1">
-                <input
-                  v-model.number="getDraft(day.date).tss"
-                  type="number"
-                  inputmode="numeric"
-                  min="0"
-                  max="999"
-                  placeholder="—"
-                  :disabled="day.isPast"
-                  class="w-16 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-1 -mx-1 tabular transition-colors disabled:cursor-default"
-                  @blur="save(day.date)"
-                  @keydown.enter="($event.target as HTMLInputElement).blur()"
-                >
-                <span class="text-xs text-stone-300">TSS</span>
-              </div>
+              <input
+                v-model.number="getDraft(day.date).tss"
+                type="number"
+                inputmode="numeric"
+                min="0"
+                max="999"
+                placeholder="—"
+                :disabled="day.isPast"
+                class="hidden sm:block w-14 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular transition-colors disabled:cursor-default"
+                @blur="save(day.date)"
+                @keydown.enter="($event.target as HTMLInputElement).blur()"
+              >
             </div>
 
             <!-- Duration: compact read-only text in narrow/vertical layouts,
@@ -354,30 +399,35 @@ async function saveNote() {
               <span class="sm:hidden text-xs tabular" :class="getDraft(day.date).durationMinutes ? 'text-stone-500' : 'text-stone-300'">
                 {{ getDraft(day.date).durationMinutes ?? '—' }}<span class="text-stone-300"> min</span>
               </span>
-              <div class="hidden sm:flex items-center gap-1">
-                <input
-                  v-model.number="getDraft(day.date).durationMinutes"
-                  type="number"
-                  inputmode="numeric"
-                  min="0"
-                  max="999"
-                  placeholder="—"
-                  :disabled="day.isPast"
-                  class="w-14 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-1 -mx-1 tabular transition-colors disabled:cursor-default"
-                  @blur="save(day.date)"
-                  @keydown.enter="($event.target as HTMLInputElement).blur()"
-                >
-                <span class="text-xs text-stone-300">min</span>
-              </div>
+              <input
+                v-model.number="getDraft(day.date).durationMinutes"
+                type="number"
+                inputmode="numeric"
+                min="0"
+                max="999"
+                placeholder="—"
+                :disabled="day.isPast"
+                class="hidden sm:block w-12 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular transition-colors disabled:cursor-default"
+                @blur="save(day.date)"
+                @keydown.enter="($event.target as HTMLInputElement).blur()"
+              >
             </div>
 
             <!-- Projected CTL -->
-            <div class="hidden sm:flex items-center gap-1 shrink-0">
-              <span class="text-xs text-stone-300">CTL</span>
-              <span class="w-10 text-sm text-right tabular text-stone-500">
-                {{ liveProjections[day.date]?.ctl ?? '—' }}
-              </span>
-            </div>
+            <span
+              class="hidden sm:inline-block w-9 shrink-0 text-sm text-right tabular text-stone-500 rounded px-1 py-0.5 transition-colors"
+              :style="ctlStyle(liveProjections[day.date]?.ctl)"
+            >
+              {{ liveProjections[day.date]?.ctl ?? '—' }}
+            </span>
+
+            <!-- Projected TSB -->
+            <span
+              class="hidden sm:inline-block w-9 shrink-0 text-sm text-right tabular text-stone-500 rounded px-1 py-0.5 transition-colors"
+              :style="tsbStyle(liveProjections[day.date]?.tsb)"
+            >
+              {{ liveProjections[day.date]?.tsb ?? '—' }}
+            </span>
 
             <!-- Save indicator -->
             <div class="w-4 shrink-0 flex justify-center">
@@ -387,6 +437,7 @@ async function saveNote() {
                 class="animate-spin text-stone-300 w-3 h-3"
               />
             </div>
+          </div>
           </div>
         </div>
       </div>
