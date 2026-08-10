@@ -268,31 +268,34 @@ async function saveNote() {
       <div
         v-for="week in weeks"
         :key="week.monday"
-        class="flex bg-white rounded-xl border border-stone-100"
+        class="flex flex-col sm:flex-row bg-white rounded-xl border border-stone-100"
       >
-        <!-- Week label margin — sticky within this week block as the page scrolls.
-             Note: overflow-hidden must stay off this element's ancestors up to the
+        <!-- Week label margin — a top bar on narrow viewports so it doesn't eat
+             into the day-row width, a sticky side column at sm+. Note:
+             overflow-hidden must stay off this element's ancestors up to the
              page's scroll container, or sticky positioning breaks — the rounded
              clipping is applied per-column below instead. -->
-        <div class="shrink-0 whitespace-nowrap rounded-l-xl border-r border-stone-100 bg-stone-50">
+        <div class="shrink-0 sm:whitespace-nowrap rounded-t-xl sm:rounded-t-none sm:rounded-l-xl border-b sm:border-b-0 sm:border-r border-stone-100 bg-stone-50">
           <div
-            class="sticky px-2 sm:px-3 py-2.5 text-right"
+            class="sticky flex items-baseline justify-between gap-3 px-3 py-1.5 sm:block sm:px-3 sm:py-2.5 sm:text-right"
             style="top: var(--app-sticky-h, 0px)"
           >
             <div class="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-stone-400 leading-tight">
               Week of {{ weekLabel(week.monday) }}
             </div>
-            <div class="mt-1.5 text-sm font-semibold tabular text-stone-700 leading-tight">
-              {{ weekHours(week.days) ?? '—' }}
-            </div>
-            <div class="text-sm font-semibold tabular text-stone-700 leading-tight">
-              {{ weekTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
+            <div class="flex items-baseline gap-2 sm:block">
+              <div class="sm:mt-1.5 text-sm font-semibold tabular text-stone-700 leading-tight">
+                {{ weekHours(week.days) ?? '—' }}
+              </div>
+              <div class="text-sm font-semibold tabular text-stone-700 leading-tight">
+                {{ weekTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Week body -->
-        <div class="flex-1 min-w-0 overflow-hidden rounded-r-xl">
+        <div class="flex-1 min-w-0 overflow-hidden rounded-b-xl sm:rounded-b-none sm:rounded-r-xl">
           <!-- Column headers -->
           <div class="hidden sm:flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 pt-2 pb-1 border-b border-stone-100">
             <span class="w-12 sm:w-16 shrink-0" />
