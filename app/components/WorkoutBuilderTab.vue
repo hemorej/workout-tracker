@@ -206,7 +206,10 @@ watch(popoverEl, (el) => {
     return
   }
   popoverResizeObserver = new ResizeObserver((entries) => {
-    const height = entries[0]?.contentRect.height
+    // contentRect excludes the popover's own padding — use offsetHeight
+    // (border-box, matches actual rendered height) so the reserved space
+    // isn't ~32px short of what the popover really occupies.
+    const height = (entries[0]?.target as HTMLElement | undefined)?.offsetHeight
     if (height) popoverHeight.value = height
   })
   popoverResizeObserver.observe(el)
