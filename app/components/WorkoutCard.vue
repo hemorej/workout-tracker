@@ -398,7 +398,7 @@ function confirmDelete() {
         v-if="isPlannedDay"
         title="Mark as completed"
         aria-label="Mark as completed"
-        class="flex items-center justify-center self-center shrink-0 w-9 h-9 rounded-full border-none bg-transparent text-violet-300 opacity-65 transition-all hover:opacity-100 hover:text-violet-600 hover:bg-violet-100"
+        class="flex items-center justify-center self-start shrink-0 w-9 h-9 -mt-2 rounded-full border-none bg-transparent text-violet-300 opacity-65 transition-all hover:opacity-100 hover:text-violet-600 hover:bg-violet-100"
         @click="emit('mark-completed')"
       >
         <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -413,7 +413,7 @@ function confirmDelete() {
           v-if="!showDeleteConfirm"
           title="Delete workout"
           aria-label="Delete workout"
-          class="flex items-center justify-center self-center shrink-0 w-10 h-10 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-rose-600 hover:bg-rose-50"
+          class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-rose-600 hover:bg-rose-50"
           @click="requestDelete"
         >
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
