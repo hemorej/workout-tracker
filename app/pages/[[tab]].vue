@@ -377,6 +377,26 @@ function onDocumentClickForLogPanel(event: MouseEvent) {
 onMounted(() => document.addEventListener('click', onDocumentClickForLogPanel))
 onUnmounted(() => document.removeEventListener('click', onDocumentClickForLogPanel))
 
+// ── Keyboard shortcut: Alt/Option+1..4 jumps to the matching tab ────────────
+// Cmd/Ctrl+1..4 is reserved by Chrome/Safari for switching browser tabs and
+// can't be reliably intercepted from page JS, so Alt is used instead.
+function onKeydownTabShortcut(event: KeyboardEvent) {
+  if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+  // On macOS, Option+digit produces a special character in `event.key`
+  // (e.g. Option+2 → '™'), so read the physical key via `event.code` instead.
+  const match = /^Digit(\d)$/.exec(event.code)
+  if (!match) return
+  const index = Number(match[1]) - 1
+  if (!Number.isInteger(index) || index < 0 || index >= tabs.length) return
+  const target = event.target as HTMLElement | null
+  if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+  event.preventDefault()
+  setTab(tabs[index]!.id)
+}
+
+onMounted(() => document.addEventListener('keydown', onKeydownTabShortcut))
+onUnmounted(() => document.removeEventListener('keydown', onKeydownTabShortcut))
+
 // ── Sticky header height ─────────────────────────────────────────────────────
 // Exposes the pinned header+tab-nav bar's height as a CSS var so other sticky
 // elements further down the page (e.g. planning week labels) can offset below it.

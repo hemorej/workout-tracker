@@ -102,7 +102,7 @@ function buildSegments(source: Block[]): Segment[] {
     else if (b.type === 'steady') {
       segs.push({ blockId: b.id, duration: b.duration, powerStart: b.power, powerEnd: b.power })
     }
-    else {
+    else if (b.type === 'interval') {
       for (let i = 0; i < b.reps; i++) {
         segs.push({ blockId: b.id, duration: b.onDuration, powerStart: b.onPower, powerEnd: b.onPower })
         segs.push({ blockId: b.id, duration: b.offDuration, powerStart: b.offPower, powerEnd: b.offPower })
@@ -312,7 +312,7 @@ const popoverLeft = computed(() => {
 
 // ── Block mutations ──────────────────────────────────────────────────────
 
-function bumpPower<T extends Block>(id: number, field: keyof T & string, delta: number) {
+function bumpPower(id: number, field: string, delta: number) {
   const b = blocks.value.find(x => x.id === id) as Record<string, unknown> | undefined
   if (!b) return
   const v = Math.max(0.2, Math.min(2.0, ((b[field] as number) || 0) + delta))
@@ -478,7 +478,7 @@ function download() {
     else if (b.type === 'steady') {
       xml += `    <SteadyState Duration="${b.duration}" Power="${b.power}"${b.cadence ? ` Cadence="${b.cadence}"` : ''}/>\n`
     }
-    else {
+    else if (b.type === 'interval') {
       xml += `    <IntervalsT Repeat="${b.reps}" OnDuration="${b.onDuration}" OffDuration="${b.offDuration}" OnPower="${b.onPower}" OffPower="${b.offPower}"${b.onCadence ? ` Cadence="${b.onCadence}"` : ''}${b.offCadence ? ` CadenceResting="${b.offCadence}"` : ''}/>\n`
     }
   }
@@ -749,7 +749,7 @@ function download() {
             </template>
 
             <!-- Interval fields -->
-            <template v-else>
+            <template v-else-if="selectedBlock.type === 'interval'">
               <div class="flex items-center justify-between mb-3 pb-3" style="border-bottom: 1px solid #44403c;">
                 <span style="font: 600 13px 'Hanken Grotesk'; color: #d6d3d1;">Repeats</span>
                 <div class="flex items-center gap-2">

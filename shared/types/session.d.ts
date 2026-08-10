@@ -7,8 +7,11 @@
  * which is declared as `UserSession & { user: User }`, so an override on
  * `UserSession.user` alone gets shadowed there.
  *
- * This file is picked up automatically by Nuxt's type system because it
- * lives inside the `server/` directory.
+ * Lives under `shared/` (not `server/`) so both the app-side and server-side
+ * TS projects pick it up — the app project also transitively type-checks
+ * `server/api/**` for Nitro's typed-`$fetch` route inference, but doesn't
+ * include arbitrary `server/utils/*.d.ts` files as root files, so an
+ * augmentation placed there never actually merged into that program.
  *
  * See: https://github.com/atinux/nuxt-auth-utils#session-type
  */
