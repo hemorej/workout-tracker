@@ -320,12 +320,14 @@ function bumpPower(id: number, field: string, delta: number) {
   if (!b) return
   const v = Math.max(0.2, Math.min(2.0, ((b[field] as number) || 0) + delta))
   b[field] = Math.round(v * 100) / 100
+  if (isPowerDraft(id, field)) powerDraft.value = null
 }
 
 function bumpDuration(id: number, field: string, delta: number) {
   const b = blocks.value.find(x => x.id === id) as Record<string, unknown> | undefined
   if (!b) return
   b[field] = Math.max(5, ((b[field] as number) || 0) + delta)
+  if (isHmsDraft(id, field)) hmsDraft.value = null
 }
 
 function bumpCadence(id: number, field: string, delta: number) {
@@ -335,70 +337,88 @@ function bumpCadence(id: number, field: string, delta: number) {
   b[field] = Math.max(0, Math.min(140, cur + delta))
 }
 
-// ── Direct input editing (duration in seconds, power in absolute watts) ──
+// ── Direct input editing (duration as h:m:s, power in watts or %) ────────
 
 function powerWatts(power: number) {
   return Math.round(power * ftp.value)
 }
 
-function powerPercentLabel(power: number) {
-  return `${Math.round(power * 100)}%`
-}
-
-// Bounds are only enforced on commit (blur/Enter), not on every keystroke —
-// clamping mid-typing would snap "120" down to the minimum after the first
-// digit and make it impossible to type a value below the previous one.
-function setDurationSeconds(id: number, field: string, seconds: number, commit: boolean) {
-  if (!Number.isFinite(seconds)) return
+function blockField(id: number, field: string): number {
   const b = blocks.value.find(x => x.id === id) as Record<string, unknown> | undefined
-  if (!b) return
-  const rounded = Math.round(seconds)
-  b[field] = commit ? Math.max(5, rounded) : rounded
+  return (b?.[field] as number) ?? 0
 }
 
-function onDurationInput(e: Event, id: number, field: string) {
-  setDurationSeconds(id, field, (e.target as HTMLInputElement).valueAsNumber, false)
+function splitHms(totalSeconds: number) {
+  const t = Math.max(0, Math.round(totalSeconds))
+  return { h: Math.floor(t / 3600), m: Math.floor((t % 3600) / 60), s: t % 60 }
 }
 
-function onDurationCommit(e: Event, id: number, field: string) {
-  setDurationSeconds(id, field, (e.target as HTMLInputElement).valueAsNumber, true)
+// Live-typed h/m/s parts live in a draft keyed to the field being edited, so
+// typing into one part doesn't clobber the other two mid-edit. Committed
+// (blur) into the block's total-seconds field with the same min-5s floor as
+// before, falling back to 30s (the design's stated default) if all three
+// parts are empty/zero rather than collapsing to a 0s block.
+interface HmsDraft { id: number, field: string, h: number, m: number, s: number }
+const hmsDraft = ref<HmsDraft | null>(null)
+
+function isHmsDraft(id: number, field: string) {
+  return hmsDraft.value?.id === id && hmsDraft.value?.field === field
 }
 
-// Power is stored as a fraction of FTP rounded to the nearest 1% — writing
-// every keystroke straight into the block would round small in-progress
-// watt values (e.g. the "1" in "120") down to 0%, snapping the field back
-// to 0W mid-type. So the live-typed watts live in a draft here and only
-// commit into the block (with min/max clamping) on blur — the draft still
-// drives the % readout so it updates as you type.
-interface PowerDraft { id: number, field: string, watts: number }
+function hmsPart(duration: number, id: number, field: string, part: 'h' | 'm' | 's') {
+  return isHmsDraft(id, field) ? hmsDraft.value![part] : splitHms(duration)[part]
+}
+
+function onHmsInput(e: Event, id: number, field: string, part: 'h' | 'm' | 's') {
+  const raw = (e.target as HTMLInputElement).valueAsNumber
+  const val = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 0
+  const base = isHmsDraft(id, field) ? hmsDraft.value! : { id, field, ...splitHms(blockField(id, field)) }
+  hmsDraft.value = { ...base, [part]: val }
+}
+
+function onHmsCommit(id: number, field: string) {
+  if (!isHmsDraft(id, field)) return
+  const { h, m, s } = hmsDraft.value!
+  const total = h * 3600 + m * 60 + s
+  const b = blocks.value.find(x => x.id === id) as Record<string, unknown> | undefined
+  if (b) b[field] = total > 0 ? Math.max(5, total) : 30
+  hmsDraft.value = null
+}
+
+// Power is stored as a single fraction of FTP, but the watts and % fields
+// each edit it directly — the draft holds that shared un-rounded fraction
+// so a keystroke in either field is reflected live in the other, and only
+// commits into the block (with min/max clamping) on blur.
+interface PowerDraft { id: number, field: string, fraction: number }
 const powerDraft = ref<PowerDraft | null>(null)
 
 function isPowerDraft(id: number, field: string) {
   return powerDraft.value?.id === id && powerDraft.value?.field === field
 }
 
-function powerInputValue(power: number, id: number, field: string) {
-  return isPowerDraft(id, field) ? powerDraft.value!.watts : powerWatts(power)
+function powerFieldWatts(power: number, id: number, field: string) {
+  return isPowerDraft(id, field) ? Math.round(powerDraft.value!.fraction * ftp.value) : powerWatts(power)
 }
 
-function powerPercentDisplay(power: number, id: number, field: string) {
-  if (!isPowerDraft(id, field)) return powerPercentLabel(power)
-  const pct = ftp.value > 0 ? Math.round((powerDraft.value!.watts / ftp.value) * 100) : 0
-  return `${pct}%`
+function powerFieldPercent(power: number, id: number, field: string) {
+  return isPowerDraft(id, field) ? Math.round(powerDraft.value!.fraction * 100) : Math.round(power * 100)
 }
 
 function onPowerWattsInput(e: Event, id: number, field: string) {
   const watts = (e.target as HTMLInputElement).valueAsNumber
-  powerDraft.value = { id, field, watts: Number.isFinite(watts) ? Math.round(watts) : 0 }
+  const fraction = ftp.value > 0 && Number.isFinite(watts) ? watts / ftp.value : 0
+  powerDraft.value = { id, field, fraction }
 }
 
-function onPowerWattsCommit(e: Event, id: number, field: string) {
-  const watts = (e.target as HTMLInputElement).valueAsNumber
+function onPowerPercentInput(e: Event, id: number, field: string) {
+  const pct = (e.target as HTMLInputElement).valueAsNumber
+  powerDraft.value = { id, field, fraction: Number.isFinite(pct) ? pct / 100 : 0 }
+}
+
+function onPowerCommit(id: number, field: string) {
+  if (!isPowerDraft(id, field)) return
   const b = blocks.value.find(x => x.id === id) as Record<string, unknown> | undefined
-  if (b && Number.isFinite(watts)) {
-    const fraction = ftp.value > 0 ? Math.round(watts) / ftp.value : 0
-    b[field] = Math.round(Math.min(2.0, Math.max(0.2, fraction)) * 100) / 100
-  }
+  if (b) b[field] = Math.round(Math.min(2.0, Math.max(0.2, powerDraft.value!.fraction)) * 100) / 100
   powerDraft.value = null
 }
 
@@ -663,13 +683,28 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Duration</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'duration', -15)">–</button>
-                  <input
-                    type="number" step="1" min="5" class="tabular stepper-input"
-                    :value="selectedBlock.duration"
-                    @input="onDurationInput($event, selectedBlock.id, 'duration')"
-                    @change="onDurationCommit($event, selectedBlock.id, 'duration')"
-                  >
-                  <span class="tabular stepper-suffix">{{ fmtClock(selectedBlock.duration) }}</span>
+                  <div class="hms-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.duration, selectedBlock.id, 'duration', 'h')"
+                      @input="onHmsInput($event, selectedBlock.id, 'duration', 'h')"
+                      @blur="onHmsCommit(selectedBlock.id, 'duration')"
+                    >
+                    <span class="hms-colon">:</span>
+                    <input
+                      type="number" step="1" min="0" max="59" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.duration, selectedBlock.id, 'duration', 'm')"
+                      @input="onHmsInput($event, selectedBlock.id, 'duration', 'm')"
+                      @blur="onHmsCommit(selectedBlock.id, 'duration')"
+                    >
+                    <span class="hms-colon">:</span>
+                    <input
+                      type="number" step="1" min="0" max="59" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.duration, selectedBlock.id, 'duration', 's')"
+                      @input="onHmsInput($event, selectedBlock.id, 'duration', 's')"
+                      @blur="onHmsCommit(selectedBlock.id, 'duration')"
+                    >
+                  </div>
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'duration', 15)">+</button>
                 </div>
               </div>
@@ -677,13 +712,24 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Power</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'power', -0.01)">–</button>
-                  <input
-                    type="number" step="1" min="0" class="tabular stepper-input"
-                    :value="powerInputValue(selectedBlock.power, selectedBlock.id, 'power')"
-                    @input="onPowerWattsInput($event, selectedBlock.id, 'power')"
-                    @blur="onPowerWattsCommit($event, selectedBlock.id, 'power')"
-                  >
-                  <span class="tabular stepper-suffix">W · {{ powerPercentDisplay(selectedBlock.power, selectedBlock.id, 'power') }}</span>
+                  <div class="unit-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular unit-input-field"
+                      :value="powerFieldWatts(selectedBlock.power, selectedBlock.id, 'power')"
+                      @input="onPowerWattsInput($event, selectedBlock.id, 'power')"
+                      @blur="onPowerCommit(selectedBlock.id, 'power')"
+                    >
+                    <span class="unit-input-suffix">W</span>
+                  </div>
+                  <div class="unit-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular unit-input-field unit-input-field-pct"
+                      :value="powerFieldPercent(selectedBlock.power, selectedBlock.id, 'power')"
+                      @input="onPowerPercentInput($event, selectedBlock.id, 'power')"
+                      @blur="onPowerCommit(selectedBlock.id, 'power')"
+                    >
+                    <span class="unit-input-suffix">%</span>
+                  </div>
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'power', 0.01)">+</button>
                 </div>
               </div>
@@ -703,13 +749,28 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Duration</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'duration', -15)">–</button>
-                  <input
-                    type="number" step="1" min="5" class="tabular stepper-input"
-                    :value="selectedBlock.duration"
-                    @input="onDurationInput($event, selectedBlock.id, 'duration')"
-                    @change="onDurationCommit($event, selectedBlock.id, 'duration')"
-                  >
-                  <span class="tabular stepper-suffix">{{ fmtClock(selectedBlock.duration) }}</span>
+                  <div class="hms-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.duration, selectedBlock.id, 'duration', 'h')"
+                      @input="onHmsInput($event, selectedBlock.id, 'duration', 'h')"
+                      @blur="onHmsCommit(selectedBlock.id, 'duration')"
+                    >
+                    <span class="hms-colon">:</span>
+                    <input
+                      type="number" step="1" min="0" max="59" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.duration, selectedBlock.id, 'duration', 'm')"
+                      @input="onHmsInput($event, selectedBlock.id, 'duration', 'm')"
+                      @blur="onHmsCommit(selectedBlock.id, 'duration')"
+                    >
+                    <span class="hms-colon">:</span>
+                    <input
+                      type="number" step="1" min="0" max="59" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.duration, selectedBlock.id, 'duration', 's')"
+                      @input="onHmsInput($event, selectedBlock.id, 'duration', 's')"
+                      @blur="onHmsCommit(selectedBlock.id, 'duration')"
+                    >
+                  </div>
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'duration', 15)">+</button>
                 </div>
               </div>
@@ -717,13 +778,24 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Start power</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'powerStart', -0.01)">–</button>
-                  <input
-                    type="number" step="1" min="0" class="tabular stepper-input"
-                    :value="powerInputValue(selectedBlock.powerStart, selectedBlock.id, 'powerStart')"
-                    @input="onPowerWattsInput($event, selectedBlock.id, 'powerStart')"
-                    @blur="onPowerWattsCommit($event, selectedBlock.id, 'powerStart')"
-                  >
-                  <span class="tabular stepper-suffix">W · {{ powerPercentDisplay(selectedBlock.powerStart, selectedBlock.id, 'powerStart') }}</span>
+                  <div class="unit-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular unit-input-field"
+                      :value="powerFieldWatts(selectedBlock.powerStart, selectedBlock.id, 'powerStart')"
+                      @input="onPowerWattsInput($event, selectedBlock.id, 'powerStart')"
+                      @blur="onPowerCommit(selectedBlock.id, 'powerStart')"
+                    >
+                    <span class="unit-input-suffix">W</span>
+                  </div>
+                  <div class="unit-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular unit-input-field unit-input-field-pct"
+                      :value="powerFieldPercent(selectedBlock.powerStart, selectedBlock.id, 'powerStart')"
+                      @input="onPowerPercentInput($event, selectedBlock.id, 'powerStart')"
+                      @blur="onPowerCommit(selectedBlock.id, 'powerStart')"
+                    >
+                    <span class="unit-input-suffix">%</span>
+                  </div>
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'powerStart', 0.01)">+</button>
                 </div>
               </div>
@@ -731,13 +803,24 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">End power</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'powerEnd', -0.01)">–</button>
-                  <input
-                    type="number" step="1" min="0" class="tabular stepper-input"
-                    :value="powerInputValue(selectedBlock.powerEnd, selectedBlock.id, 'powerEnd')"
-                    @input="onPowerWattsInput($event, selectedBlock.id, 'powerEnd')"
-                    @blur="onPowerWattsCommit($event, selectedBlock.id, 'powerEnd')"
-                  >
-                  <span class="tabular stepper-suffix">W · {{ powerPercentDisplay(selectedBlock.powerEnd, selectedBlock.id, 'powerEnd') }}</span>
+                  <div class="unit-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular unit-input-field"
+                      :value="powerFieldWatts(selectedBlock.powerEnd, selectedBlock.id, 'powerEnd')"
+                      @input="onPowerWattsInput($event, selectedBlock.id, 'powerEnd')"
+                      @blur="onPowerCommit(selectedBlock.id, 'powerEnd')"
+                    >
+                    <span class="unit-input-suffix">W</span>
+                  </div>
+                  <div class="unit-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular unit-input-field unit-input-field-pct"
+                      :value="powerFieldPercent(selectedBlock.powerEnd, selectedBlock.id, 'powerEnd')"
+                      @input="onPowerPercentInput($event, selectedBlock.id, 'powerEnd')"
+                      @blur="onPowerCommit(selectedBlock.id, 'powerEnd')"
+                    >
+                    <span class="unit-input-suffix">%</span>
+                  </div>
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'powerEnd', 0.01)">+</button>
                 </div>
               </div>
@@ -769,13 +852,28 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Duration</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'onDuration', -15)">–</button>
-                  <input
-                    type="number" step="1" min="5" class="tabular stepper-input"
-                    :value="selectedBlock.onDuration"
-                    @input="onDurationInput($event, selectedBlock.id, 'onDuration')"
-                    @change="onDurationCommit($event, selectedBlock.id, 'onDuration')"
-                  >
-                  <span class="tabular stepper-suffix">{{ fmtClock(selectedBlock.onDuration) }}</span>
+                  <div class="hms-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.onDuration, selectedBlock.id, 'onDuration', 'h')"
+                      @input="onHmsInput($event, selectedBlock.id, 'onDuration', 'h')"
+                      @blur="onHmsCommit(selectedBlock.id, 'onDuration')"
+                    >
+                    <span class="hms-colon">:</span>
+                    <input
+                      type="number" step="1" min="0" max="59" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.onDuration, selectedBlock.id, 'onDuration', 'm')"
+                      @input="onHmsInput($event, selectedBlock.id, 'onDuration', 'm')"
+                      @blur="onHmsCommit(selectedBlock.id, 'onDuration')"
+                    >
+                    <span class="hms-colon">:</span>
+                    <input
+                      type="number" step="1" min="0" max="59" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.onDuration, selectedBlock.id, 'onDuration', 's')"
+                      @input="onHmsInput($event, selectedBlock.id, 'onDuration', 's')"
+                      @blur="onHmsCommit(selectedBlock.id, 'onDuration')"
+                    >
+                  </div>
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'onDuration', 15)">+</button>
                 </div>
               </div>
@@ -783,13 +881,24 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Power</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'onPower', -0.01)">–</button>
-                  <input
-                    type="number" step="1" min="0" class="tabular stepper-input"
-                    :value="powerInputValue(selectedBlock.onPower, selectedBlock.id, 'onPower')"
-                    @input="onPowerWattsInput($event, selectedBlock.id, 'onPower')"
-                    @blur="onPowerWattsCommit($event, selectedBlock.id, 'onPower')"
-                  >
-                  <span class="tabular stepper-suffix">W · {{ powerPercentDisplay(selectedBlock.onPower, selectedBlock.id, 'onPower') }}</span>
+                  <div class="unit-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular unit-input-field"
+                      :value="powerFieldWatts(selectedBlock.onPower, selectedBlock.id, 'onPower')"
+                      @input="onPowerWattsInput($event, selectedBlock.id, 'onPower')"
+                      @blur="onPowerCommit(selectedBlock.id, 'onPower')"
+                    >
+                    <span class="unit-input-suffix">W</span>
+                  </div>
+                  <div class="unit-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular unit-input-field unit-input-field-pct"
+                      :value="powerFieldPercent(selectedBlock.onPower, selectedBlock.id, 'onPower')"
+                      @input="onPowerPercentInput($event, selectedBlock.id, 'onPower')"
+                      @blur="onPowerCommit(selectedBlock.id, 'onPower')"
+                    >
+                    <span class="unit-input-suffix">%</span>
+                  </div>
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'onPower', 0.01)">+</button>
                 </div>
               </div>
@@ -809,13 +918,28 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Duration</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'offDuration', -15)">–</button>
-                  <input
-                    type="number" step="1" min="5" class="tabular stepper-input"
-                    :value="selectedBlock.offDuration"
-                    @input="onDurationInput($event, selectedBlock.id, 'offDuration')"
-                    @change="onDurationCommit($event, selectedBlock.id, 'offDuration')"
-                  >
-                  <span class="tabular stepper-suffix">{{ fmtClock(selectedBlock.offDuration) }}</span>
+                  <div class="hms-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.offDuration, selectedBlock.id, 'offDuration', 'h')"
+                      @input="onHmsInput($event, selectedBlock.id, 'offDuration', 'h')"
+                      @blur="onHmsCommit(selectedBlock.id, 'offDuration')"
+                    >
+                    <span class="hms-colon">:</span>
+                    <input
+                      type="number" step="1" min="0" max="59" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.offDuration, selectedBlock.id, 'offDuration', 'm')"
+                      @input="onHmsInput($event, selectedBlock.id, 'offDuration', 'm')"
+                      @blur="onHmsCommit(selectedBlock.id, 'offDuration')"
+                    >
+                    <span class="hms-colon">:</span>
+                    <input
+                      type="number" step="1" min="0" max="59" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.offDuration, selectedBlock.id, 'offDuration', 's')"
+                      @input="onHmsInput($event, selectedBlock.id, 'offDuration', 's')"
+                      @blur="onHmsCommit(selectedBlock.id, 'offDuration')"
+                    >
+                  </div>
                   <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'offDuration', 15)">+</button>
                 </div>
               </div>
@@ -823,13 +947,24 @@ function download() {
                 <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Power</span>
                 <div class="flex items-center gap-2">
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'offPower', -0.01)">–</button>
-                  <input
-                    type="number" step="1" min="0" class="tabular stepper-input"
-                    :value="powerInputValue(selectedBlock.offPower, selectedBlock.id, 'offPower')"
-                    @input="onPowerWattsInput($event, selectedBlock.id, 'offPower')"
-                    @blur="onPowerWattsCommit($event, selectedBlock.id, 'offPower')"
-                  >
-                  <span class="tabular stepper-suffix">W · {{ powerPercentDisplay(selectedBlock.offPower, selectedBlock.id, 'offPower') }}</span>
+                  <div class="unit-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular unit-input-field"
+                      :value="powerFieldWatts(selectedBlock.offPower, selectedBlock.id, 'offPower')"
+                      @input="onPowerWattsInput($event, selectedBlock.id, 'offPower')"
+                      @blur="onPowerCommit(selectedBlock.id, 'offPower')"
+                    >
+                    <span class="unit-input-suffix">W</span>
+                  </div>
+                  <div class="unit-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular unit-input-field unit-input-field-pct"
+                      :value="powerFieldPercent(selectedBlock.offPower, selectedBlock.id, 'offPower')"
+                      @input="onPowerPercentInput($event, selectedBlock.id, 'offPower')"
+                      @blur="onPowerCommit(selectedBlock.id, 'offPower')"
+                    >
+                    <span class="unit-input-suffix">%</span>
+                  </div>
                   <button class="stepper-btn" @click="bumpPower(selectedBlock.id, 'offPower', 0.01)">+</button>
                 </div>
               </div>
@@ -969,35 +1104,78 @@ function download() {
   text-align: center;
   display: inline-block;
 }
-.stepper-input {
-  width: 46px;
-  font: 700 15px 'Hanken Grotesk';
-  color: #fff;
-  text-align: center;
+/* Compound "one field, baked-in unit" boxes used by the power (W / %) and
+   duration (h:m:s) inputs — a bordered box styled like a single input, with
+   the unit character(s) rendered as a fixed, non-editable span alongside a
+   borderless <input>, so the unit reads as part of the field without being
+   part of the editable text. */
+.unit-input,
+.hms-input {
+  display: inline-flex;
+  align-items: center;
   background: #1c1917;
   border: 1px solid #44403c;
   border-radius: 6px;
-  padding: 2px 0;
   outline: none;
 }
-.stepper-input:focus {
+.unit-input:focus-within,
+.hms-input:focus-within {
   border-color: #78716c;
 }
-/* Hide native spinner arrows — the –/+ buttons already cover stepping. */
-.stepper-input::-webkit-outer-spin-button,
-.stepper-input::-webkit-inner-spin-button {
+.unit-input {
+  gap: 2px;
+  padding: 2px 6px;
+}
+.unit-input-field {
+  width: 30px;
+  font: 700 14px 'Hanken Grotesk';
+  color: #fff;
+  text-align: right;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+}
+.unit-input-field-pct {
+  width: 24px;
+}
+.unit-input-suffix {
+  font: 600 12px 'Hanken Grotesk';
+  color: #a8a29e;
+  user-select: none;
+  pointer-events: none;
+}
+.hms-input {
+  padding: 2px 4px;
+}
+.hms-field {
+  width: 18px;
+  font: 700 14px 'Hanken Grotesk';
+  color: #fff;
+  text-align: center;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+}
+.hms-colon {
+  font: 700 14px 'Hanken Grotesk';
+  color: #78716c;
+  user-select: none;
+  pointer-events: none;
+  padding: 0 1px;
+}
+/* Hide native spinner arrows on all the compound-field inputs. */
+.unit-input-field::-webkit-outer-spin-button,
+.unit-input-field::-webkit-inner-spin-button,
+.hms-field::-webkit-outer-spin-button,
+.hms-field::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
-.stepper-input[type='number'] {
+.unit-input-field[type='number'],
+.hms-field[type='number'] {
   -moz-appearance: textfield;
-}
-.stepper-suffix {
-  font: 500 12px 'Hanken Grotesk';
-  color: #a8a29e;
-  white-space: nowrap;
-  display: inline-block;
-  min-width: 56px;
 }
 
 /* Timeline chart stays scrollable but hides the visible scrollbar chrome. */
