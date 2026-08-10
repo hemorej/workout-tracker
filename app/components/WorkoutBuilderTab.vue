@@ -996,6 +996,8 @@ function download() {
   font: 500 12px 'Hanken Grotesk';
   color: #a8a29e;
   white-space: nowrap;
+  display: inline-block;
+  min-width: 56px;
 }
 
 /* Timeline chart stays scrollable but hides the visible scrollbar chrome. */
