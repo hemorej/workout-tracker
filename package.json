@@ -25,6 +25,7 @@
     },
     "dependencies": {
         "@adonisjs/hash": "^10.1.0",
+        "@fontsource-variable/hanken-grotesk": "^5.3.0",
         "@nuxt/ui": "^4.10.0",
         "@pinia/nuxt": "^1.0.1",
         "drizzle-orm": "0.45.2",
@@ -38,6 +39,7 @@
     },
     "devDependencies": {
         "@iconify-json/heroicons": "^1.2.3",
+        "@iconify-json/lucide": "^1.2.122",
         "@nuxt/devtools": "^3.4.1",
         "@types/pg": "^8.20.4",
         "drizzle-kit": "^0.31.10",

@@ -54,19 +54,16 @@ export default defineNuxtConfig({
     },
 
     /**
-     * `@nuxt/fonts` (auto-installed by `@nuxt/ui`) self-hosts fonts referenced
-     * via `font-family` in our CSS instead of loading them from Google/Bunny/
-     * Fontshare at request time — it downloads the woff2 files at build time
-     * and serves them from our own origin, generating size-matched fallback
-     * metrics to avoid layout shift. Pinned here to the exact weights and
-     * subset the app actually uses (see `font-bold`/`font-extrabold` etc.
-     * usage), rather than the module's broader auto-detected defaults.
+     * `@nuxt/fonts` (auto-installed by `@nuxt/ui`) would otherwise try to
+     * resolve 'Hanken Grotesk' from Google Fonts at build time. It's vendored
+     * instead via `@fontsource-variable/hanken-grotesk` + a manual `@font-face`
+     * in main.css, so tell the module to leave that family alone — it still
+     * handles fallback-metric generation etc. for anything else that needs it.
      */
     fonts: {
-        defaults: {
-            weights: [400, 500, 600, 700, 800],
-            subsets: ['latin'],
-        },
+        families: [
+            { name: 'Hanken Grotesk', provider: 'none' },
+        ],
     },
 
     /**
@@ -89,7 +86,7 @@ export default defineNuxtConfig({
         },
     },
 
-    css: ['./assets/css/main.css'],
+    css: ['~/assets/css/main.css'],
 
     devtools: {enabled: true},
 
@@ -110,6 +107,9 @@ export default defineNuxtConfig({
             gzip: true,
             brotli: true,
         },
+        // No Sentry or other sourcemap consumer wired up — skip the transform/write
+        // cost in production. Kept on locally in case you want to debug a build.
+        sourceMap: process.env.NODE_ENV !== 'production',
     },
 
     /**
