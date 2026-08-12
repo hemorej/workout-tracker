@@ -188,7 +188,7 @@ function recap(label: string, value: string): void {
 
 // ── Interactive select prompt (arrow keys to move, type to filter) ──────
 
-interface SelectOption { label: string, value: string }
+interface SelectOption { label: string, value: string, disabled?: boolean }
 
 /**
  * Renders a filterable list in raw terminal mode: ↑/↓ moves the highlight,
@@ -206,14 +206,14 @@ async function selectPrompt(question: string, options: SelectOption[], config: {
 
   if (!process.stdin.isTTY) {
     console.log(`\n${question}`)
-    options.forEach((o, i) => console.log(`  ${i + 1}) ${o.label}`))
+    options.forEach((o, i) => console.log(`  ${i + 1}) ${o.label}${o.disabled ? ' (disabled)' : ''}`))
     console.log(multi ? '  (blank = all)' : '  (blank = none)')
     const answer = await ask('> ')
     const indices = answer
-      ? answer.split(',').map(s => Number(s.trim()) - 1).filter(i => i >= 0 && i < options.length)
+      ? answer.split(',').map(s => Number(s.trim()) - 1).filter(i => i >= 0 && i < options.length && !options[i]!.disabled)
       : []
     if (multi) {
-      return indices.length > 0 ? indices.map(i => options[i]!.value) : options.map(o => o.value)
+      return indices.length > 0 ? indices.map(i => options[i]!.value) : options.filter(o => !o.disabled).map(o => o.value)
     }
     return indices.length > 0 ? [options[indices[0]!]!.value] : []
   }
@@ -243,8 +243,9 @@ async function selectPrompt(question: string, options: SelectOption[], config: {
       visible.forEach((o, i) => {
         const isCursor = i === cursor
         const mark = multi ? (checked.has(o.index) ? '[x]' : '[ ]') : (isCursor ? '›' : ' ')
-        const text = `  ${mark} ${o.label}`
-        lines.push(isCursor ? ansi(['1', '36'], text) : text)
+        const text = `  ${mark} ${o.label}${o.disabled ? ' (disabled)' : ''}`
+        if (o.disabled) lines.push(ansi('90', text))
+        else lines.push(isCursor ? ansi(['1', '36'], text) : text)
       })
       if (filtered.length === 0) lines.push(ansi('90', '  (no matches)'))
       else if (filtered.length > VISIBLE_LIMIT) lines.push(ansi('90', `  … and ${filtered.length - VISIBLE_LIMIT} more — keep typing to narrow`))
@@ -295,7 +296,7 @@ async function selectPrompt(question: string, options: SelectOption[], config: {
       }
       else if (multi && key.name === 'space') {
         const opt = filtered[cursor]
-        if (opt) {
+        if (opt && !opt.disabled) {
           if (checked.has(opt.index)) checked.delete(opt.index)
           else checked.add(opt.index)
         }
@@ -307,11 +308,11 @@ async function selectPrompt(question: string, options: SelectOption[], config: {
         if (multi) {
           resolve(checked.size > 0
             ? [...checked].sort((a, b) => a - b).map(i => options[i]!.value)
-            : options.map(o => o.value))
+            : options.filter(o => !o.disabled).map(o => o.value))
         }
         else {
           const opt = filtered[cursor]
-          resolve(opt ? [opt.value] : [])
+          resolve(opt && !opt.disabled ? [opt.value] : [])
         }
       }
       else if (key.name === 'backspace') {
@@ -869,7 +870,7 @@ async function main() {
   const tssMax = tssMin + 4
   recap('TSS', String(tssMin))
 
-  const sourceOptions: SelectOption[] = PROVIDERS.map(p => ({ label: p.name, value: p.name }))
+  const sourceOptions: SelectOption[] = PROVIDERS.map(p => ({ label: p.name, value: p.name, disabled: p === trainerRoadProvider }))
   const chosenNames = await selectPrompt('Sources: (space to toggle, blank = all)', sourceOptions, { multi: true })
   const providers = PROVIDERS.filter(p => chosenNames.includes(p.name))
   recap('Sources', chosenNames.length === PROVIDERS.length ? 'All' : chosenNames.join(', '))
