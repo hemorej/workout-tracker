@@ -37,6 +37,8 @@ export interface PlannedDay {
   isPast: boolean
   /** Planned workout for this day, or null for an unplanned rest day */
   plan: PlanEntry | null
+  /** Actually logged totals for this day. null for future days. */
+  actual: { tss: number, durationMinutes: number } | null
   /** Projected Chronic Training Load after applying this day's planned TSS */
   projectedCtl: number
   /** Projected Training Stress Balance (CTL − ATL) at the start of this day */

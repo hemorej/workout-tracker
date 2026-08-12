@@ -57,12 +57,39 @@ const weeks = computed(() => {
   return result
 })
 
+/** The TSS to display and count for a day: actual once it's in the past, else planned. */
+function effectiveTss(day: (typeof planning.plans)[number]) {
+  if (day.isPast) return day.actual?.tss ?? 0
+  return getDraft(day.date).tss ?? 0
+}
+
+/** The duration to display and count for a day: actual once it's in the past, else planned. */
+function effectiveMinutes(day: (typeof planning.plans)[number]) {
+  if (day.isPast) return day.actual?.durationMinutes ?? 0
+  return getDraft(day.date).durationMinutes ?? 0
+}
+
+/** True when a past day's logged TSS differs from what was planned for it. */
+function tssDiverged(day: (typeof planning.plans)[number]) {
+  if (!day.isPast || !day.actual) return false
+  return day.actual.tss !== (day.plan?.tss ?? 0)
+}
+
 function weekTss(days: typeof planning.plans) {
+  return days.reduce((sum, d) => sum + effectiveTss(d), 0)
+}
+
+function weekPlannedTss(days: typeof planning.plans) {
   return days.reduce((sum, d) => sum + (d.plan?.tss ?? 0), 0)
 }
 
+/** Only show the "planned" footnote when the week actually diverged. */
+function weekDiverged(days: typeof planning.plans) {
+  return days.some(tssDiverged)
+}
+
 function weekHours(days: typeof planning.plans) {
-  const mins = days.reduce((sum, d) => sum + (d.plan?.durationMinutes ?? 0), 0)
+  const mins = days.reduce((sum, d) => sum + effectiveMinutes(d), 0)
   if (!mins) return null
   const h = Math.floor(mins / 60)
   const m = mins % 60
@@ -287,8 +314,19 @@ async function saveNote() {
               <div class="sm:mt-1.5 text-sm font-semibold tabular text-stone-700 leading-tight">
                 {{ weekHours(week.days) ?? '—' }}
               </div>
-              <div class="text-sm font-semibold tabular text-stone-700 leading-tight">
-                {{ weekTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
+              <div class="flex items-baseline gap-1.5 sm:block">
+                <!-- Narrow/vertical layout: inline fraction, like the row cells -->
+                <div class="sm:hidden text-sm font-semibold tabular text-stone-700 leading-tight">
+                  {{ weekTss(week.days) }}<template v-if="weekDiverged(week.days)"><span class="text-[11px] tabular text-stone-300 mx-0.5">⁄</span><span class="text-[11px] tabular text-stone-300">{{ weekPlannedTss(week.days) }}</span></template><span class="text-[10px] font-medium text-stone-400"> TSS</span>
+                </div>
+
+                <!-- sm+ layout: unchanged two-line footnote -->
+                <div class="hidden sm:block text-sm font-semibold tabular text-stone-700 leading-tight">
+                  {{ weekTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
+                </div>
+                <div v-if="weekDiverged(week.days)" class="hidden sm:block text-[11px] tabular text-stone-400 leading-tight">
+                  {{ weekPlannedTss(week.days) }} planned
+                </div>
               </div>
             </div>
           </div>
@@ -381,41 +419,63 @@ async function saveNote() {
             </button>
             <div v-else class="hidden sm:block w-5 shrink-0" />
 
-            <!-- TSS: compact read-only text in narrow/vertical layouts,
-                 editable input from `sm` up -->
+            <!-- TSS: compact read-only text in narrow/vertical layouts;
+                 from `sm` up, an editable input for future days, or static
+                 text for past days (logged value, plus planned when diverged) -->
             <div class="shrink-0">
-              <span class="sm:hidden text-xs tabular" :class="getDraft(day.date).tss ? 'text-stone-500' : 'text-stone-300'">
+              <span v-if="day.isPast" class="sm:hidden text-xs tabular text-stone-500">
+                <template v-if="tssDiverged(day)">{{ day.actual!.tss }}<span class="text-stone-300 mx-0.5">⁄</span><span class="text-stone-300">{{ day.plan?.tss ?? 0 }}</span></template>
+                <template v-else>{{ day.actual?.tss ?? 0 }}</template>
+                <span class="text-stone-300"> TSS</span>
+              </span>
+              <span v-else class="sm:hidden text-xs tabular" :class="getDraft(day.date).tss ? 'text-stone-500' : 'text-stone-300'">
                 {{ getDraft(day.date).tss ?? '—' }}<span class="text-stone-300"> TSS</span>
               </span>
+
+              <span v-if="day.isPast && tssDiverged(day)" class="hidden sm:flex w-14 shrink-0 items-baseline justify-end gap-1 px-1 py-0.5 -mx-1">
+                <span class="text-sm font-semibold tabular text-stone-600">{{ day.actual!.tss }}</span>
+                <span class="text-[11px] tabular text-stone-300 mx-0.5">⁄</span><span class="text-[11px] tabular text-stone-300">{{ day.plan?.tss ?? 0 }}</span>
+              </span>
+              <span v-else-if="day.isPast" class="hidden sm:block w-14 shrink-0 text-right text-sm tabular text-stone-500 px-1 py-0.5 -mx-1">
+                {{ day.actual?.tss ?? 0 }}
+              </span>
               <input
+                v-else
                 v-model.number="getDraft(day.date).tss"
                 type="number"
                 inputmode="numeric"
                 min="0"
                 max="999"
                 placeholder="—"
-                :disabled="day.isPast"
-                class="hidden sm:block w-14 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular transition-colors disabled:cursor-default"
+                class="hidden sm:block w-14 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular transition-colors"
                 @blur="save(day.date)"
                 @keydown.enter="($event.target as HTMLInputElement).blur()"
               >
             </div>
 
-            <!-- Duration: compact read-only text in narrow/vertical layouts,
-                 editable input from `sm` up -->
+            <!-- Duration: compact read-only text in narrow/vertical layouts;
+                 from `sm` up, an editable input for future days, or static
+                 text (the actual logged minutes) for past days -->
             <div class="shrink-0">
-              <span class="sm:hidden text-xs tabular" :class="getDraft(day.date).durationMinutes ? 'text-stone-500' : 'text-stone-300'">
+              <span v-if="day.isPast" class="sm:hidden text-xs tabular text-stone-500">
+                {{ day.actual?.durationMinutes ?? 0 }}<span class="text-stone-300"> min</span>
+              </span>
+              <span v-else class="sm:hidden text-xs tabular" :class="getDraft(day.date).durationMinutes ? 'text-stone-500' : 'text-stone-300'">
                 {{ getDraft(day.date).durationMinutes ?? '—' }}<span class="text-stone-300"> min</span>
               </span>
+
+              <span v-if="day.isPast" class="hidden sm:block w-12 shrink-0 text-right text-sm tabular text-stone-500 px-1 py-0.5 -mx-1">
+                {{ day.actual?.durationMinutes ?? 0 }}
+              </span>
               <input
+                v-else
                 v-model.number="getDraft(day.date).durationMinutes"
                 type="number"
                 inputmode="numeric"
                 min="0"
                 max="999"
                 placeholder="—"
-                :disabled="day.isPast"
-                class="hidden sm:block w-12 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular transition-colors disabled:cursor-default"
+                class="hidden sm:block w-12 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular transition-colors"
                 @blur="save(day.date)"
                 @keydown.enter="($event.target as HTMLInputElement).blur()"
               >

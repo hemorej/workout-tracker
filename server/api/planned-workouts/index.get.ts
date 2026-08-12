@@ -16,7 +16,7 @@
  * }
  */
 
-import { eq, asc } from 'drizzle-orm'
+import { eq, asc, and, inArray } from 'drizzle-orm'
 import { plannedWorkouts, workouts, users } from '../../db/schema'
 import { useDB } from '../../db'
 import { computeMetricsSeries } from '../../utils/tss'
@@ -73,6 +73,22 @@ export default defineEventHandler(async (event) => {
   // from the planned TSS like any future day.
   const todayEntry = series.find(d => d.date === todayStr)
   const isTodayLogged = !!todayEntry && !todayEntry.isRestDay
+
+  // Actual logged totals per day, for past days only — lets the UI show what
+  // really happened instead of just the plan. Summed per date since a day can
+  // have more than one logged workout but the grid is one row per day.
+  const actualRows = await db
+    .select({ date: workouts.date, tss: workouts.tss, durationMinutes: workouts.durationMinutes })
+    .from(workouts)
+    .where(and(eq(workouts.userId, user.id), inArray(workouts.date, dates)))
+
+  const actualByDate = new Map<string, { tss: number, durationMinutes: number }>()
+  for (const row of actualRows) {
+    const existing = actualByDate.get(row.date) ?? { tss: 0, durationMinutes: 0 }
+    existing.tss += row.tss
+    existing.durationMinutes += row.durationMinutes
+    actualByDate.set(row.date, existing)
+  }
 
   // Seed for future-day projections is CTL/ATL as of the END of yesterday —
   // using today's own series entry here would double-count today's load
@@ -144,6 +160,7 @@ export default defineEventHandler(async (event) => {
       plan: plan
         ? { id: plan.id, name: plan.name, type: plan.type, tss: plan.tss, durationMinutes: plan.durationMinutes, notes: plan.notes }
         : null,
+      actual: isPast ? (actualByDate.get(date) ?? { tss: 0, durationMinutes: 0 }) : null,
       projectedCtl: projCtl,
       projectedTsb: Math.round((projCtl - projAtl) * 10) / 10,
     }
