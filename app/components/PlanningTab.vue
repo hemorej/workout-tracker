@@ -75,16 +75,35 @@ function tssDiverged(day: (typeof planning.plans)[number]) {
   return day.actual.tss !== (day.plan?.tss ?? 0)
 }
 
+const todayStr = new Date().toISOString().slice(0, 10)
+
+/** True for the week containing today — the only week where "logged so far" and
+ * "planned for the whole week" are genuinely different quantities worth showing
+ * side by side. */
+function isCurrentWeek(days: typeof planning.plans) {
+  return days.some(d => d.date === todayStr)
+}
+
+/** Headline TSS figure: for the current week, only what's actually been logged
+ * through today (future days in the week don't count yet); for any other week,
+ * the existing actual-once-past/planned-once-future figure. */
 function weekTss(days: typeof planning.plans) {
+  if (isCurrentWeek(days)) {
+    return days.reduce((sum, d) => sum + (d.date <= todayStr ? (d.actual?.tss ?? 0) : 0), 0)
+  }
   return days.reduce((sum, d) => sum + effectiveTss(d), 0)
 }
 
+/** Total planned TSS across the whole week, regardless of past/future. */
 function weekPlannedTss(days: typeof planning.plans) {
   return days.reduce((sum, d) => sum + (d.plan?.tss ?? 0), 0)
 }
 
-/** Only show the "planned" footnote when the week actually diverged. */
+/** Whether to show the "planned" footnote: always for the current week (it's a
+ * different quantity — logged-so-far vs. planned-for-the-week), otherwise only
+ * when a past day actually diverged from its plan. */
 function weekDiverged(days: typeof planning.plans) {
+  if (isCurrentWeek(days)) return true
   return days.some(tssDiverged)
 }
 
@@ -449,6 +468,7 @@ async function saveNote() {
                 placeholder="—"
                 class="hidden sm:block w-14 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular transition-colors"
                 @blur="save(day.date)"
+                @change="save(day.date)"
                 @keydown.enter="($event.target as HTMLInputElement).blur()"
               >
             </div>
@@ -477,6 +497,7 @@ async function saveNote() {
                 placeholder="—"
                 class="hidden sm:block w-12 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular transition-colors"
                 @blur="save(day.date)"
+                @change="save(day.date)"
                 @keydown.enter="($event.target as HTMLInputElement).blur()"
               >
             </div>
