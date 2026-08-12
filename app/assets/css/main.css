@@ -88,3 +88,21 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ── Hide number input spin buttons ────────────────────────────────────── */
+
+/*
+ * .no-spinner
+ * Removes the native up/down stepper on <input type="number"> while leaving
+ * it otherwise editable — used where the stepper's width isn't accounted
+ * for in a tight grid column and throws neighboring columns out of
+ * alignment (e.g. the planning grid's TSS/Min fields).
+ */
+.no-spinner {
+  -moz-appearance: textfield;
+}
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

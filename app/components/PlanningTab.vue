@@ -451,12 +451,14 @@ async function saveNote() {
                 {{ getDraft(day.date).tss ?? '—' }}<span class="text-stone-300"> TSS</span>
               </span>
 
-              <span v-if="day.isPast && tssDiverged(day)" class="hidden sm:flex w-14 shrink-0 items-baseline justify-end gap-1 px-1 py-0.5 -mx-1">
-                <span class="text-sm font-semibold tabular text-stone-600">{{ day.actual!.tss }}</span>
-                <span class="text-[11px] tabular text-stone-300 mx-0.5">⁄</span><span class="text-[11px] tabular text-stone-300">{{ day.plan?.tss ?? 0 }}</span>
-              </span>
-              <span v-else-if="day.isPast" class="hidden sm:block w-14 shrink-0 text-right text-sm tabular text-stone-500 px-1 py-0.5 -mx-1">
-                {{ day.actual?.tss ?? 0 }}
+              <span
+                v-if="day.isPast"
+                class="hidden sm:flex w-14 shrink-0 items-baseline justify-end gap-px px-1 py-0.5 -mx-1"
+                :class="tssDiverged(day) ? 'cursor-help' : ''"
+                :title="tssDiverged(day) ? `Planned: ${day.plan?.tss ?? 0}` : undefined"
+              >
+                <span class="text-sm tabular text-stone-400" :class="tssDiverged(day) ? '' : 'invisible'">*</span>
+                <span class="text-sm tabular" :class="tssDiverged(day) ? 'font-semibold text-stone-600' : 'text-stone-500'">{{ day.actual?.tss ?? 0 }}</span>
               </span>
               <input
                 v-else
@@ -466,7 +468,7 @@ async function saveNote() {
                 min="0"
                 max="999"
                 placeholder="—"
-                class="hidden sm:block w-14 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular transition-colors"
+                class="hidden sm:block w-14 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular no-spinner transition-colors"
                 @blur="save(day.date)"
                 @change="save(day.date)"
                 @keydown.enter="($event.target as HTMLInputElement).blur()"
@@ -495,7 +497,7 @@ async function saveNote() {
                 min="0"
                 max="999"
                 placeholder="—"
-                class="hidden sm:block w-12 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular transition-colors"
+                class="hidden sm:block w-12 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular no-spinner transition-colors"
                 @blur="save(day.date)"
                 @change="save(day.date)"
                 @keydown.enter="($event.target as HTMLInputElement).blur()"
