@@ -57,6 +57,13 @@
       "when": 1785793368925,
       "tag": "0007_square_colleen_wing",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786665600000,
+      "tag": "0008_rename_wahoo_power_bests",
+      "breakpoints": true
     }
   ]
 }

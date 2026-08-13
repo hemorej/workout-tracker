@@ -31,15 +31,26 @@ export default defineNuxtConfig({
      *   STRAVA_CLIENT_ID        → runtimeConfig.stravaClientId
      *   STRAVA_CLIENT_SECRET    → runtimeConfig.stravaClientSecret
      *   STRAVA_REFRESH_TOKEN    → runtimeConfig.stravaRefreshToken
+     *   WAHOO_CLIENT_ID         → runtimeConfig.wahooClientId
+     *   WAHOO_CLIENT_SECRET     → runtimeConfig.wahooClientSecret
+     *   WAHOO_REFRESH_TOKEN     → runtimeConfig.wahooRefreshToken
      */
     runtimeConfig: {
         databaseUrl: process.env.DATABASE_URL,
 
         // Strava API access — single-user, refresh token acquired via a one-time
         // manual OAuth exchange (see CLAUDE.md). No in-app OAuth flow.
+        // Kept in place but currently unused by the app (superseded by Wahoo
+        // below) — pending removal once Wahoo has been tested end to end.
         stravaClientId: process.env.STRAVA_CLIENT_ID,
         stravaClientSecret: process.env.STRAVA_CLIENT_SECRET,
         stravaRefreshToken: process.env.STRAVA_REFRESH_TOKEN,
+
+        // Wahoo Cloud API access — single-user, refresh token acquired via a
+        // one-time manual OAuth exchange (see CLAUDE.md). No in-app OAuth flow.
+        wahooClientId: process.env.WAHOO_CLIENT_ID,
+        wahooClientSecret: process.env.WAHOO_CLIENT_SECRET,
+        wahooRefreshToken: process.env.WAHOO_REFRESH_TOKEN,
 
         /**
          * nuxt-auth-utils session configuration.

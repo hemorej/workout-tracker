@@ -30,13 +30,19 @@ import { useWorkoutsStore, type LogFilters } from '~/stores/workouts'
 import { usePlanningStore } from '~/stores/planning'
 import type { WorkoutPrefill } from '~/components/AddWorkoutModal.vue'
 
-interface StravaRideSummary {
+interface WahooRideSummary {
   id: number
   name: string
   startDateLocal: string
   movingTimeSeconds: number
   distanceMeters: number
-  rideType: 'trainer' | 'outdoor'
+  rideType: 'trainer' | 'outdoor' | null
+}
+
+interface WahooActivityDetail {
+  ride: WahooRideSummary
+  tss: number
+  powerBests: { duration: string, watts: number }[]
 }
 
 // Protect this page — unauthenticated users are sent to /login
@@ -145,11 +151,15 @@ function closeAddWorkout() {
   showAddWorkout.value = false
 }
 
-// ── "Mark as completed" — Strava activity picker ────────────────────────
+// ── "Mark as completed" — Wahoo activity picker ──────────────────────────
 const showActivityPicker = ref(false)
 const activityPickerLoading = ref(false)
 const activityPickerError = ref<string | null>(null)
-const recentRides = ref<StravaRideSummary[]>([])
+const recentRides = ref<WahooRideSummary[]>([])
+// Set to the ride being resolved (FIT download + parse) while the user waits
+// to enter the Add Workout modal — used to show a per-row loading state and
+// block picking a second ride mid-fetch.
+const resolvingActivityId = ref<number | null>(null)
 
 async function onMarkCompleted() {
   showActivityPicker.value = true
@@ -158,11 +168,11 @@ async function onMarkCompleted() {
   recentRides.value = []
 
   try {
-    const { activities } = await $fetch<{ activities: StravaRideSummary[] }>('/api/strava/recent-rides')
+    const { activities } = await $fetch<{ activities: WahooRideSummary[] }>('/api/wahoo/recent-rides')
     recentRides.value = activities
   }
   catch {
-    activityPickerError.value = "Couldn't reach Strava. Try again in a moment."
+    activityPickerError.value = "Couldn't reach Wahoo. Try again in a moment."
   }
   finally {
     activityPickerLoading.value = false
@@ -192,15 +202,49 @@ function formatRideDate(startDateLocal: string): string {
   })
 }
 
-function selectActivity(activity: StravaRideSummary) {
-  pendingPrefill.value = {
-    date: activity.startDateLocal.slice(0, 10),
-    name: activity.name,
-    durationMinutes: Math.round(activity.movingTimeSeconds / 60),
-    distanceKm: Math.round((activity.distanceMeters / 1000) * 10) / 10,
-    tss: todayPlan.value?.plan?.tss ?? null,
-    rideType: activity.rideType,
+/**
+ * Downloads and parses the ride's FIT file (TSS + power bests) before
+ * opening the Add Workout modal, so those fields arrive already filled in —
+ * AddWorkoutModal only reads `prefill` once at mount, so this has to
+ * resolve before `showAddWorkout` flips to true, not after.
+ *
+ * Falls back to a base prefill (no TSS/power bests) if the FIT file can't
+ * be read, rather than blocking the user from logging the ride manually.
+ */
+async function selectActivity(activity: WahooRideSummary) {
+  resolvingActivityId.value = activity.id
+
+  try {
+    const detail = await $fetch<WahooActivityDetail>(`/api/wahoo/activities/${activity.id}`)
+    pendingPrefill.value = {
+      date: detail.ride.startDateLocal.slice(0, 10),
+      name: detail.ride.name,
+      durationMinutes: Math.round(detail.ride.movingTimeSeconds / 60),
+      distanceKm: detail.ride.distanceMeters > 0 ? Math.round((detail.ride.distanceMeters / 1000) * 10) / 10 : null,
+      tss: detail.tss,
+      rideType: detail.ride.rideType,
+      powerBests: detail.powerBests,
+    }
   }
+  catch {
+    toast.add({
+      title: "Couldn't read power data",
+      description: "This ride's FIT file couldn't be parsed — fill in TSS and power bests manually.",
+      color: 'warning',
+    })
+    pendingPrefill.value = {
+      date: activity.startDateLocal.slice(0, 10),
+      name: activity.name,
+      durationMinutes: Math.round(activity.movingTimeSeconds / 60),
+      distanceKm: activity.distanceMeters > 0 ? Math.round((activity.distanceMeters / 1000) * 10) / 10 : null,
+      tss: todayPlan.value?.plan?.tss ?? null,
+      rideType: activity.rideType,
+    }
+  }
+  finally {
+    resolvingActivityId.value = null
+  }
+
   showActivityPicker.value = false
   showAddWorkout.value = true
 }
@@ -984,14 +1028,14 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
       </div>
     </Teleport>
 
-    <!-- ── Strava Activity Picker ────────────────────────────────────── -->
+    <!-- ── Wahoo Activity Picker ─────────────────────────────────────── -->
     <Teleport to="body">
       <div
         v-if="showActivityPicker"
         class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
         role="dialog"
         aria-modal="true"
-        aria-label="Pick a Strava ride"
+        aria-label="Pick a Wahoo ride"
       >
         <div
           class="fixed inset-0 bg-black/25 backdrop-blur-sm"
@@ -1002,7 +1046,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           <div class="flex items-start justify-between mb-6">
             <div>
               <h2 class="text-lg font-semibold text-stone-900">Mark as completed</h2>
-              <p class="text-sm text-stone-400 mt-0.5">Pick the Strava ride that matches this workout.</p>
+              <p class="text-sm text-stone-400 mt-0.5">Pick the Wahoo ride that matches this workout.</p>
             </div>
             <button
               class="text-stone-300 hover:text-stone-600 transition-colors ml-4 mt-0.5"
@@ -1031,7 +1075,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
 
           <!-- Empty -->
           <div v-else-if="recentRides.length === 0" class="text-center py-6">
-            <p class="text-sm text-stone-500">No recent rides found on Strava.</p>
+            <p class="text-sm text-stone-500">No recent rides found on Wahoo.</p>
           </div>
 
           <!-- Activity list -->
@@ -1047,15 +1091,15 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
                   {{ formatRideDate(activity.startDateLocal) }}
                   &nbsp;·&nbsp;
                   {{ formatDuration(Math.round(activity.movingTimeSeconds / 60)) }}
-                  &nbsp;·&nbsp;
-                  {{ (activity.distanceMeters / 1000).toFixed(1) }} km
                 </p>
               </div>
               <button
-                class="shrink-0 text-sm font-semibold text-orange-600 hover:text-orange-700 transition-colors"
+                class="shrink-0 flex items-center gap-2 text-sm font-semibold text-orange-600 hover:text-orange-700 transition-colors disabled:opacity-50"
+                :disabled="resolvingActivityId !== null"
                 @click="selectActivity(activity)"
               >
-                Use this
+                <BikeSpinner v-if="resolvingActivityId === activity.id" :size="14" />
+                {{ resolvingActivityId === activity.id ? 'Reading FIT file…' : 'Use this' }}
               </button>
             </li>
           </ul>

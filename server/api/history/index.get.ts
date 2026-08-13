@@ -5,11 +5,12 @@
  * plus a power-bests panel (last 8 weeks vs all time) and current FTP.
  *
  * The power-bests panel merges two sources: manually-entered bests tied to
- * a logged workout (`power_bests`), and bests derived from Strava activity
- * power streams (`strava_power_bests`, populated by
- * scripts/sync-power-bests.ts). They're kept as separate tables — Strava's
- * own power numbers don't always match the bike computer — but shown
- * together here as "best known value from either source".
+ * a logged workout (`power_bests`), and bests derived from Wahoo FIT files
+ * (`wahoo_power_bests`, populated by server/api/wahoo/activities/[id].get.ts
+ * whenever a ride is previewed via the "Mark completed" picker). They're
+ * kept as separate tables — computed values may not always match what the
+ * user chooses to log — but shown together here as "best known value from
+ * either source".
  *
  * Response shape:
  * {
@@ -23,7 +24,7 @@
  */
 
 import { eq, asc, inArray } from 'drizzle-orm'
-import { workouts, powerBests as powerBestsTable, stravaPowerBests, POWER_BEST_DURATIONS } from '../../db/schema'
+import { workouts, powerBests as powerBestsTable, wahooPowerBests, POWER_BEST_DURATIONS } from '../../db/schema'
 import { useDB } from '../../db'
 
 type GroupBy = 'week' | 'month' | 'year'
@@ -162,7 +163,7 @@ export default defineEventHandler(async (event) => {
   const workoutDateById = new Map(allWorkouts.map((w) => [w.id, w.date]))
 
   // Merge candidates from both sources — manual entries (tied to a workout date)
-  // and Strava-derived bests (tied to an activity date) — before ranking.
+  // and Wahoo-derived bests (tied to an activity date) — before ranking.
   const candidatesByDuration = new Map<string, { watts: number; date: string }[]>()
   function addCandidate(duration: string, watts: number, date: string) {
     const list = candidatesByDuration.get(duration)
@@ -175,16 +176,16 @@ export default defineEventHandler(async (event) => {
     if (date) addCandidate(pb.duration, pb.watts, date)
   }
 
-  const allStravaBests = await db
+  const allWahooBests = await db
     .select({
-      duration: stravaPowerBests.duration,
-      watts: stravaPowerBests.watts,
-      achievedAt: stravaPowerBests.achievedAt,
+      duration: wahooPowerBests.duration,
+      watts: wahooPowerBests.watts,
+      achievedAt: wahooPowerBests.achievedAt,
     })
-    .from(stravaPowerBests)
+    .from(wahooPowerBests)
 
-  for (const sb of allStravaBests) {
-    addCandidate(sb.duration, sb.watts, sb.achievedAt)
+  for (const wb of allWahooBests) {
+    addCandidate(wb.duration, wb.watts, wb.achievedAt)
   }
 
   const last8wBests: Record<string, number> = {}

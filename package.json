@@ -20,9 +20,7 @@
         "start": "node .output/server/index.mjs",
         "reset-password": "pnpm dlx dotenv-cli -e .env -- node --experimental-strip-types scripts/reset-password.ts",
         "zwift-tss": "node --experimental-strip-types scripts/zwift-workout-tss.ts",
-        "workout-search": "node --experimental-strip-types scripts/workout-search.ts",
-        "sync-power-bests": "pnpm dlx dotenv-cli -e .env -- node --experimental-strip-types scripts/sync-power-bests.ts",
-        "analyze-fit": "node --experimental-strip-types scripts/analyze-fit.ts"
+        "workout-search": "node --experimental-strip-types scripts/workout-search.ts"
     },
     "dependencies": {
         "@adonisjs/hash": "^10.1.0",
@@ -30,6 +28,7 @@
         "@nuxt/ui": "^4.10.0",
         "@pinia/nuxt": "^1.0.1",
         "drizzle-orm": "0.45.2",
+        "fit-file-parser": "^4.1.0",
         "nuxt": "^4.5.2",
         "nuxt-auth-utils": "^0.5.30",
         "pg": "8.22.0",
@@ -45,7 +44,6 @@
         "@types/node": "^26.2.0",
         "@types/pg": "^8.20.4",
         "drizzle-kit": "^0.31.10",
-        "fit-file-parser": "^4.1.0",
         "typescript": "^5.7.0",
         "vue-tsc": "^3.3.8"
     }
