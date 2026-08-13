@@ -54,7 +54,7 @@ export const CoachWorkoutSchema = z.object({
   name: z.string().describe('short workout title, e.g. "3x10min Sweet Spot"'),
   blocks: z.array(z.discriminatedUnion('type', [RampBlockSchema, SteadyBlockSchema, IntervalBlockSchema]))
     .describe('ordered list of workout blocks — warmup first, cooldown last'),
-  fuellingGuide: z.string().describe('pre-ride, during-ride, and post-ride fuelling/hydration guidance for this specific workout'),
+  fuellingGuide: z.string().describe('pre-ride, during-ride, and post-ride fuelling/hydration guidance for this specific workout, as three short paragraphs separated by blank lines (one per phase, each starting with a "Pre-ride:"/"During:"/"Post-ride:" label)'),
 })
 
 export type CoachWorkout = z.infer<typeof CoachWorkoutSchema>

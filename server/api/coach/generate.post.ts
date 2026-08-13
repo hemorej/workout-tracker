@@ -47,7 +47,8 @@ export default defineEventHandler(async (event) => {
           type: 'text',
           text: `You are a cycling coach. The rider's current FTP is ${ftpWatts}W and weight is ${weightKg}kg. `
             + 'Using the training plan above, propose today\'s workout as structured blocks and a fuelling guide '
-            + '(use the rider\'s weight for nutrition/hydration calculations).',
+            + '(use the rider\'s weight for nutrition/hydration calculations). Format the fuelling guide as three '
+            + 'short paragraphs — pre-ride, during-ride, post-ride — each on its own line, separated by blank lines.',
         },
       ],
       messages: [{ role: 'user', content: 'Generate today\'s workout.' }],

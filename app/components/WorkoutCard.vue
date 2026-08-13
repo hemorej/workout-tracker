@@ -328,7 +328,7 @@ function confirmDelete() {
       <!-- Planned workout (today, not yet logged) -->
       <div v-else-if="isPlannedDay">
         <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-          <span class="text-base font-medium text-stone-500 italic truncate max-w-xs">
+          <span class="text-base font-medium text-stone-500 italic max-w-xs">
             {{ plannedPlan?.name || 'Planned workout' }}
           </span>
           <span v-if="plannedDurationDisplay" class="text-sm text-stone-400">{{ plannedDurationDisplay }}</span>
@@ -341,7 +341,7 @@ function confirmDelete() {
              own second line (w-full) instead of wrapping wherever the title happens to
              break; at sm+ it collapses back into the same flex row via sm:contents. -->
         <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-          <span class="text-base font-semibold text-stone-800 truncate max-w-xs">
+          <span class="text-base font-semibold text-stone-800 max-w-xs">
             {{ day.workout?.name }}
           </span>
           <div class="flex items-baseline gap-x-2.5 w-full sm:w-auto sm:contents">
