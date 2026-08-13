@@ -8,6 +8,20 @@
  */
 
 @import "tailwindcss";
+/*
+ * Required by @nuxt/ui (see its README's installation steps) — pulls in its
+ * generated .nuxt/ui.css, which declares --ui-* theme tokens and, critically,
+ * an explicit `@source "./ui"` directive. Without that, Tailwind's automatic
+ * content detection never scans .nuxt/ui/*.ts (the compiled per-component
+ * theme files @nuxt/ui components read their classes from) because .nuxt/ is
+ * gitignored and Tailwind v4 skips gitignored paths by default. Missing this
+ * import silently broke every @nuxt/ui component's internal styling — most
+ * visibly the toast notifications (collapsed to a 0x0 viewport, effectively
+ * invisible), but also things like UButton's color/ring/focus classes that
+ * were easy to miss since hand-written classes on those components still
+ * applied normally.
+ */
+@import "@nuxt/ui";
 
 /*
  * Hanken Grotesk, self-hosted via @fontsource-variable — vendored as an npm
