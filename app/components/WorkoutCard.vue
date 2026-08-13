@@ -22,6 +22,8 @@ import type { PlannedDay } from '~/stores/planning'
 interface Props {
   day: DayEntry
   plannedWorkout?: PlannedDay | null
+  /** True while an auto-build (AI) request is in flight for this day's plan. */
+  isAutoBuilding?: boolean
 }
 
 const props = defineProps<Props>()
@@ -29,6 +31,7 @@ const emit = defineEmits<{
   (e: 'delete', id: number): void
   (e: 'mark-completed'): void
   (e: 'go-to-builder'): void
+  (e: 'auto-build'): void
 }>()
 
 // ── Date formatting ──────────────────────────────────────────────────────
@@ -126,6 +129,19 @@ const mobileDuration = computed(() => {
   if (props.day.isRestDay && !isPlannedDay.value) return null
   return isPlannedDay.value ? plannedDurationDisplay.value : durationDisplay.value
 })
+
+// ── Planned pill: start from scratch vs auto-build ───────────────────────
+const showBuildChoice = ref(false)
+
+function chooseFromScratch() {
+  showBuildChoice.value = false
+  emit('go-to-builder')
+}
+
+function chooseAutoBuild() {
+  showBuildChoice.value = false
+  emit('auto-build')
+}
 
 // ── Delete confirmation ──────────────────────────────────────────────────
 const showDeleteConfirm = ref(false)
@@ -226,6 +242,10 @@ function confirmDelete() {
       >
         RPE {{ day.workout?.rpe }}/10
       </span>
+      <!-- Plain, non-interactive-in-practice pill on mobile: the Workout
+           Builder tab (and thus both "from scratch" and "auto-build") is
+           unavailable below `lg`, so there's no choice to offer here — see
+           the desktop pill below for the real interaction. -->
       <button
         v-else-if="isPlannedDay"
         title="Go to workout builder"
@@ -383,14 +403,28 @@ function confirmDelete() {
       >
         RPE {{ day.workout?.rpe }}/10
       </span>
-      <button
-        v-else-if="isPlannedDay"
-        title="Go to workout builder"
-        class="inline-block text-xs text-violet-600 font-semibold bg-violet-100 border border-violet-200 rounded-full px-2.5 py-0.5 whitespace-nowrap cursor-pointer transition-colors hover:bg-violet-200"
-        @click="emit('go-to-builder')"
-      >
-        Planned
-      </button>
+      <template v-else-if="isPlannedDay">
+        <BikeSpinner v-if="isAutoBuilding" :size="20" />
+        <div v-else-if="showBuildChoice" class="flex items-center gap-2">
+          <button class="text-xs text-violet-600 hover:text-violet-700 font-semibold" @click="chooseFromScratch">
+            From scratch
+          </button>
+          <button class="text-xs text-violet-600 hover:text-violet-700 font-semibold" @click="chooseAutoBuild">
+            Auto-build
+          </button>
+          <button class="text-xs text-stone-300 hover:text-stone-500" @click="showBuildChoice = false">
+            Cancel
+          </button>
+        </div>
+        <button
+          v-else
+          title="Go to workout builder"
+          class="inline-block text-xs text-violet-600 font-semibold bg-violet-100 border border-violet-200 rounded-full px-2.5 py-0.5 whitespace-nowrap cursor-pointer transition-colors hover:bg-violet-200"
+          @click="showBuildChoice = true"
+        >
+          Planned
+        </button>
+      </template>
 
       <!-- Mark as completed — primary action for a planned-but-not-logged day.
            Rendered at low opacity by default (not hover-gated) so it's reachable on touch. -->

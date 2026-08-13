@@ -34,9 +34,14 @@ export default defineNuxtConfig({
      *   WAHOO_CLIENT_ID         → runtimeConfig.wahooClientId
      *   WAHOO_CLIENT_SECRET     → runtimeConfig.wahooClientSecret
      *   WAHOO_REFRESH_TOKEN     → runtimeConfig.wahooRefreshToken
+     *   ANTHROPIC_API_KEY       → runtimeConfig.anthropicApiKey
      */
     runtimeConfig: {
         databaseUrl: process.env.DATABASE_URL,
+
+        // Anthropic API access — AI coach workout generation. Static key,
+        // no rotation flow (unlike Strava/Wahoo).
+        anthropicApiKey: process.env.ANTHROPIC_API_KEY,
 
         // Strava API access — single-user, refresh token acquired via a one-time
         // manual OAuth exchange (see CLAUDE.md). No in-app OAuth flow.

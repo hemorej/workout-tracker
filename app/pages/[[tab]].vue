@@ -28,6 +28,7 @@
 import { useAuthStore } from '~/stores/auth'
 import { useWorkoutsStore, type LogFilters } from '~/stores/workouts'
 import { usePlanningStore } from '~/stores/planning'
+import { useCoachStore, type CoachWorkout } from '~/stores/coach'
 import type { WorkoutPrefill } from '~/components/AddWorkoutModal.vue'
 
 interface StravaRideSummary {
@@ -87,6 +88,7 @@ function setTab(id: TabId) {
 const auth = useAuthStore()
 const workouts = useWorkoutsStore()
 const planning = usePlanningStore()
+const coach = useCoachStore()
 const toast = useToast()
 
 // Today's date as YYYY-MM-DD (local time, matches DayEntry.date format)
@@ -146,6 +148,33 @@ function goToBuilder() {
   const name = todayPlan.value?.plan?.name
   activeTab.value = 'builder'
   navigateTo({ path: '/builder', query: name ? { planName: name } : undefined })
+}
+
+// ── "Auto-build" — AI-generated workout via the coach endpoint ───────────
+// Only today's row can ever show the Planned pill (plannedWorkout is only
+// passed for day.date === todayStr, see the WorkoutCard usage below), so a
+// single flag is enough — no per-row keying needed.
+const isAutoBuilding = ref(false)
+
+async function onAutoBuild() {
+  if (window.innerWidth < 1024) return
+  isAutoBuilding.value = true
+  try {
+    const workout = await $fetch<CoachWorkout>('/api/coach/generate', { method: 'POST' })
+    coach.setPendingWorkout(workout)
+    activeTab.value = 'builder'
+    navigateTo({ path: '/builder' })
+  }
+  catch {
+    toast.add({
+      title: "Couldn't generate a workout",
+      description: 'Make sure a training plan is set for your account, then try again.',
+      color: 'error',
+    })
+  }
+  finally {
+    isAutoBuilding.value = false
+  }
 }
 
 function openAddWorkout() {
@@ -1028,9 +1057,11 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           :key="day.date"
           :day="day"
           :planned-workout="day.date === todayStr ? todayPlan : null"
+          :is-auto-building="isAutoBuilding"
           @delete="onDeleteWorkout"
           @mark-completed="onMarkCompleted"
           @go-to-builder="goToBuilder"
+          @auto-build="onAutoBuild"
         />
       </div>
 

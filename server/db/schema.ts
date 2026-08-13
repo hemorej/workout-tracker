@@ -65,6 +65,20 @@ export const users = pgTable('users', {
    */
   initialAtl: integer('initial_atl').default(0).notNull(),
 
+  /**
+   * Free-text training plan, used as context for the AI coach's workout
+   * generation (see server/api/coach/generate.post.ts). Not committed to
+   * the repo — edit directly via `pnpm db:studio` or SQL when it changes.
+   */
+  trainingPlan: text('training_plan'),
+
+  /**
+   * Current body weight in kg, used for nutrition/hydration calculations
+   * in AI-generated fuelling guides. A single current value, not a
+   * per-workout history — update directly via `pnpm db:studio` or SQL.
+   */
+  weightKg: real('weight_kg'),
+
   /** Row creation timestamp (UTC) */
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
