@@ -84,7 +84,7 @@ interface StravaActivity {
 }
 
 /** Fetches the most recent Strava activities of type "Ride", newest first. */
-export async function fetchRecentRides(limit = 3): Promise<StravaRideSummary[]> {
+export async function fetchRecentStravaRides(limit = 3): Promise<StravaRideSummary[]> {
   const accessToken = await getStravaAccessToken()
 
   const activities = await $fetch<StravaActivity[]>('https://www.strava.com/api/v3/athlete/activities', {
