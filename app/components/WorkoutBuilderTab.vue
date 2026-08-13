@@ -110,7 +110,10 @@ async function saveToPlannedWorkout() {
       body: {
         date: saveDate.value,
         name: title.value || null,
-        type: null, // AI-generated/manually-built workouts mix zones; not classified
+        // No `type` here: AI-generated/manually-built workouts mix zones, so this
+        // save shouldn't classify one — and omitting the key (rather than sending
+        // `type: null`) lets the PUT endpoint preserve whatever zone type is
+        // already set for this date (e.g. from the Planning tab).
         tss: totalTSS.value,
         durationMinutes: Math.round(totalDuration.value / 60),
         notes: fuellingNotes.value || null,

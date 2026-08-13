@@ -407,10 +407,10 @@ function confirmDelete() {
         <BikeSpinner v-if="isAutoBuilding" :size="20" />
         <div v-else-if="showBuildChoice" class="flex items-center gap-2">
           <button class="text-xs text-violet-600 hover:text-violet-700 font-semibold" @click="chooseFromScratch">
-            From scratch
+            Manual
           </button>
           <button class="text-xs text-violet-600 hover:text-violet-700 font-semibold" @click="chooseAutoBuild">
-            Auto-build
+            Auto
           </button>
           <button class="text-xs text-stone-300 hover:text-stone-500" @click="showBuildChoice = false">
             Cancel
