@@ -156,9 +156,16 @@ function goToBuilder() {
 // single flag is enough — no per-row keying needed.
 const isAutoBuilding = ref(false)
 
+// Guards against an accidental tab close/refresh while the request is in
+// flight — the overlay above already blocks in-app navigation.
+function preventUnloadDuringAutoBuild(e: BeforeUnloadEvent) {
+  e.preventDefault()
+}
+
 async function onAutoBuild() {
   if (window.innerWidth < 1024) return
   isAutoBuilding.value = true
+  window.addEventListener('beforeunload', preventUnloadDuringAutoBuild)
   try {
     const workout = await $fetch<CoachWorkout>('/api/coach/generate', { method: 'POST' })
     coach.setPendingWorkout(workout)
@@ -178,6 +185,7 @@ async function onAutoBuild() {
   }
   finally {
     isAutoBuilding.value = false
+    window.removeEventListener('beforeunload', preventUnloadDuringAutoBuild)
   }
 }
 
@@ -617,6 +625,17 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
 <template>
   <div class="min-h-screen" style="background-color: #fafaf9;">
     <title>Sprocket</title>
+
+    <!-- ── Auto-build overlay — blocks the page while the AI coach generates
+         a workout, so an accidental click/back-nav can't interrupt the
+         in-flight request before it lands in the builder ──────────────── -->
+    <div
+      v-if="isAutoBuilding"
+      class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[#fafaf9]/95 backdrop-blur-sm"
+    >
+      <BikeSpinner :size="96" class="text-orange-600" />
+      <p class="text-sm font-medium text-stone-500">Building your workout…</p>
+    </div>
 
     <!-- ── Header + tab nav — pinned together to the top on scroll ──── -->
     <div ref="stickyBar" class="sticky top-0 z-10">
