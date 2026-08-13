@@ -275,6 +275,26 @@ export const wahooPowerBests = pgTable(
 )
 
 // ---------------------------------------------------------------------------
+// wahoo_tokens
+//
+// Single-row table holding the current Wahoo OAuth refresh token. Wahoo
+// rotates the refresh token on every use (unlike Strava's, which never
+// expires under normal use) — server/utils/wahoo.ts persists the newest
+// value here so a process restart/deploy can pick up where the last one
+// left off instead of falling back to the (by then stale) WAHOO_REFRESH_TOKEN
+// env var. See CLAUDE.md's Wahoo integration section.
+// ---------------------------------------------------------------------------
+
+export const wahooTokens = pgTable('wahoo_tokens', {
+  /** Always 1 — this table only ever holds a single row. */
+  id: integer('id').primaryKey().default(1),
+
+  refreshToken: text('refresh_token').notNull(),
+
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+// ---------------------------------------------------------------------------
 // Relations (used by Drizzle's relational query API)
 // ---------------------------------------------------------------------------
 
@@ -315,6 +335,7 @@ export type Workout = typeof workouts.$inferSelect
 export type PlannedWorkout = typeof plannedWorkouts.$inferSelect
 export type PowerBest = typeof powerBests.$inferSelect
 export type WahooPowerBest = typeof wahooPowerBests.$inferSelect
+export type WahooToken = typeof wahooTokens.$inferSelect
 
 /** Insert types (id and createdAt are optional / auto-generated) */
 export type NewUser = typeof users.$inferInsert
@@ -322,3 +343,4 @@ export type NewWorkout = typeof workouts.$inferInsert
 export type NewPlannedWorkout = typeof plannedWorkouts.$inferInsert
 export type NewPowerBest = typeof powerBests.$inferInsert
 export type NewWahooPowerBest = typeof wahooPowerBests.$inferInsert
+export type NewWahooToken = typeof wahooTokens.$inferInsert

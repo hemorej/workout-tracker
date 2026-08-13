@@ -64,6 +64,13 @@
       "when": 1786665600000,
       "tag": "0008_rename_wahoo_power_bests",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786638098856,
+      "tag": "0009_salty_blockbuster",
+      "breakpoints": true
     }
   ]
 }

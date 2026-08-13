@@ -12,18 +12,23 @@
  *
  * CONFIRMED: Wahoo rotates the refresh token on every use — each refresh
  * response's `refresh_token` invalidates the previous one. WAHOO_REFRESH_TOKEN
- * is only ever read as the *first* refresh token for a given process; every
- * refresh after that reuses whatever Wahoo returned last time, held in
- * `_cachedRefreshToken`. That means the token in .env goes stale the moment
- * this process performs its first successful refresh — if the process
- * restarts (deploy, dev server restart, crash), the .env value will no
- * longer work and Wahoo returns invalid_grant. When that happens, re-run the
- * one-time OAuth exchange (see CLAUDE.md) for a new token — there is no way
- * to recover in-process. A rotated token is logged at `warn` specifically so
- * it's visible and copyable when this happens.
+ * (the .env value) is only ever used as a *bootstrap* fallback, for a brand
+ * new install with no `wahoo_tokens` row yet. Every refresh after the first
+ * reads/writes the `wahoo_tokens` table (see server/db/schema.ts) instead —
+ * that's what lets a process restart (deploy, dev server restart, crash)
+ * keep working without a manual re-authorization: the next process reads
+ * the last-rotated token straight out of the DB rather than falling back to
+ * the by-then-stale .env value. `_cachedRefreshToken` remains as an
+ * in-process fast path so a hot refresh doesn't need a DB round trip.
+ * `invalid_grant` is now only expected if the `wahoo_tokens` row itself gets
+ * lost (e.g. a fresh DB restore that predates this table) — see CLAUDE.md
+ * for the one-time OAuth exchange to recover in that case.
  */
 
+import { eq } from 'drizzle-orm'
 import { parseFitFile, type ParsedFitMetrics } from './fit'
+import { useDB } from '../db'
+import { wahooTokens } from '../db/schema'
 
 interface CachedToken {
   accessToken: string
@@ -31,7 +36,7 @@ interface CachedToken {
 }
 
 let _cachedToken: CachedToken | null = null
-/** Overrides config.wahooRefreshToken once Wahoo has rotated it at least once this process. */
+/** In-process fast path once a refresh has happened at least once — see module docblock. */
 let _cachedRefreshToken: string | null = null
 
 interface WahooTokenResponse {
@@ -40,9 +45,36 @@ interface WahooTokenResponse {
   refresh_token?: string
 }
 
+/** Reads the persisted refresh token, if any. Returns null (rather than throwing) on DB errors — the caller falls back to .env. */
+async function getStoredRefreshToken(): Promise<string | null> {
+  try {
+    const db = useDB()
+    const [row] = await db.select().from(wahooTokens).where(eq(wahooTokens.id, 1)).limit(1)
+    return row?.refreshToken ?? null
+  } catch (err: unknown) {
+    const e = err as Record<string, any>
+    getLogger('wahoo').error('wahoo.read_stored_refresh_token_failed', { err: e?.message })
+    return null
+  }
+}
+
+/** Persists the newest rotated refresh token. Logs and swallows DB errors — the in-memory cache still keeps this process working either way. */
+async function persistRefreshToken(refreshToken: string): Promise<void> {
+  try {
+    const db = useDB()
+    await db
+      .insert(wahooTokens)
+      .values({ id: 1, refreshToken, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: wahooTokens.id, set: { refreshToken, updatedAt: new Date() } })
+  } catch (err: unknown) {
+    const e = err as Record<string, any>
+    getLogger('wahoo').error('wahoo.persist_refresh_token_failed', { err: e?.message })
+  }
+}
+
 async function refreshAccessToken(): Promise<CachedToken> {
   const config = useRuntimeConfig()
-  const refreshToken = _cachedRefreshToken ?? config.wahooRefreshToken
+  const refreshToken = _cachedRefreshToken ?? (await getStoredRefreshToken()) ?? config.wahooRefreshToken
 
   let response: WahooTokenResponse
   try {
@@ -63,7 +95,8 @@ async function refreshAccessToken(): Promise<CachedToken> {
 
   if (response.refresh_token && response.refresh_token !== refreshToken) {
     _cachedRefreshToken = response.refresh_token
-    getLogger('wahoo').warn('wahoo.refresh_token_rotated', { newRefreshToken: response.refresh_token })
+    await persistRefreshToken(response.refresh_token)
+    getLogger('wahoo').info('wahoo.refresh_token_rotated', { persisted: true })
   }
 
   const token: CachedToken = {
