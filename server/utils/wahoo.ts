@@ -192,6 +192,19 @@ export interface WahooActivityDetail {
 }
 
 /**
+ * Finds the most recent Wahoo biking workout that started on the given
+ * calendar day (local date, "YYYY-MM-DD"). Used to match a Strava-sourced
+ * activity (the picker's source of truth, see CLAUDE.md's Strava/Wahoo
+ * refactor) to its corresponding Wahoo workout so the original FIT file can
+ * be fetched — the user only ever logs one ride per day, so same-day is a
+ * reliable match without needing to correlate by id or duration.
+ */
+export async function findRideByDate(dateLocal: string, searchLimit = 15): Promise<WahooRideSummary | null> {
+  const rides = await fetchRecentRides(searchLimit)
+  return rides.find((r) => r.startDateLocal.slice(0, 10) === dateLocal) ?? null
+}
+
+/**
  * Fetches a single workout's FIT file and parses it against the given FTP.
  * Throws if the workout has no associated FIT file (workout_summary.file)
  * or the file has no power data.

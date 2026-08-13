@@ -6,8 +6,10 @@
  *
  * The power-bests panel merges two sources: manually-entered bests tied to
  * a logged workout (`power_bests`), and bests derived from Wahoo FIT files
- * (`wahoo_power_bests`, populated by server/api/wahoo/activities/[id].get.ts
- * whenever a ride is previewed via the "Mark completed" picker). They're
+ * (`wahoo_power_bests`, populated by server/api/wahoo/by-date.get.ts
+ * whenever an outdoor ride is previewed via the "Mark completed" picker —
+ * indoor/virtual rides go through the manual-upload path in
+ * server/api/fit/upload.post.ts instead, which does not write here). They're
  * kept as separate tables — computed values may not always match what the
  * user chooses to log — but shown together here as "best known value from
  * either source".

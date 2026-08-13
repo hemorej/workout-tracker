@@ -32,6 +32,8 @@ const DURATION_SECONDS: Record<PowerBestDuration, number> = {
 interface FitRecord {
   timestamp?: Date
   power?: number
+  /** Cumulative distance in meters (lengthUnit: 'm' below) */
+  distance?: number
 }
 
 export interface ParsedFitMetrics {
@@ -43,6 +45,8 @@ export interface ParsedFitMetrics {
   tss: number
   /** Best rolling-average power per duration bucket the ride was long enough to fill. */
   bests: Partial<Record<PowerBestDuration, number>>
+  /** Total distance recorded, if the device provided it (0 for trainer rides with no distance data). */
+  distanceMeters: number
 }
 
 function mean(arr: number[] | Float64Array): number {
@@ -124,6 +128,12 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     throw new Error('No power data found in FIT file — not a power-meter/trainer ride?')
   }
 
+  // distance is cumulative — the last record with a value holds the ride total.
+  let distanceMeters = 0
+  for (const r of records) {
+    if (r.distance !== undefined) distanceMeters = r.distance
+  }
+
   const avgPower = mean(watts)
   const maxPower = Math.max(...watts)
   const np = normalizedPower(watts)
@@ -139,5 +149,6 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     intensityFactor: Math.round(intensityFactor * 100) / 100,
     tss: Math.round(tss),
     bests: computeBests(watts),
+    distanceMeters: Math.round(distanceMeters),
   }
 }

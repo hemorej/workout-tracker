@@ -30,19 +30,25 @@ import { useWorkoutsStore, type LogFilters } from '~/stores/workouts'
 import { usePlanningStore } from '~/stores/planning'
 import type { WorkoutPrefill } from '~/components/AddWorkoutModal.vue'
 
-interface WahooRideSummary {
+interface StravaRideSummary {
   id: number
   name: string
   startDateLocal: string
   movingTimeSeconds: number
   distanceMeters: number
-  rideType: 'trainer' | 'outdoor' | null
+  rideType: 'trainer' | 'outdoor'
 }
 
-interface WahooActivityDetail {
-  ride: WahooRideSummary
+/** Shape shared by both FIT-parsing endpoints (Wahoo by-date and manual upload). */
+interface ParsedFitPrefill {
   tss: number
   powerBests: { duration: string, watts: number }[]
+  durationSeconds: number
+  distanceMeters: number
+}
+
+interface WahooByDateResponse extends ParsedFitPrefill {
+  ride: { startDateLocal: string }
 }
 
 // Protect this page — unauthenticated users are sent to /login
@@ -151,28 +157,45 @@ function closeAddWorkout() {
   showAddWorkout.value = false
 }
 
-// ── "Mark as completed" — Wahoo activity picker ──────────────────────────
+// ── "Mark as completed" — Strava activity picker ─────────────────────────
+// The picker lists Strava activities (title + day are reliable there for
+// both outdoor and Zwift rides); the actual ride data (duration, distance,
+// TSS, power bests) always comes from a parsed FIT file, sourced from Wahoo
+// for outdoor rides or a manual upload for indoor/virtual ones — Wahoo never
+// has a FIT file for Zwift activities (see CLAUDE.md). Strava's own
+// NP/TSS numbers are never used.
 const showActivityPicker = ref(false)
 const activityPickerLoading = ref(false)
 const activityPickerError = ref<string | null>(null)
-const recentRides = ref<WahooRideSummary[]>([])
-// Set to the ride being resolved (FIT download + parse) while the user waits
-// to enter the Add Workout modal — used to show a per-row loading state and
-// block picking a second ride mid-fetch.
+const recentRides = ref<StravaRideSummary[]>([])
+// Set to the ride being resolved (Wahoo FIT download + parse) while the user
+// waits to enter the Add Workout modal — used to show a per-row loading
+// state and block picking a second ride mid-fetch.
 const resolvingActivityId = ref<number | null>(null)
+
+// Picker switches into this mode when an indoor/virtual ride is picked —
+// Wahoo has no FIT file for it, so we need the user to upload their local one.
+const activityPickerMode = ref<'list' | 'upload'>('list')
+const pendingUploadActivity = ref<StravaRideSummary | null>(null)
+const isUploadingFit = ref(false)
+const uploadError = ref<string | null>(null)
+const fitFileInput = ref<HTMLInputElement | null>(null)
 
 async function onMarkCompleted() {
   showActivityPicker.value = true
+  activityPickerMode.value = 'list'
+  pendingUploadActivity.value = null
+  uploadError.value = null
   activityPickerLoading.value = true
   activityPickerError.value = null
   recentRides.value = []
 
   try {
-    const { activities } = await $fetch<{ activities: WahooRideSummary[] }>('/api/wahoo/recent-rides')
+    const { activities } = await $fetch<{ activities: StravaRideSummary[] }>('/api/strava/recent-rides')
     recentRides.value = activities
   }
   catch {
-    activityPickerError.value = "Couldn't reach Wahoo. Try again in a moment."
+    activityPickerError.value = "Couldn't reach Strava. Try again in a moment."
   }
   finally {
     activityPickerLoading.value = false
@@ -181,6 +204,15 @@ async function onMarkCompleted() {
 
 function closeActivityPicker() {
   showActivityPicker.value = false
+  activityPickerMode.value = 'list'
+  pendingUploadActivity.value = null
+  uploadError.value = null
+}
+
+function backToActivityList() {
+  activityPickerMode.value = 'list'
+  pendingUploadActivity.value = null
+  uploadError.value = null
 }
 
 /** "Xh Ym" duration display, matching WorkoutCard's formatting */
@@ -202,49 +234,106 @@ function formatRideDate(startDateLocal: string): string {
   })
 }
 
+/** Builds a fallback prefill straight from Strava's summary data, used when FIT parsing fails. */
+function fallbackPrefillFromStrava(activity: StravaRideSummary): WorkoutPrefill {
+  return {
+    date: activity.startDateLocal.slice(0, 10),
+    name: activity.name,
+    durationMinutes: Math.round(activity.movingTimeSeconds / 60),
+    distanceKm: activity.distanceMeters > 0 ? Math.round((activity.distanceMeters / 1000) * 10) / 10 : null,
+    tss: todayPlan.value?.plan?.tss ?? null,
+    rideType: activity.rideType,
+  }
+}
+
+function prefillFromParsedFit(activity: StravaRideSummary, parsed: ParsedFitPrefill): WorkoutPrefill {
+  return {
+    date: activity.startDateLocal.slice(0, 10),
+    name: activity.name, // title always comes from Strava, e.g. "Morning Ride", "Zwift - 3x4"
+    durationMinutes: Math.round(parsed.durationSeconds / 60),
+    distanceKm: parsed.distanceMeters > 0 ? Math.round((parsed.distanceMeters / 1000) * 10) / 10 : null,
+    tss: parsed.tss,
+    rideType: activity.rideType,
+    powerBests: parsed.powerBests,
+  }
+}
+
 /**
- * Downloads and parses the ride's FIT file (TSS + power bests) before
- * opening the Add Workout modal, so those fields arrive already filled in —
- * AddWorkoutModal only reads `prefill` once at mount, so this has to
- * resolve before `showAddWorkout` flips to true, not after.
+ * Outdoor rides: fetches the matching Wahoo workout's FIT file (matched by
+ * calendar day — see server/utils/wahoo.ts) and parses it before opening the
+ * Add Workout modal, so TSS/power bests arrive already filled in —
+ * AddWorkoutModal only reads `prefill` once at mount, so this has to resolve
+ * before `showAddWorkout` flips to true, not after.
  *
- * Falls back to a base prefill (no TSS/power bests) if the FIT file can't
- * be read, rather than blocking the user from logging the ride manually.
+ * Indoor/virtual rides (Zwift etc.) never have a FIT file on Wahoo, so this
+ * instead switches the picker into upload mode and waits for the user to
+ * supply their local FIT file via onFitFileSelected.
+ *
+ * Falls back to a base prefill (no TSS/power bests) if the FIT file can't be
+ * read, rather than blocking the user from logging the ride manually.
  */
-async function selectActivity(activity: WahooRideSummary) {
+async function selectActivity(activity: StravaRideSummary) {
+  if (activity.rideType === 'trainer') {
+    pendingUploadActivity.value = activity
+    activityPickerMode.value = 'upload'
+    return
+  }
+
   resolvingActivityId.value = activity.id
 
   try {
-    const detail = await $fetch<WahooActivityDetail>(`/api/wahoo/activities/${activity.id}`)
-    pendingPrefill.value = {
-      date: detail.ride.startDateLocal.slice(0, 10),
-      name: detail.ride.name,
-      durationMinutes: Math.round(detail.ride.movingTimeSeconds / 60),
-      distanceKm: detail.ride.distanceMeters > 0 ? Math.round((detail.ride.distanceMeters / 1000) * 10) / 10 : null,
-      tss: detail.tss,
-      rideType: detail.ride.rideType,
-      powerBests: detail.powerBests,
-    }
+    const date = activity.startDateLocal.slice(0, 10)
+    const detail = await $fetch<WahooByDateResponse>('/api/wahoo/by-date', { query: { date } })
+    pendingPrefill.value = prefillFromParsedFit(activity, detail)
   }
   catch {
     toast.add({
       title: "Couldn't read power data",
-      description: "This ride's FIT file couldn't be parsed — fill in TSS and power bests manually.",
+      description: "This ride's Wahoo FIT file couldn't be found or parsed — fill in TSS and power bests manually.",
       color: 'warning',
     })
-    pendingPrefill.value = {
-      date: activity.startDateLocal.slice(0, 10),
-      name: activity.name,
-      durationMinutes: Math.round(activity.movingTimeSeconds / 60),
-      distanceKm: activity.distanceMeters > 0 ? Math.round((activity.distanceMeters / 1000) * 10) / 10 : null,
-      tss: todayPlan.value?.plan?.tss ?? null,
-      rideType: activity.rideType,
-    }
+    pendingPrefill.value = fallbackPrefillFromStrava(activity)
   }
   finally {
     resolvingActivityId.value = null
   }
 
+  showActivityPicker.value = false
+  showAddWorkout.value = true
+}
+
+/** Called when the user picks a local FIT file in upload mode (indoor/virtual rides). */
+async function onFitFileSelected(event: Event) {
+  const activity = pendingUploadActivity.value
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!activity || !file) return
+
+  isUploadingFit.value = true
+  uploadError.value = null
+
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const parsed = await $fetch<ParsedFitPrefill>('/api/fit/upload', { method: 'POST', body: formData })
+    pendingPrefill.value = prefillFromParsedFit(activity, parsed)
+    showActivityPicker.value = false
+    showAddWorkout.value = true
+  }
+  catch (err: unknown) {
+    uploadError.value = (err as { data?: { statusMessage?: string } })?.data?.statusMessage
+      ?? "Couldn't parse that FIT file."
+  }
+  finally {
+    isUploadingFit.value = false
+    // Reset so picking the same file again still fires a change event.
+    if (fitFileInput.value) fitFileInput.value.value = ''
+  }
+}
+
+/** Skips FIT parsing entirely and opens Add Workout pre-filled from Strava's summary data only. */
+function skipUploadAndEnterManually() {
+  if (!pendingUploadActivity.value) return
+  pendingPrefill.value = fallbackPrefillFromStrava(pendingUploadActivity.value)
   showActivityPicker.value = false
   showAddWorkout.value = true
 }
@@ -1028,14 +1117,14 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
       </div>
     </Teleport>
 
-    <!-- ── Wahoo Activity Picker ─────────────────────────────────────── -->
+    <!-- ── Strava Activity Picker ────────────────────────────────────── -->
     <Teleport to="body">
       <div
         v-if="showActivityPicker"
         class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
         role="dialog"
         aria-modal="true"
-        aria-label="Pick a Wahoo ride"
+        aria-label="Pick a Strava ride"
       >
         <div
           class="fixed inset-0 bg-black/25 backdrop-blur-sm"
@@ -1046,7 +1135,9 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           <div class="flex items-start justify-between mb-6">
             <div>
               <h2 class="text-lg font-semibold text-stone-900">Mark as completed</h2>
-              <p class="text-sm text-stone-400 mt-0.5">Pick the Wahoo ride that matches this workout.</p>
+              <p class="text-sm text-stone-400 mt-0.5">
+                {{ activityPickerMode === 'list' ? 'Pick the Strava ride that matches this workout.' : 'Upload the FIT file for this ride.' }}
+              </p>
             </div>
             <button
               class="text-stone-300 hover:text-stone-600 transition-colors ml-4 mt-0.5"
@@ -1057,52 +1148,104 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
             </button>
           </div>
 
-          <!-- Loading -->
-          <div v-if="activityPickerLoading" class="flex justify-center py-10">
-            <BikeSpinner :size="24" class="text-stone-300" />
-          </div>
+          <template v-if="activityPickerMode === 'list'">
+            <!-- Loading -->
+            <div v-if="activityPickerLoading" class="flex justify-center py-10">
+              <BikeSpinner :size="24" class="text-stone-300" />
+            </div>
 
-          <!-- Error -->
-          <div v-else-if="activityPickerError" class="text-center py-6">
-            <p class="text-sm text-stone-500">{{ activityPickerError }}</p>
-            <button
-              class="mt-3 text-sm font-medium text-orange-600 hover:text-orange-700"
-              @click="onMarkCompleted"
-            >
-              Retry
-            </button>
-          </div>
-
-          <!-- Empty -->
-          <div v-else-if="recentRides.length === 0" class="text-center py-6">
-            <p class="text-sm text-stone-500">No recent rides found on Wahoo.</p>
-          </div>
-
-          <!-- Activity list -->
-          <ul v-else class="divide-y divide-stone-100">
-            <li
-              v-for="activity in recentRides"
-              :key="activity.id"
-              class="flex items-center justify-between gap-4 py-3"
-            >
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-stone-800 truncate">{{ activity.name }}</p>
-                <p class="text-xs text-stone-400 mt-0.5">
-                  {{ formatRideDate(activity.startDateLocal) }}
-                  &nbsp;·&nbsp;
-                  {{ formatDuration(Math.round(activity.movingTimeSeconds / 60)) }}
-                </p>
-              </div>
+            <!-- Error -->
+            <div v-else-if="activityPickerError" class="text-center py-6">
+              <p class="text-sm text-stone-500">{{ activityPickerError }}</p>
               <button
-                class="shrink-0 flex items-center gap-2 text-sm font-semibold text-orange-600 hover:text-orange-700 transition-colors disabled:opacity-50"
-                :disabled="resolvingActivityId !== null"
-                @click="selectActivity(activity)"
+                class="mt-3 text-sm font-medium text-orange-600 hover:text-orange-700"
+                @click="onMarkCompleted"
               >
-                <BikeSpinner v-if="resolvingActivityId === activity.id" :size="14" />
-                {{ resolvingActivityId === activity.id ? 'Reading FIT file…' : 'Use this' }}
+                Retry
               </button>
-            </li>
-          </ul>
+            </div>
+
+            <!-- Empty -->
+            <div v-else-if="recentRides.length === 0" class="text-center py-6">
+              <p class="text-sm text-stone-500">No recent rides found on Strava.</p>
+            </div>
+
+            <!-- Activity list -->
+            <ul v-else class="divide-y divide-stone-100">
+              <li
+                v-for="activity in recentRides"
+                :key="activity.id"
+                class="flex items-center justify-between gap-4 py-3"
+              >
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-stone-800 truncate">{{ activity.name }}</p>
+                  <p class="text-xs text-stone-400 mt-0.5">
+                    {{ formatRideDate(activity.startDateLocal) }}
+                    &nbsp;·&nbsp;
+                    {{ formatDuration(Math.round(activity.movingTimeSeconds / 60)) }}
+                    <span v-if="activity.rideType === 'trainer'">&nbsp;·&nbsp;Indoor</span>
+                  </p>
+                </div>
+                <button
+                  class="shrink-0 flex items-center gap-2 text-sm font-semibold text-orange-600 hover:text-orange-700 transition-colors disabled:opacity-50"
+                  :disabled="resolvingActivityId !== null"
+                  @click="selectActivity(activity)"
+                >
+                  <BikeSpinner v-if="resolvingActivityId === activity.id" :size="14" />
+                  {{ resolvingActivityId === activity.id ? 'Reading FIT file…' : 'Use this' }}
+                </button>
+              </li>
+            </ul>
+          </template>
+
+          <!-- Upload mode — indoor/virtual rides have no FIT file on Wahoo -->
+          <template v-else>
+            <div class="text-center py-4">
+              <p class="text-sm text-stone-600 mb-1">
+                <span class="font-medium text-stone-800">{{ pendingUploadActivity?.name }}</span>
+                doesn't have a FIT file on Wahoo (Zwift/virtual rides never do).
+              </p>
+              <p class="text-xs text-stone-400 mb-6">
+                Upload the FIT file saved by your trainer app to fill in TSS and power bests automatically.
+              </p>
+
+              <input
+                ref="fitFileInput"
+                type="file"
+                accept=".fit"
+                class="hidden"
+                @change="onFitFileSelected"
+              >
+
+              <UButton
+                :loading="isUploadingFit"
+                :disabled="isUploadingFit"
+                class="rounded-lg font-semibold"
+                @click="fitFileInput?.click()"
+              >
+                {{ isUploadingFit ? 'Reading FIT file…' : 'Choose FIT file' }}
+              </UButton>
+
+              <p v-if="uploadError" class="text-xs text-rose-400 mt-3">{{ uploadError }}</p>
+
+              <div class="flex justify-center gap-4 mt-5">
+                <button
+                  type="button"
+                  class="text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors"
+                  @click="backToActivityList"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="button"
+                  class="text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors"
+                  @click="skipUploadAndEnterManually"
+                >
+                  Skip, enter manually
+                </button>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
     </Teleport>
