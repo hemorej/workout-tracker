@@ -12,9 +12,9 @@
  * nothing partial is ever returned.
  */
 
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
-import { users } from '../../db/schema'
+import { users, plannedWorkouts } from '../../db/schema'
 import { useDB } from '../../db'
 import { CoachWorkoutSchema } from '../../utils/anthropic'
 
@@ -36,19 +36,50 @@ export default defineEventHandler(async (event) => {
   const ftpWatts = await getCurrentFtpWatts(user.id)
   const weightKg = row.weightKg ?? FALLBACK_WEIGHT_KG
 
+  // Today's specific planned entry (name/type/tss/duration/notes), if the
+  // planning grid has one — this is what actually names the session (e.g.
+  // "Sweet spot 3x12min"). Without it the model only ever saw the long-form
+  // plan document and had to *guess* which session type today was, which
+  // repeatedly produced the wrong workout type (e.g. VO2max instead of
+  // sweet spot).
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const [plannedRow] = await db
+    .select()
+    .from(plannedWorkouts)
+    .where(and(eq(plannedWorkouts.userId, user.id), eq(plannedWorkouts.date, todayStr)))
+    .limit(1)
+
+  const todaysSessionText = plannedRow
+    ? [
+        'Today\'s planned session (from the planning grid — this is the specific workout to build, not a general '
+        + 'day from the plan document):',
+        `- Name: ${plannedRow.name ?? '(untitled)'}`,
+        plannedRow.type ? `- Zone/type: ${plannedRow.type}` : null,
+        plannedRow.tss ? `- Target TSS: ${plannedRow.tss}` : null,
+        plannedRow.durationMinutes ? `- Target duration: ${plannedRow.durationMinutes} minutes` : null,
+        plannedRow.notes ? `- Notes: ${plannedRow.notes}` : null,
+      ].filter(Boolean).join('\n')
+    : null
+
   try {
     const client = getAnthropicClient()
     const response = await client.messages.parse({
       model: 'claude-sonnet-5',
-      max_tokens: 4096,
+      max_tokens: 6000,
       system: [
         { type: 'text', text: row.trainingPlan, cache_control: { type: 'ephemeral' } },
         {
           type: 'text',
           text: `You are a cycling coach. The rider's current FTP is ${ftpWatts}W and weight is ${weightKg}kg. `
-            + 'Using the training plan above, propose today\'s workout as structured blocks and a fuelling guide '
-            + '(use the rider\'s weight for nutrition/hydration calculations). Format the fuelling guide as three '
-            + 'short paragraphs — pre-ride, during-ride, post-ride — each on its own line, separated by blank lines.',
+            + (todaysSessionText
+              ? `${todaysSessionText}\n\nBuild this exact session as structured blocks — the name and zone/type above `
+                + 'take precedence over the general plan document if they ever seem to disagree. Match the interval '
+                + 'structure implied by the name (e.g. "3x12min" means three 12-minute work intervals) and the target '
+                + 'TSS/duration as closely as possible. '
+              : 'Using the training plan above, propose today\'s workout as structured blocks. ')
+            + 'Also produce a fuelling guide (use the rider\'s weight for nutrition/hydration calculations). '
+            + 'Format the fuelling guide as three short paragraphs — pre-ride, during-ride, post-ride — each on its '
+            + 'own line, separated by blank lines.',
         },
       ],
       messages: [{ role: 'user', content: 'Generate today\'s workout.' }],
