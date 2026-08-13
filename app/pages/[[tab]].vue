@@ -162,7 +162,11 @@ async function onAutoBuild() {
   try {
     const workout = await $fetch<CoachWorkout>('/api/coach/generate', { method: 'POST' })
     coach.setPendingWorkout(workout)
-    activeTab.value = 'builder'
+    // Don't set activeTab.value = 'builder' here: `/` and `/builder` are separate
+    // route records (see coach.ts), so that would synchronously mount a throwaway
+    // WorkoutBuilderTab on the current page that immediately consumes and clears
+    // the pending workout before the real navigation/remount even happens. The
+    // watch(routeTab, ...) above syncs activeTab once navigateTo() actually lands.
     navigateTo({ path: '/builder' })
   }
   catch {
