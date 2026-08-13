@@ -16,16 +16,18 @@ export interface WorkoutPrefill {
   date: string
   name: string
   durationMinutes: number
-  /** Pre-filled from a matched Strava activity's distance, if any. */
+  /** Pre-filled from a matched Wahoo activity's distance, if any. */
   distanceKm?: number | null
-  /** Pre-filled from the day's planned workout TSS, if any. */
+  /** Pre-filled from the day's planned workout TSS, or computed from a Wahoo FIT file. */
   tss?: number | null
-  /** Pre-filled from a matched Strava activity's type, if any. */
+  /** Pre-filled from a matched Wahoo activity's type, if any. */
   rideType?: 'trainer' | 'outdoor' | null
+  /** Computed from a Wahoo FIT file's power-curve bests, if any. Still user-editable. */
+  powerBests?: PowerBestEntry[] | null
 }
 
 const props = defineProps<{
-  /** Pre-fills date/name/duration, e.g. from a matched Strava activity. RPE is never pre-filled. */
+  /** Pre-fills date/name/duration/tss/powerBests, e.g. from a matched Wahoo activity. RPE is never pre-filled. */
   prefill?: WorkoutPrefill | null
 }>()
 
@@ -56,13 +58,16 @@ const form = reactive({
   rpe: null as number | null,
 })
 
-// Not user-editable — carried straight through from the matched Strava activity, if any.
+// Not user-editable — carried straight through from the matched Wahoo activity, if any.
 const rideType = ref<'trainer' | 'outdoor' | null>(props.prefill?.rideType ?? null)
 
-const optionalExpanded = ref(false)
+// Auto-expand so pre-filled power bests (from a parsed Wahoo FIT file) are visible immediately.
+const optionalExpanded = ref((props.prefill?.powerBests?.length ?? 0) > 0)
 const notes = ref('')
 const ftpWatts = ref<number | null>(null)
-const powerBestRows = ref<{ duration: string; watts: number | null }[]>([])
+const powerBestRows = ref<{ duration: string; watts: number | null }[]>(
+  (props.prefill?.powerBests ?? []).map((pb) => ({ duration: pb.duration, watts: pb.watts })),
+)
 
 function addPowerBestRow() {
   // Find the first duration not yet used
