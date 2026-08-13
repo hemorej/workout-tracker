@@ -70,6 +70,33 @@ export default defineNuxtConfig({
     },
 
     /**
+     * Nuxt UI theme configuration.
+     *
+     * Sets the primary colour to 'orange' (Sprocket's energetic accent) and
+     * the neutral palette to 'stone' (warm grays rather than cool
+     * blue-grays). Primary drives all UButton fills, focus rings and
+     * interactive accents.
+     *
+     * Deliberately set here rather than in a standalone `app.config.ts` —
+     * with `future.compatibilityVersion: 4` (srcDir moved to `app/`), Nuxt
+     * 4.5.2's Nitro "impound" plugin throws on `#build/app.config.mjs`
+     * whenever `app.config.ts` lives inside `app/` (the only place Nuxt
+     * will actually pick it up in this layout; at the repo root it's
+     * silently ignored). Setting `appConfig` here instead is read directly
+     * into `nuxt.options.appConfig` at module-setup time, before `@nuxt/ui`
+     * merges in its own (green) defaults, so it always wins without going
+     * through that broken file-resolution path.
+     */
+    appConfig: {
+        ui: {
+            colors: {
+                primary: 'orange',
+                neutral: 'stone',
+            },
+        },
+    },
+
+    /**
      * `@nuxt/fonts` (auto-installed by `@nuxt/ui`) would otherwise try to
      * resolve 'Hanken Grotesk' from Google Fonts at build time. It's vendored
      * instead via `@fontsource-variable/hanken-grotesk` + a manual `@font-face`
