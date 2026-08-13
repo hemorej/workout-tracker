@@ -16,6 +16,8 @@ minimumReleaseAgeExclude:
   # GHSA-cj5m-c6f8-hqm6 / GHSA-cxrh-j4jr-qwg3 fixed in 8.9.0 (released
   # 2026-08-03, same day as advisory disclosure)
   - undici
+  # GHSA-2v37-7h3g-55p8 fixed in 3.3.18
+  - nanoid
 
 overrides:
   undici: '>=8.9.0'
@@ -25,3 +27,4 @@ overrides:
   tar: '>=7.5.21'
   svgo: '>=4.0.2'
   postcss: '>=8.5.23'
+  nanoid: '>=3.3.18'
