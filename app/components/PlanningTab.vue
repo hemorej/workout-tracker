@@ -75,16 +75,16 @@ function tssDiverged(day: (typeof planning.plans)[number]) {
   return day.actual.tss !== (day.plan?.tss ?? 0)
 }
 
-/** Headline TSS figure: past days use logged TSS, future days use planned TSS, summed —
- * same rule for every week, including the current one (a future day within the
- * current week counts its plan, same as any other future day). */
-function weekTss(days: typeof planning.plans) {
-  return days.reduce((sum, d) => sum + effectiveTss(d), 0)
+/** Headline TSS figure: logged TSS only, for days up to and including today. */
+function weekLoggedTss(days: typeof planning.plans) {
+  return days.reduce((sum, d) => sum + (d.isPast ? (d.actual?.tss ?? 0) : 0), 0)
 }
 
-/** Total planned TSS across the whole week, regardless of past/future. */
+/** "Planned" figure: logged TSS for past days, planned TSS for future days —
+ * same rule for every week, including the current one (a future day within the
+ * current week counts its plan, same as any other future day). */
 function weekPlannedTss(days: typeof planning.plans) {
-  return days.reduce((sum, d) => sum + (d.plan?.tss ?? 0), 0)
+  return days.reduce((sum, d) => sum + effectiveTss(d), 0)
 }
 
 /** Whether to show the "planned" footnote — only when a past day's logged TSS
@@ -322,14 +322,14 @@ async function saveNote() {
               <div class="flex items-baseline gap-1.5 sm:block">
                 <!-- Narrow/vertical layout: inline fraction, like the row cells -->
                 <div class="sm:hidden text-sm font-semibold tabular text-stone-700 leading-tight">
-                  {{ weekTss(week.days) }}<template v-if="weekDiverged(week.days)"><span class="text-[11px] tabular text-stone-300 mx-0.5">⁄</span><span class="text-[11px] tabular text-stone-300">{{ weekPlannedTss(week.days) }}</span></template><span class="text-[10px] font-medium text-stone-400"> TSS</span>
+                  {{ weekLoggedTss(week.days) }}<span class="text-[11px] tabular text-stone-300 mx-0.5">⁄</span><span class="text-[11px] tabular text-stone-300">{{ weekPlannedTss(week.days) }}</span><span class="text-[10px] font-medium text-stone-400"> TSS</span>
                 </div>
 
                 <!-- sm+ layout: unchanged two-line footnote -->
                 <div class="hidden sm:block text-sm font-semibold tabular text-stone-700 leading-tight">
-                  {{ weekTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
+                  {{ weekLoggedTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
                 </div>
-                <div v-if="weekDiverged(week.days)" class="hidden sm:block text-[11px] tabular text-stone-400 leading-tight">
+                <div class="hidden sm:block text-[11px] tabular text-stone-400 leading-tight">
                   {{ weekPlannedTss(week.days) }} planned
                 </div>
               </div>
