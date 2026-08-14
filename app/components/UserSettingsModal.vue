@@ -77,14 +77,14 @@ async function handleSubmit() {
 
     <template v-else>
       <UFormField name="weightKg">
-        <template #label>
+        <div class="flex items-center gap-3">
           <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide">Weight (kg)</span>
-        </template>
-        <UInput
-          v-model.number="weightKg"
-          type="number" inputmode="decimal" min="0" step="0.1" placeholder="e.g. 68"
-          class="w-40"
-        />
+          <UInput
+            v-model.number="weightKg"
+            type="number" inputmode="decimal" min="0" step="0.1" placeholder="e.g. 68"
+            class="w-20"
+          />
+        </div>
       </UFormField>
 
       <UFormField name="trainingPlan">
@@ -94,7 +94,7 @@ async function handleSubmit() {
         <UTextarea
           v-model="trainingPlan"
           placeholder="Context the AI coach uses when generating workouts…"
-          :rows="8"
+          :rows="11"
           class="w-full"
         />
       </UFormField>
