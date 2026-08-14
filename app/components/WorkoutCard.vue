@@ -26,6 +26,8 @@ interface Props {
   isAutoBuilding?: boolean
   /** True while a "refresh ride data" fetch/parse is in flight for this day's workout. */
   isRefreshingRideData?: boolean
+  /** True while an AI "ride insights" generation request is in flight for this day's workout. */
+  isGeneratingInsights?: boolean
 }
 
 const props = defineProps<Props>()
@@ -36,6 +38,7 @@ const emit = defineEmits<{
   (e: 'auto-build'): void
   (e: 'open-fit-overlay'): void
   (e: 'refresh-ride-data'): void
+  (e: 'generate-insights'): void
 }>()
 
 // ── Date formatting ──────────────────────────────────────────────────────
@@ -122,6 +125,7 @@ const plannedDurationDisplay = computed(() => {
 const hasFtp = computed(() => !!props.day.workout?.ftpWatts)
 const hasPowerBests = computed(() => (props.day.workout?.powerBests?.length ?? 0) > 0)
 const hasFitData = computed(() => !!props.day.workout?.fitData)
+const hasInsights = computed(() => !!props.day.workout?.insights)
 
 // ── Mobile swipe-row summary (panel 1) ───────────────────────────────────
 const mobileTitle = computed(() => {
@@ -294,6 +298,19 @@ function confirmDelete() {
           <path d="M21 3v5h-5" />
           <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
           <path d="M3 21v-5h5" />
+        </svg>
+      </button>
+      <button
+        v-if="!day.isRestDay && !isPlannedDay && hasFitData && !hasInsights"
+        title="Ride insights"
+        aria-label="Ride insights"
+        :disabled="isGeneratingInsights"
+        class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-amber-500 hover:bg-amber-50 disabled:opacity-100"
+        @click="emit('generate-insights')"
+      >
+        <BikeSpinner v-if="isGeneratingInsights" :size="12" />
+        <svg v-else class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M13.5 2L4 14h6l-1 8 9.5-12h-6l1-8z" />
         </svg>
       </button>
       <template v-if="!day.isRestDay && !isPlannedDay">
@@ -494,6 +511,22 @@ function confirmDelete() {
           <path d="M21 3v5h-5" />
           <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
           <path d="M3 21v-5h5" />
+        </svg>
+      </button>
+
+      <!-- Ride insights — shown once FIT data exists and insights haven't been generated yet;
+           permanently hidden once generated (see WorkoutFitOverlay's Insights tab instead). -->
+      <button
+        v-if="!day.isRestDay && !isPlannedDay && hasFitData && !hasInsights"
+        title="Ride insights"
+        aria-label="Ride insights"
+        :disabled="isGeneratingInsights"
+        class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-amber-500 hover:bg-amber-50 disabled:opacity-100"
+        @click="emit('generate-insights')"
+      >
+        <BikeSpinner v-if="isGeneratingInsights" :size="16" />
+        <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M13.5 2L4 14h6l-1 8 9.5-12h-6l1-8z" />
         </svg>
       </button>
 

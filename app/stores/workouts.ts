@@ -35,6 +35,13 @@ export interface WorkoutFitData {
   maxCadence: number | null
 }
 
+/** AI-generated post-ride analysis — mirrors WorkoutInsights in server/db/schema.ts */
+export interface WorkoutInsights {
+  recovery: string
+  rideAnalysis: string
+  generatedAt: string
+}
+
 export interface WorkoutDetail {
   id: number
   name: string
@@ -46,6 +53,7 @@ export interface WorkoutDetail {
   ftpWatts: number | null
   rideType: 'trainer' | 'outdoor' | null
   fitData: WorkoutFitData | null
+  insights: WorkoutInsights | null
   powerBests: PowerBestEntry[]
 }
 

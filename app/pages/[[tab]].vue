@@ -26,7 +26,7 @@
  */
 
 import { useAuthStore } from '~/stores/auth'
-import { useWorkoutsStore, type LogFilters, type WorkoutDetail, type WorkoutFitData, type DayEntry } from '~/stores/workouts'
+import { useWorkoutsStore, type LogFilters, type WorkoutDetail, type WorkoutFitData, type WorkoutInsights, type DayEntry } from '~/stores/workouts'
 import { usePlanningStore } from '~/stores/planning'
 import { useCoachStore, type CoachWorkout } from '~/stores/coach'
 import type { WorkoutPrefill } from '~/components/AddWorkoutModal.vue'
@@ -265,6 +265,8 @@ const refreshTargetWorkout = ref<WorkoutDetail | null>(null)
 // Per-row loading state for the outdoor "refresh ride data" fetch (mirrors
 // resolvingActivityId above, but keyed by workout id instead of Strava activity id).
 const refreshingWorkoutId = ref<number | null>(null)
+// Per-row loading state for the "Ride insights" AI generation request.
+const generatingInsightsWorkoutId = ref<number | null>(null)
 
 async function onMarkCompleted() {
   pickerPurpose.value = 'create'
@@ -494,6 +496,38 @@ function openEditModalFromRefresh(parsedPrefill: WorkoutPrefill) {
   showAddWorkout.value = true
   pickerPurpose.value = 'create'
   refreshTargetWorkout.value = null
+}
+
+/**
+ * Triggers the AI "Ride insights" generation for a workout with FIT data.
+ * On success the returned insights are written straight onto `day.workout`
+ * (the same object reference held by fitOverlayWorkout, if the overlay's
+ * open) so both the row's button and the overlay update immediately without
+ * a full page refetch. On failure the workout stays unmodified so the
+ * button (gated on `!workout.insights`) re-enables for retry.
+ */
+async function onGenerateInsights(day: DayEntry) {
+  const workout = day.workout
+  if (!workout) return
+
+  generatingInsightsWorkoutId.value = workout.id
+  try {
+    const { insights } = await $fetch<{ insights: WorkoutInsights }>(
+      `/api/workouts/${workout.id}/insights`,
+      { method: 'POST' },
+    )
+    workout.insights = insights
+  }
+  catch {
+    toast.add({
+      title: "Couldn't generate ride insights",
+      description: 'Something went wrong reaching the AI coach. Try again in a moment.',
+      color: 'error',
+    })
+  }
+  finally {
+    generatingInsightsWorkoutId.value = null
+  }
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -1206,12 +1240,14 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           :planned-workout="day.date === todayStr ? todayPlan : null"
           :is-auto-building="isAutoBuilding"
           :is-refreshing-ride-data="refreshingWorkoutId !== null && day.workout?.id === refreshingWorkoutId"
+          :is-generating-insights="generatingInsightsWorkoutId !== null && day.workout?.id === generatingInsightsWorkoutId"
           @delete="onDeleteWorkout"
           @mark-completed="onMarkCompleted"
           @go-to-builder="goToBuilder"
           @auto-build="onAutoBuild"
           @open-fit-overlay="openFitOverlay(day)"
           @refresh-ride-data="onRefreshRideData(day)"
+          @generate-insights="onGenerateInsights(day)"
         />
       </div>
 
