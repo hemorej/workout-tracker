@@ -36,6 +36,8 @@ interface FitRecord {
   distance?: number
   heart_rate?: number
   cadence?: number
+  /** Cumulative moving-time seconds (elapsed_time minus accumulated paused time) — see parseFitFile. */
+  timer_time?: number
 }
 
 export interface ParsedFitMetrics {
@@ -117,18 +119,44 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     throw new Error('No record data found in FIT file.')
   }
 
-  // Records are typically ~1Hz but can have gaps (auto-pause, signal loss).
-  // Bucket by elapsed second-from-start so sliding-window math operates on a
-  // consistent 1Hz timeline rather than assuming every record is 1s apart.
-  const start = records[0]!.timestamp?.getTime() ?? 0
-  const end = records[records.length - 1]!.timestamp?.getTime() ?? start
-  const totalSeconds = Math.max(1, Math.round((end - start) / 1000))
+  // Records are typically ~1Hz but can have gaps — most notably auto-pause,
+  // where the device stops writing records entirely for the paused stretch.
+  // `elapsedRecordField` (enabled above) adds a `timer_time` field per record:
+  // fit-file-parser tracks accumulated paused time internally from the file's
+  // own start/stop events and reports `timer_time = elapsed_time - pausedTime`
+  // — i.e. moving time only, matching the device's own "moving time" stat.
+  // Bucketing by that instead of raw wall-clock elapsed time means an
+  // auto-pause gap simply isn't allocated any array slots, rather than being
+  // zero-filled as if it were low-power pedaling (which previously inflated
+  // duration and dragged down avg power/NP toward the paused stretch's watts).
+  // Older files without usable timestamps fall back to the wall-clock method.
+  const hasTimerTime = records.some((r) => r.timer_time !== undefined)
 
-  const watts = new Array<number>(totalSeconds + 1).fill(0)
-  for (const r of records) {
-    if (r.timestamp && r.power !== undefined) {
-      const sec = Math.round((r.timestamp.getTime() - start) / 1000)
-      if (sec >= 0 && sec < watts.length) watts[sec] = r.power
+  let totalSeconds: number
+  let watts: number[]
+
+  if (hasTimerTime) {
+    let lastSec = 0
+    watts = []
+    for (const r of records) {
+      if (r.timer_time === undefined) continue
+      const sec = Math.round(r.timer_time)
+      if (sec > lastSec) lastSec = sec
+      while (watts.length <= sec) watts.push(0)
+      if (r.power !== undefined) watts[sec] = r.power
+    }
+    totalSeconds = Math.max(1, lastSec)
+  }
+  else {
+    const start = records[0]!.timestamp?.getTime() ?? 0
+    const end = records[records.length - 1]!.timestamp?.getTime() ?? start
+    totalSeconds = Math.max(1, Math.round((end - start) / 1000))
+    watts = new Array<number>(totalSeconds + 1).fill(0)
+    for (const r of records) {
+      if (r.timestamp && r.power !== undefined) {
+        const sec = Math.round((r.timestamp.getTime() - start) / 1000)
+        if (sec >= 0 && sec < watts.length) watts[sec] = r.power
+      }
     }
   }
 
@@ -142,8 +170,12 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     if (r.distance !== undefined) distanceMeters = r.distance
   }
 
-  const heartRates = records.map((r) => r.heart_rate).filter((v): v is number => v !== undefined)
-  const cadences = records.map((r) => r.cadence).filter((v): v is number => v !== undefined)
+  // Same moving-time-only filter for HR/cadence: skip records with no
+  // timer_time (i.e. recorded while paused, for devices that keep sampling
+  // through a pause instead of stopping recording entirely).
+  const movingRecords = hasTimerTime ? records.filter((r) => r.timer_time !== undefined) : records
+  const heartRates = movingRecords.map((r) => r.heart_rate).filter((v): v is number => v !== undefined)
+  const cadences = movingRecords.map((r) => r.cadence).filter((v): v is number => v !== undefined)
 
   const avgPower = mean(watts)
   const maxPower = Math.max(...watts)
