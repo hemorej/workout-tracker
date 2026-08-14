@@ -11,6 +11,8 @@
  * persisted or shared with other tabs (see design_handoff_workout_builder/README.md).
  */
 
+import { useCoachStore } from '~/stores/coach'
+
 // ── Data model ───────────────────────────────────────────────────────────
 
 type RampBlock = { id: number, type: 'warmup' | 'cooldown', duration: number, powerStart: number, powerEnd: number, cadence: number | null }
@@ -68,6 +70,64 @@ if (typeof route.query.planName === 'string') {
 const nextId = ref(1)
 const selectedId = ref<number | null>(null)
 const blocks = ref<Block[]>([])
+
+// ── Fuelling guide + save-to-planned-workout ────────────────────────────
+
+const fuellingNotes = ref('')
+
+// Today's date as YYYY-MM-DD (local time) — matches the format planned_workouts
+// and the training log use elsewhere (see todayStr in [[tab]].vue).
+function todayLocalDate() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const saveDate = ref(todayLocalDate())
+const isSaving = ref(false)
+const toast = useToast()
+
+// Consumed the same way as the `planName` query param above — this tab is
+// remounted on navigation (see the comment on that block, and on
+// useCoachStore itself), so a pending AI-generated workout is read from the
+// store on setup rather than passed via a prop/ref call from the parent.
+const coach = useCoachStore()
+const pendingWorkout = coach.consumePendingWorkout()
+if (pendingWorkout) {
+  title.value = pendingWorkout.name
+  fuellingNotes.value = pendingWorkout.fuellingGuide
+  blocks.value = pendingWorkout.blocks.map((b) => {
+    const block = { ...b, id: nextId.value } as Block
+    nextId.value += 1
+    return block
+  })
+}
+
+async function saveToPlannedWorkout() {
+  isSaving.value = true
+  try {
+    await $fetch('/api/planned-workouts', {
+      method: 'PUT',
+      body: {
+        date: saveDate.value,
+        name: title.value || null,
+        // No `type` here: AI-generated/manually-built workouts mix zones, so this
+        // save shouldn't classify one — and omitting the key (rather than sending
+        // `type: null`) lets the PUT endpoint preserve whatever zone type is
+        // already set for this date (e.g. from the Planning tab).
+        tss: totalTSS.value,
+        durationMinutes: Math.round(totalDuration.value / 60),
+        notes: fuellingNotes.value || null,
+      },
+    })
+    toast.add({ title: 'Saved to planned workout', color: 'success' })
+  }
+  catch {
+    toast.add({ title: 'Could not save planned workout', color: 'error' })
+  }
+  finally {
+    isSaving.value = false
+  }
+}
 
 // ── Formatting ───────────────────────────────────────────────────────────
 
@@ -1084,6 +1144,47 @@ function download() {
           <path d="M4 16.5 H16" />
         </svg>
       </button>
+    </div>
+
+    <!-- ── Fuelling guide + save to planned workout ──────────────────── -->
+    <div class="max-w-3xl mx-auto space-y-3" style="padding-bottom: 8px;">
+      <div>
+        <label class="block mb-[7px]" style="font: 600 12px 'Hanken Grotesk'; color: #78716c; letter-spacing: .04em; text-transform: uppercase;">
+          Fuelling guide
+        </label>
+        <textarea
+          v-model="fuellingNotes"
+          rows="4"
+          placeholder="Optional — pre/during/post-ride fuelling notes"
+          class="w-full outline-none resize-y"
+          style="font: 400 14px 'Hanken Grotesk'; color: #1c1917; border: 1.5px solid #e7e5e4; border-radius: 10px; padding: 12px 14px; background: #fff;"
+        />
+      </div>
+
+      <div class="flex items-end gap-3 flex-wrap">
+        <div class="flex-none" style="width: 160px;">
+          <label class="block mb-[7px]" style="font: 600 12px 'Hanken Grotesk'; color: #78716c; letter-spacing: .04em; text-transform: uppercase;">
+            Date
+          </label>
+          <input
+            v-model="saveDate"
+            type="date"
+            class="w-full outline-none"
+            style="font: 600 14px 'Hanken Grotesk'; color: #1c1917; border: 1.5px solid #e7e5e4; border-radius: 10px; padding: 11px 12px; background: #fff;"
+          >
+        </div>
+
+        <button
+          :disabled="blocks.length === 0 || isSaving"
+          class="inline-flex items-center justify-center shrink-0"
+          :class="blocks.length === 0 || isSaving ? 'cursor-not-allowed' : 'cursor-pointer'"
+          style="font: 600 14px 'Hanken Grotesk'; color: #fff; background: #7c3aed; border: none; border-radius: 10px; padding: 11px 18px;"
+          :style="{ opacity: blocks.length === 0 || isSaving ? 0.5 : 1 }"
+          @click="saveToPlannedWorkout"
+        >
+          {{ isSaving ? 'Saving…' : 'Save to planned workout' }}
+        </button>
+      </div>
     </div>
   </div>
 </template>

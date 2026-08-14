@@ -36,12 +36,23 @@ export default defineEventHandler(async (event) => {
     notes: notes || null,
   }
 
+  // On conflict, only overwrite fields the caller actually included in the
+  // body — callers that save a subset (e.g. the workout builder's fuelling-guide
+  // save, which never sets `type`) must not clobber fields set by other callers
+  // (e.g. the planning tab's zone `type`) for the same date.
+  const updateValues: Partial<typeof values> = {}
+  if ('name' in body) updateValues.name = values.name
+  if ('type' in body) updateValues.type = values.type
+  if ('tss' in body) updateValues.tss = values.tss
+  if ('durationMinutes' in body) updateValues.durationMinutes = values.durationMinutes
+  if ('notes' in body) updateValues.notes = values.notes
+
   await db
     .insert(plannedWorkouts)
     .values(values)
     .onConflictDoUpdate({
       target: [plannedWorkouts.userId, plannedWorkouts.date],
-      set: values,
+      set: updateValues,
     })
 
   getLogger('planned_workouts').info('planned_workouts.upserted', { requestId: event.context.requestId, date })

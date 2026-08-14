@@ -1,36 +1,38 @@
 /**
- * POST /api/workouts
+ * PATCH /api/workouts/:id
  *
- * Creates a new workout entry for the authenticated user.
+ * Updates an existing workout entry for the authenticated user — used by the
+ * "Refresh ride data" flow (see CLAUDE.md's Completed-workout picker), which
+ * re-parses a FIT file for an already-logged workout and reopens the Add
+ * Workout modal (in edit mode) so the user can review before saving.
  *
- * Body (JSON):
- * {
- *   date:            string   — ISO date "YYYY-MM-DD" (defaults to today)
- *   name:            string   — workout name
- *   durationMinutes: number   — positive integer
- *   distanceKm?:     number   — optional, non-negative
- *   tss:             number   — non-negative integer
- *   rpe?:            number   — optional, 1–10
- *   notes?:          string   — optional free text
- *   ftpWatts?:       number   — optional, positive integer (watts)
- *   rideType?:       string   — optional, 'trainer' | 'outdoor'
- *   powerBests?:     { duration: string; watts: number }[]
- *   fitData?:        WorkoutFitData — optional, extra stats from a parsed FIT file
- * }
+ * Only the workout's owner can update it — same id+userId filter as DELETE.
+ *
+ * Body (JSON): same shape as POST /api/workouts.
+ *
+ * powerBests, if provided, fully replaces the workout's existing power-best
+ * rows (delete + reinsert) rather than merging — the simplest correct way to
+ * handle both additions and removals from a freshly re-parsed file.
  *
  * Returns:
- *   201 { workout }  on success
+ *   200 { workout }  on success
  *   400 for validation errors
- *   409 if a workout already exists for that date
+ *   404 if the workout doesn't exist or belongs to a different user
  */
 
-import { eq, and } from 'drizzle-orm'
+import { eq, and, ne } from 'drizzle-orm'
 import { workouts, powerBests, POWER_BEST_DURATIONS, type WorkoutFitData } from '../../db/schema'
 import { useDB } from '../../db'
 import { invalidateMetrics } from '../../utils/metricsCache'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
+
+  const id = Number(getRouterParam(event, 'id'))
+  if (!Number.isInteger(id) || id <= 0) {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid workout ID.' })
+  }
+
   const body = await readBody(event)
 
   // ── Validation ────────────────────────────────────────────────────────────
@@ -65,10 +67,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Default to today if no date provided
   const date: string = body.date || new Date().toISOString().slice(0, 10)
-
-  // Basic ISO date format check
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw createError({ statusCode: 400, statusMessage: 'Date must be in YYYY-MM-DD format.' })
   }
@@ -134,36 +133,32 @@ export default defineEventHandler(async (event) => {
       }
       pbInput.push({ duration: pb.duration, watts })
     }
-    // Reject duplicate durations in one submission
     const durations = pbInput.map((p) => p.duration)
     if (new Set(durations).size !== durations.length) {
       throw createError({ statusCode: 400, statusMessage: 'Each power best duration must be unique.' })
     }
   }
 
-  // ── Duplicate check ───────────────────────────────────────────────────────
+  // ── Update ────────────────────────────────────────────────────────────────
 
   const db = useDB()
 
-  const [existing] = await db
+  const [dateConflict] = await db
     .select({ id: workouts.id })
     .from(workouts)
-    .where(and(eq(workouts.userId, user.id), eq(workouts.date, date)))
+    .where(and(eq(workouts.userId, user.id), eq(workouts.date, date), ne(workouts.id, id)))
     .limit(1)
 
-  if (existing) {
+  if (dateConflict) {
     throw createError({
       statusCode: 409,
-      statusMessage: `A workout is already logged for ${date}. Delete it first to replace it.`,
+      statusMessage: `A different workout is already logged for ${date}.`,
     })
   }
 
-  // ── Insert ────────────────────────────────────────────────────────────────
-
-  const inserted = await db
-    .insert(workouts)
-    .values({
-      userId: user.id,
+  const updated = await db
+    .update(workouts)
+    .set({
       date,
       name: body.name.trim(),
       durationMinutes,
@@ -175,24 +170,26 @@ export default defineEventHandler(async (event) => {
       rideType,
       fitData,
     })
+    .where(and(eq(workouts.id, id), eq(workouts.userId, user.id)))
     .returning()
 
-  const newWorkout = inserted[0]
-  if (!newWorkout) {
-    throw createError({ statusCode: 500, statusMessage: 'Failed to create workout.' })
+  const updatedWorkout = updated[0]
+  if (!updatedWorkout) {
+    throw createError({ statusCode: 404, statusMessage: 'Workout not found.' })
   }
 
-  if (pbInput.length > 0) {
-    await db.insert(powerBests).values(
-      pbInput.map((pb) => ({ workoutId: newWorkout.id, duration: pb.duration, watts: pb.watts })),
-    )
+  if (Array.isArray(body.powerBests)) {
+    await db.delete(powerBests).where(eq(powerBests.workoutId, id))
+    if (pbInput.length > 0) {
+      await db.insert(powerBests).values(
+        pbInput.map((pb) => ({ workoutId: id, duration: pb.duration, watts: pb.watts })),
+      )
+    }
   }
 
-  // Invalidate the metrics cache so the next GET recomputes with the new workout
   invalidateMetrics(user.id)
 
-  getLogger('workouts').info('workouts.created', { requestId: event.context.requestId, workoutId: newWorkout.id })
+  getLogger('workouts').info('workouts.updated', { requestId: event.context.requestId, workoutId: id })
 
-  setResponseStatus(event, 201)
-  return { workout: newWorkout }
+  return { workout: updatedWorkout }
 })

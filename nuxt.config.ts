@@ -34,9 +34,14 @@ export default defineNuxtConfig({
      *   WAHOO_CLIENT_ID         → runtimeConfig.wahooClientId
      *   WAHOO_CLIENT_SECRET     → runtimeConfig.wahooClientSecret
      *   WAHOO_REFRESH_TOKEN     → runtimeConfig.wahooRefreshToken
+     *   ANTHROPIC_API_KEY       → runtimeConfig.anthropicApiKey
      */
     runtimeConfig: {
         databaseUrl: process.env.DATABASE_URL,
+
+        // Anthropic API access — AI coach workout generation. Static key,
+        // no rotation flow (unlike Strava/Wahoo).
+        anthropicApiKey: process.env.ANTHROPIC_API_KEY,
 
         // Strava API access — single-user, refresh token acquired via a one-time
         // manual OAuth exchange (see CLAUDE.md). No in-app OAuth flow.
@@ -61,6 +66,33 @@ export default defineNuxtConfig({
         session: {
             maxAge: 60 * 60 * 24 * 30, // 30 days — override with NUXT_SESSION_MAX_AGE
             password: process.env.NUXT_SESSION_PASSWORD ?? '',
+        },
+    },
+
+    /**
+     * Nuxt UI theme configuration.
+     *
+     * Sets the primary colour to 'orange' (Sprocket's energetic accent) and
+     * the neutral palette to 'stone' (warm grays rather than cool
+     * blue-grays). Primary drives all UButton fills, focus rings and
+     * interactive accents.
+     *
+     * Deliberately set here rather than in a standalone `app.config.ts` —
+     * with `future.compatibilityVersion: 4` (srcDir moved to `app/`), Nuxt
+     * 4.5.2's Nitro "impound" plugin throws on `#build/app.config.mjs`
+     * whenever `app.config.ts` lives inside `app/` (the only place Nuxt
+     * will actually pick it up in this layout; at the repo root it's
+     * silently ignored). Setting `appConfig` here instead is read directly
+     * into `nuxt.options.appConfig` at module-setup time, before `@nuxt/ui`
+     * merges in its own (green) defaults, so it always wins without going
+     * through that broken file-resolution path.
+     */
+    appConfig: {
+        ui: {
+            colors: {
+                primary: 'orange',
+                neutral: 'stone',
+            },
         },
     },
 

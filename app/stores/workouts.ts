@@ -23,6 +23,25 @@ export interface PowerBestEntry {
   watts: number
 }
 
+/** Extra stats from a parsed FIT file — mirrors WorkoutFitData in server/db/schema.ts */
+export interface WorkoutFitData {
+  avgPower: number
+  maxPower: number
+  normalizedPower: number
+  intensityFactor: number
+  avgHr: number | null
+  maxHr: number | null
+  avgCadence: number | null
+  maxCadence: number | null
+}
+
+/** AI-generated post-ride analysis — mirrors WorkoutInsights in server/db/schema.ts */
+export interface WorkoutInsights {
+  recovery: string
+  rideAnalysis: string
+  generatedAt: string
+}
+
 export interface WorkoutDetail {
   id: number
   name: string
@@ -32,6 +51,9 @@ export interface WorkoutDetail {
   rpe: number | null
   notes: string | null
   ftpWatts: number | null
+  rideType: 'trainer' | 'outdoor' | null
+  fitData: WorkoutFitData | null
+  insights: WorkoutInsights | null
   powerBests: PowerBestEntry[]
 }
 
@@ -93,6 +115,7 @@ export interface NewWorkoutPayload {
   ftpWatts?: number | null
   rideType?: 'trainer' | 'outdoor' | null
   powerBests?: PowerBestEntry[]
+  fitData?: WorkoutFitData | null
 }
 
 // ── Store ───────────────────────────────────────────────────────────────────
@@ -175,6 +198,19 @@ export const useWorkoutsStore = defineStore('workouts', () => {
   }
 
   /**
+   * Updates an existing workout via PATCH /api/workouts/:id, then refreshes
+   * the current page in place (unlike addWorkout, this stays on the current
+   * page rather than jumping to page 1 — the edited workout is already visible).
+   */
+  async function updateWorkout(id: number, payload: NewWorkoutPayload) {
+    await $fetch(`/api/workouts/${id}`, {
+      method: 'PATCH',
+      body: payload,
+    })
+    await fetchPage(pagination.value.page)
+  }
+
+  /**
    * Deletes a workout by id via DELETE /api/workouts/:id,
    * then refreshes the current page.
    */
@@ -213,6 +249,7 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     // Actions
     fetchPage,
     addWorkout,
+    updateWorkout,
     deleteWorkout,
     goToPage,
     setFilters,

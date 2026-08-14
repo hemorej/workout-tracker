@@ -11,13 +11,13 @@
  *   502 if the Strava API call fails (token refresh failure, network error, etc.)
  */
 
-import { fetchRecentRides } from '../../utils/strava'
+import { fetchRecentStravaRides } from '../../utils/strava'
 
 export default defineEventHandler(async (event) => {
   await requireUserSession(event)
 
   try {
-    const activities = await fetchRecentRides(3)
+    const activities = await fetchRecentStravaRides(3)
     return { activities }
   }
   catch (err: unknown) {

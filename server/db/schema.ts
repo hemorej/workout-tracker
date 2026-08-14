@@ -18,6 +18,7 @@ import {
   real,
   date,
   timestamp,
+  jsonb,
   uniqueIndex,
   index,
   check,
@@ -30,6 +31,37 @@ export const POWER_BEST_DURATIONS = [
 ] as const
 
 export type PowerBestDuration = typeof POWER_BEST_DURATIONS[number]
+
+/**
+ * Extra stats a parsed FIT file produces beyond what's already its own
+ * workouts column (TSS/duration/distance stay scalar columns; power-curve
+ * bests stay in the power_bests table). Stored as one JSON blob rather than
+ * a family of new scalar columns — the UI reads fields straight out of it.
+ */
+export interface WorkoutFitData {
+  avgPower: number
+  maxPower: number
+  normalizedPower: number
+  intensityFactor: number
+  avgHr: number | null
+  maxHr: number | null
+  avgCadence: number | null
+  maxCadence: number | null
+}
+
+/**
+ * AI-generated post-ride analysis (see server/api/workouts/[id]/insights.post.ts).
+ * Generated once, on demand — null until the user triggers it, and never
+ * regenerated after that (the "Ride insights" button hides permanently once set).
+ */
+export interface WorkoutInsights {
+  /** Rest-of-day recovery actions + tomorrow's training recommendation */
+  recovery: string
+  /** Qualitative read on how the ride itself went */
+  rideAnalysis: string
+  /** ISO timestamp of generation */
+  generatedAt: string
+}
 
 // ---------------------------------------------------------------------------
 // users
@@ -64,6 +96,20 @@ export const users = pgTable('users', {
    * Override only if you know your actual fatigue level at that point.
    */
   initialAtl: integer('initial_atl').default(0).notNull(),
+
+  /**
+   * Free-text training plan, used as context for the AI coach's workout
+   * generation (see server/api/coach/generate.post.ts). Not committed to
+   * the repo — edit directly via `pnpm db:studio` or SQL when it changes.
+   */
+  trainingPlan: text('training_plan'),
+
+  /**
+   * Current body weight in kg, used for nutrition/hydration calculations
+   * in AI-generated fuelling guides. A single current value, not a
+   * per-workout history — update directly via `pnpm db:studio` or SQL.
+   */
+  weightKg: real('weight_kg'),
 
   /** Row creation timestamp (UTC) */
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -124,6 +170,21 @@ export const workouts = pgTable(
      * (Strava's `type: 'VirtualRide'` vs `'Ride'`).
      */
     rideType: text('ride_type'),
+
+    /**
+     * Extra stats from a parsed FIT file (avg/max power, NP, IF, avg/max HR,
+     * avg/max cadence) — see WorkoutFitData above. Null until a FIT file has
+     * been parsed for this workout (via "Mark as completed" or "Refresh ride
+     * data"); older/manually-entered workouts never get one.
+     */
+    fitData: jsonb('fit_data').$type<WorkoutFitData>(),
+
+    /**
+     * AI-generated post-ride analysis — see WorkoutInsights above. Null
+     * until generated via the "Ride insights" action (only available once
+     * fitData is present); once set, it is never regenerated or cleared.
+     */
+    insights: jsonb('insights').$type<WorkoutInsights>(),
 
     /** Row creation timestamp (UTC) */
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

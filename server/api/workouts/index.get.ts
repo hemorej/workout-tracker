@@ -35,7 +35,7 @@
  */
 
 import { eq, asc, desc, and, gte, lte, ilike, inArray, sql, type SQL } from 'drizzle-orm'
-import { workouts, users, powerBests } from '../../db/schema'
+import { workouts, users, powerBests, type WorkoutFitData, type WorkoutInsights } from '../../db/schema'
 import { useDB } from '../../db'
 import { computeMetricsSeries, computeWeeklyStats, type DayMetrics } from '../../utils/tss'
 import { getCachedMetrics, setCachedMetrics } from '../../utils/metricsCache'
@@ -102,6 +102,8 @@ export default defineEventHandler(async (event) => {
         rpe: workouts.rpe,
         notes: workouts.notes,
         ftpWatts: workouts.ftpWatts,
+        rideType: workouts.rideType,
+        fitData: workouts.fitData,
       })
       .from(workouts)
       .where(eq(workouts.userId, user.id))
@@ -146,6 +148,9 @@ export default defineEventHandler(async (event) => {
     rpe: number | null
     notes: string | null
     ftpWatts: number | null
+    rideType: string | null
+    fitData: WorkoutFitData | null
+    insights: WorkoutInsights | null
   }
 
   async function powerBestsByWorkoutId(workoutIds: number[]) {
@@ -174,6 +179,9 @@ export default defineEventHandler(async (event) => {
       rpe: row.rpe,
       notes: row.notes,
       ftpWatts: row.ftpWatts,
+      rideType: row.rideType,
+      fitData: row.fitData,
+      insights: row.insights,
       powerBests: pbByWorkoutId.get(row.id) ?? [],
     }
   }
@@ -215,6 +223,9 @@ export default defineEventHandler(async (event) => {
         rpe: workouts.rpe,
         notes: workouts.notes,
         ftpWatts: workouts.ftpWatts,
+        rideType: workouts.rideType,
+        fitData: workouts.fitData,
+        insights: workouts.insights,
       })
       .from(workouts)
       .where(whereClause)
@@ -255,6 +266,9 @@ export default defineEventHandler(async (event) => {
         rpe: workouts.rpe,
         notes: workouts.notes,
         ftpWatts: workouts.ftpWatts,
+        rideType: workouts.rideType,
+        fitData: workouts.fitData,
+        insights: workouts.insights,
       })
       .from(workouts)
       .where(eq(workouts.userId, user.id))
