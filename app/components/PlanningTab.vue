@@ -75,22 +75,10 @@ function tssDiverged(day: (typeof planning.plans)[number]) {
   return day.actual.tss !== (day.plan?.tss ?? 0)
 }
 
-const todayStr = new Date().toISOString().slice(0, 10)
-
-/** True for the week containing today — the only week where "logged so far" and
- * "planned for the whole week" are genuinely different quantities worth showing
- * side by side. */
-function isCurrentWeek(days: typeof planning.plans) {
-  return days.some(d => d.date === todayStr)
-}
-
-/** Headline TSS figure: for the current week, only what's actually been logged
- * through today (future days in the week don't count yet); for any other week,
- * the existing actual-once-past/planned-once-future figure. */
+/** Headline TSS figure: past days use logged TSS, future days use planned TSS, summed —
+ * same rule for every week, including the current one (a future day within the
+ * current week counts its plan, same as any other future day). */
 function weekTss(days: typeof planning.plans) {
-  if (isCurrentWeek(days)) {
-    return days.reduce((sum, d) => sum + (d.date <= todayStr ? (d.actual?.tss ?? 0) : 0), 0)
-  }
   return days.reduce((sum, d) => sum + effectiveTss(d), 0)
 }
 
@@ -99,11 +87,9 @@ function weekPlannedTss(days: typeof planning.plans) {
   return days.reduce((sum, d) => sum + (d.plan?.tss ?? 0), 0)
 }
 
-/** Whether to show the "planned" footnote: always for the current week (it's a
- * different quantity — logged-so-far vs. planned-for-the-week), otherwise only
- * when a past day actually diverged from its plan. */
+/** Whether to show the "planned" footnote — only when a past day's logged TSS
+ * actually diverged from what was planned for it. */
 function weekDiverged(days: typeof planning.plans) {
-  if (isCurrentWeek(days)) return true
   return days.some(tssDiverged)
 }
 

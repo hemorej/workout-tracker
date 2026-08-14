@@ -14,7 +14,7 @@
  * and get saved normally via POST /api/workouts if the user keeps them.
  *
  * Returns:
- *   200 { tss, powerBests, durationSeconds, distanceMeters }
+ *   200 { tss, powerBests, durationSeconds, distanceMeters, fitData }
  *   400 if no file was uploaded
  *   422 if the file has no record data or no power data
  */
@@ -59,5 +59,15 @@ export default defineEventHandler(async (event) => {
     powerBests,
     durationSeconds: metrics.durationSeconds,
     distanceMeters: metrics.distanceMeters,
+    fitData: {
+      avgPower: metrics.avgPower,
+      maxPower: metrics.maxPower,
+      normalizedPower: metrics.normalizedPower,
+      intensityFactor: metrics.intensityFactor,
+      avgHr: metrics.avgHr,
+      maxHr: metrics.maxHr,
+      avgCadence: metrics.avgCadence,
+      maxCadence: metrics.maxCadence,
+    },
   }
 })

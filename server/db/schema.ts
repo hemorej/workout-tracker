@@ -18,6 +18,7 @@ import {
   real,
   date,
   timestamp,
+  jsonb,
   uniqueIndex,
   index,
   check,
@@ -30,6 +31,23 @@ export const POWER_BEST_DURATIONS = [
 ] as const
 
 export type PowerBestDuration = typeof POWER_BEST_DURATIONS[number]
+
+/**
+ * Extra stats a parsed FIT file produces beyond what's already its own
+ * workouts column (TSS/duration/distance stay scalar columns; power-curve
+ * bests stay in the power_bests table). Stored as one JSON blob rather than
+ * a family of new scalar columns — the UI reads fields straight out of it.
+ */
+export interface WorkoutFitData {
+  avgPower: number
+  maxPower: number
+  normalizedPower: number
+  intensityFactor: number
+  avgHr: number | null
+  maxHr: number | null
+  avgCadence: number | null
+  maxCadence: number | null
+}
 
 // ---------------------------------------------------------------------------
 // users
@@ -138,6 +156,14 @@ export const workouts = pgTable(
      * (Strava's `type: 'VirtualRide'` vs `'Ride'`).
      */
     rideType: text('ride_type'),
+
+    /**
+     * Extra stats from a parsed FIT file (avg/max power, NP, IF, avg/max HR,
+     * avg/max cadence) — see WorkoutFitData above. Null until a FIT file has
+     * been parsed for this workout (via "Mark as completed" or "Refresh ride
+     * data"); older/manually-entered workouts never get one.
+     */
+    fitData: jsonb('fit_data').$type<WorkoutFitData>(),
 
     /** Row creation timestamp (UTC) */
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

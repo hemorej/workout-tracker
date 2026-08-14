@@ -24,6 +24,8 @@ interface Props {
   plannedWorkout?: PlannedDay | null
   /** True while an auto-build (AI) request is in flight for this day's plan. */
   isAutoBuilding?: boolean
+  /** True while a "refresh ride data" fetch/parse is in flight for this day's workout. */
+  isRefreshingRideData?: boolean
 }
 
 const props = defineProps<Props>()
@@ -32,6 +34,8 @@ const emit = defineEmits<{
   (e: 'mark-completed'): void
   (e: 'go-to-builder'): void
   (e: 'auto-build'): void
+  (e: 'open-fit-overlay'): void
+  (e: 'refresh-ride-data'): void
 }>()
 
 // ── Date formatting ──────────────────────────────────────────────────────
@@ -117,6 +121,7 @@ const plannedDurationDisplay = computed(() => {
 // ── Power data indicators ────────────────────────────────────────────────
 const hasFtp = computed(() => !!props.day.workout?.ftpWatts)
 const hasPowerBests = computed(() => (props.day.workout?.powerBests?.length ?? 0) > 0)
+const hasFitData = computed(() => !!props.day.workout?.fitData)
 
 // ── Mobile swipe-row summary (panel 1) ───────────────────────────────────
 const mobileTitle = computed(() => {
@@ -189,7 +194,16 @@ function confirmDelete() {
         class="absolute left-0 top-2 bottom-2 w-[3px] bg-violet-400 rounded-full"
       />
       <div class="min-w-0 flex-1">
+        <button
+          v-if="!day.isRestDay && !isPlannedDay && hasFitData"
+          type="button"
+          class="text-sm font-semibold truncate text-stone-800 underline decoration-stone-300 underline-offset-2"
+          @click.stop="emit('open-fit-overlay')"
+        >
+          {{ mobileTitle }}
+        </button>
         <p
+          v-else
           class="text-sm font-semibold truncate"
           :class="day.isRestDay && !isPlannedDay ? 'text-stone-400 italic font-normal' : (isPlannedDay ? 'text-stone-500 italic' : 'text-stone-800')"
         >
@@ -264,6 +278,22 @@ function confirmDelete() {
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="9" />
           <path d="M8 12l3 3 5-6" />
+        </svg>
+      </button>
+      <button
+        v-if="!day.isRestDay && !isPlannedDay && !hasFitData"
+        title="Refresh ride data"
+        aria-label="Refresh ride data"
+        :disabled="isRefreshingRideData"
+        class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-100"
+        @click="emit('refresh-ride-data')"
+      >
+        <BikeSpinner v-if="isRefreshingRideData" :size="12" />
+        <svg v-else class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+          <path d="M3 21v-5h5" />
         </svg>
       </button>
       <template v-if="!day.isRestDay && !isPlannedDay">
@@ -341,7 +371,15 @@ function confirmDelete() {
              own second line (w-full) instead of wrapping wherever the title happens to
              break; at sm+ it collapses back into the same flex row via sm:contents. -->
         <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-          <span class="text-base font-semibold text-stone-800 max-w-xs">
+          <button
+            v-if="hasFitData"
+            type="button"
+            class="text-base font-semibold text-stone-800 max-w-xs truncate underline decoration-stone-300 underline-offset-2 hover:decoration-stone-500 transition-colors"
+            @click="emit('open-fit-overlay')"
+          >
+            {{ day.workout?.name }}
+          </button>
+          <span v-else class="text-base font-semibold text-stone-800 max-w-xs">
             {{ day.workout?.name }}
           </span>
           <div class="flex items-baseline gap-x-2.5 w-full sm:w-auto sm:contents">
@@ -438,6 +476,24 @@ function confirmDelete() {
         <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="9" />
           <path d="M8 12l3 3 5-6" />
+        </svg>
+      </button>
+
+      <!-- Refresh ride data — only shown once a workout exists with no parsed FIT data yet -->
+      <button
+        v-if="!day.isRestDay && !isPlannedDay && !hasFitData"
+        title="Refresh ride data"
+        aria-label="Refresh ride data"
+        :disabled="isRefreshingRideData"
+        class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-100"
+        @click="emit('refresh-ride-data')"
+      >
+        <BikeSpinner v-if="isRefreshingRideData" :size="16" />
+        <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+          <path d="M3 21v-5h5" />
         </svg>
       </button>
 

@@ -78,6 +78,13 @@
       "when": 1786651217572,
       "tag": "0010_certain_slapstick",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786727725167,
+      "tag": "0011_shallow_omega_red",
+      "breakpoints": true
     }
   ]
 }

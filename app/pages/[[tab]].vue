@@ -26,7 +26,7 @@
  */
 
 import { useAuthStore } from '~/stores/auth'
-import { useWorkoutsStore, type LogFilters } from '~/stores/workouts'
+import { useWorkoutsStore, type LogFilters, type WorkoutDetail, type WorkoutFitData, type DayEntry } from '~/stores/workouts'
 import { usePlanningStore } from '~/stores/planning'
 import { useCoachStore, type CoachWorkout } from '~/stores/coach'
 import type { WorkoutPrefill } from '~/components/AddWorkoutModal.vue'
@@ -46,6 +46,7 @@ interface ParsedFitPrefill {
   powerBests: { duration: string, watts: number }[]
   durationSeconds: number
   distanceMeters: number
+  fitData: WorkoutFitData
 }
 
 interface WahooByDateResponse extends ParsedFitPrefill {
@@ -111,6 +112,31 @@ const todayPlan = computed(() => {
 const showAddWorkout = ref(false)
 const addWorkoutForm = ref<{ reset: () => void } | null>(null)
 const pendingPrefill = ref<WorkoutPrefill | null>(null)
+// Set only by the "refresh ride data" flow — when non-null, the Add Workout
+// modal opens in edit mode (PATCH this workout) instead of create mode.
+const editingWorkoutId = ref<number | null>(null)
+
+// ── User settings modal (weight + training plan) ─────────────────────────
+const showUserSettings = ref(false)
+
+function openUserSettings() {
+  showUserSettings.value = true
+}
+
+function closeUserSettings() {
+  showUserSettings.value = false
+}
+
+// ── Ride stats overlay ("brief ride stats" on a logged workout's title) ──
+const fitOverlayWorkout = ref<WorkoutDetail | null>(null)
+
+function openFitOverlay(day: DayEntry) {
+  fitOverlayWorkout.value = day.workout
+}
+
+function closeFitOverlay() {
+  fitOverlayWorkout.value = null
+}
 
 // ── CTL/TSB history chart modal ──────────────────────────────────────────
 const showHistoryChart = ref(false)
@@ -191,11 +217,13 @@ async function onAutoBuild() {
 
 function openAddWorkout() {
   pendingPrefill.value = null
+  editingWorkoutId.value = null
   showAddWorkout.value = true
 }
 
 function closeAddWorkout() {
   showAddWorkout.value = false
+  editingWorkoutId.value = null
 }
 
 // ── "Mark as completed" — Strava activity picker ─────────────────────────
@@ -217,12 +245,30 @@ const resolvingActivityId = ref<number | null>(null)
 // Picker switches into this mode when an indoor/virtual ride is picked —
 // Wahoo has no FIT file for it, so we need the user to upload their local one.
 const activityPickerMode = ref<'list' | 'upload'>('list')
-const pendingUploadActivity = ref<StravaRideSummary | null>(null)
+/** Just the subset of StravaRideSummary the upload step needs — the "refresh ride data"
+ *  flow (below) has no Strava activity, only an existing WorkoutDetail, and synthesizes one. */
+interface UploadTarget {
+  name: string
+  rideType: 'trainer' | 'outdoor'
+  startDateLocal: string
+}
+const pendingUploadActivity = ref<UploadTarget | null>(null)
 const isUploadingFit = ref(false)
 const uploadError = ref<string | null>(null)
 const fitFileInput = ref<HTMLInputElement | null>(null)
 
+// Whether the (shared) activity picker is being driven by "Mark as completed"
+// (creates a new workout) or by a per-row "Refresh ride data" click (re-parses
+// FIT data for an existing workout, then reopens Add Workout in edit mode).
+const pickerPurpose = ref<'create' | 'refresh'>('create')
+const refreshTargetWorkout = ref<WorkoutDetail | null>(null)
+// Per-row loading state for the outdoor "refresh ride data" fetch (mirrors
+// resolvingActivityId above, but keyed by workout id instead of Strava activity id).
+const refreshingWorkoutId = ref<number | null>(null)
+
 async function onMarkCompleted() {
+  pickerPurpose.value = 'create'
+  refreshTargetWorkout.value = null
   showActivityPicker.value = true
   activityPickerMode.value = 'list'
   pendingUploadActivity.value = null
@@ -248,6 +294,8 @@ function closeActivityPicker() {
   activityPickerMode.value = 'list'
   pendingUploadActivity.value = null
   uploadError.value = null
+  pickerPurpose.value = 'create'
+  refreshTargetWorkout.value = null
 }
 
 function backToActivityList() {
@@ -287,7 +335,7 @@ function fallbackPrefillFromStrava(activity: StravaRideSummary): WorkoutPrefill 
   }
 }
 
-function prefillFromParsedFit(activity: StravaRideSummary, parsed: ParsedFitPrefill): WorkoutPrefill {
+function prefillFromParsedFit(activity: UploadTarget, parsed: ParsedFitPrefill): WorkoutPrefill {
   return {
     date: activity.startDateLocal.slice(0, 10),
     name: activity.name, // title always comes from Strava, e.g. "Morning Ride", "Zwift - 3x4"
@@ -296,6 +344,7 @@ function prefillFromParsedFit(activity: StravaRideSummary, parsed: ParsedFitPref
     tss: parsed.tss,
     rideType: activity.rideType,
     powerBests: parsed.powerBests,
+    fitData: parsed.fitData,
   }
 }
 
@@ -356,9 +405,14 @@ async function onFitFileSelected(event: Event) {
     const formData = new FormData()
     formData.append('file', file)
     const parsed = await $fetch<ParsedFitPrefill>('/api/fit/upload', { method: 'POST', body: formData })
-    pendingPrefill.value = prefillFromParsedFit(activity, parsed)
-    showActivityPicker.value = false
-    showAddWorkout.value = true
+    if (pickerPurpose.value === 'refresh') {
+      openEditModalFromRefresh(prefillFromParsedFit(activity, parsed))
+    }
+    else {
+      pendingPrefill.value = prefillFromParsedFit(activity, parsed)
+      showActivityPicker.value = false
+      showAddWorkout.value = true
+    }
   }
   catch (err: unknown) {
     uploadError.value = (err as { data?: { statusMessage?: string } })?.data?.statusMessage
@@ -374,9 +428,72 @@ async function onFitFileSelected(event: Event) {
 /** Skips FIT parsing entirely and opens Add Workout pre-filled from Strava's summary data only. */
 function skipUploadAndEnterManually() {
   if (!pendingUploadActivity.value) return
-  pendingPrefill.value = fallbackPrefillFromStrava(pendingUploadActivity.value)
+  pendingPrefill.value = fallbackPrefillFromStrava(pendingUploadActivity.value as StravaRideSummary)
   showActivityPicker.value = false
   showAddWorkout.value = true
+}
+
+/**
+ * "Refresh ride data" — re-runs the outdoor(Wahoo)/indoor(upload) FIT flow
+ * above against an *existing* logged workout instead of creating a new one,
+ * then opens Add Workout in edit mode so the user can review before saving
+ * (see CLAUDE.md's Completed-workout picker / PATCH /api/workouts/:id).
+ * Skips the Strava activity-list step entirely — the workout's own date and
+ * rideType already tell us what to fetch, no need to pick which activity.
+ */
+async function onRefreshRideData(day: DayEntry) {
+  const workout = day.workout
+  if (!workout) return
+
+  pickerPurpose.value = 'refresh'
+  refreshTargetWorkout.value = workout
+
+  if (workout.rideType === 'trainer') {
+    pendingUploadActivity.value = { name: workout.name, rideType: 'trainer', startDateLocal: day.date }
+    activityPickerMode.value = 'upload'
+    uploadError.value = null
+    showActivityPicker.value = true
+    return
+  }
+
+  refreshingWorkoutId.value = workout.id
+  try {
+    const detail = await $fetch<WahooByDateResponse>('/api/wahoo/by-date', { query: { date: day.date } })
+    openEditModalFromRefresh(prefillFromParsedFit({ name: workout.name, rideType: 'outdoor', startDateLocal: day.date }, detail))
+  }
+  catch {
+    toast.add({
+      title: "Couldn't read power data",
+      description: "This ride's Wahoo FIT file couldn't be found or parsed.",
+      color: 'warning',
+    })
+    pickerPurpose.value = 'create'
+    refreshTargetWorkout.value = null
+  }
+  finally {
+    refreshingWorkoutId.value = null
+  }
+}
+
+/** Opens Add Workout in edit mode for the workout being refreshed, keeping its
+ *  name/notes/RPE/FTP as-is and overwriting tss/duration/distance/powerBests/fitData
+ *  with the freshly parsed values (still user-editable before saving). */
+function openEditModalFromRefresh(parsedPrefill: WorkoutPrefill) {
+  const workout = refreshTargetWorkout.value
+  if (!workout) return
+
+  pendingPrefill.value = {
+    ...parsedPrefill,
+    name: workout.name,
+    notes: workout.notes,
+    rpe: workout.rpe,
+    ftpWatts: workout.ftpWatts,
+  }
+  editingWorkoutId.value = workout.id
+  showActivityPicker.value = false
+  showAddWorkout.value = true
+  pickerPurpose.value = 'create'
+  refreshTargetWorkout.value = null
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -398,8 +515,12 @@ await useAsyncData('dashboard-initial-load', async () => {
 
 /** Called after the form saves a workout — close modal and refresh list */
 async function onWorkoutSaved() {
+  // AddWorkoutModal's own submit already refetches via workoutsStore
+  // (updateWorkout stays on the current page; the plain POST path below
+  // still needs an explicit refresh since it calls $fetch directly).
+  const wasEdit = editingWorkoutId.value !== null
   closeAddWorkout()
-  await workouts.fetchPage(1)
+  if (!wasEdit) await workouts.fetchPage(1)
 }
 
 /** Called by WorkoutCard's delete event */
@@ -647,9 +768,12 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
             Sprocket
           </span>
           <div class="flex items-center gap-4">
-            <span class="text-sm text-stone-500 hidden sm:inline">
+            <button
+              class="text-sm text-stone-500 hidden sm:inline hover:text-stone-800 transition-colors"
+              @click="openUserSettings"
+            >
               {{ auth.user?.username }}
-            </span>
+            </button>
             <button
               class="text-sm text-stone-400 hover:text-stone-700 transition-colors"
               @click="auth.logout"
@@ -1081,10 +1205,13 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           :day="day"
           :planned-workout="day.date === todayStr ? todayPlan : null"
           :is-auto-building="isAutoBuilding"
+          :is-refreshing-ride-data="refreshingWorkoutId !== null && day.workout?.id === refreshingWorkoutId"
           @delete="onDeleteWorkout"
           @mark-completed="onMarkCompleted"
           @go-to-builder="goToBuilder"
           @auto-build="onAutoBuild"
+          @open-fit-overlay="openFitOverlay(day)"
+          @refresh-ride-data="onRefreshRideData(day)"
         />
       </div>
 
@@ -1148,8 +1275,10 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           <!-- Header -->
           <div class="flex items-start justify-between mb-6">
             <div>
-              <h2 class="text-lg font-semibold text-stone-900">Log a workout</h2>
-              <p class="text-sm text-stone-400 mt-0.5">Record your training session details.</p>
+              <h2 class="text-lg font-semibold text-stone-900">{{ editingWorkoutId ? 'Review refreshed ride data' : 'Log a workout' }}</h2>
+              <p class="text-sm text-stone-400 mt-0.5">
+                {{ editingWorkoutId ? "Confirm the freshly parsed values before saving." : "Record your training session details." }}
+              </p>
             </div>
             <button
               class="text-stone-300 hover:text-stone-600 transition-colors ml-4 mt-0.5"
@@ -1164,6 +1293,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           <AddWorkoutModal
             ref="addWorkoutForm"
             :prefill="pendingPrefill"
+            :edit-workout-id="editingWorkoutId"
             @saved="onWorkoutSaved"
             @close="closeAddWorkout"
           />
@@ -1188,7 +1318,9 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
         <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 my-8">
           <div class="flex items-start justify-between mb-6">
             <div>
-              <h2 class="text-lg font-semibold text-stone-900">Mark as completed</h2>
+              <h2 class="text-lg font-semibold text-stone-900">
+                {{ pickerPurpose === 'refresh' ? 'Refresh ride data' : 'Mark as completed' }}
+              </h2>
               <p class="text-sm text-stone-400 mt-0.5">
                 {{ activityPickerMode === 'list' ? 'Pick the Strava ride that matches this workout.' : 'Upload the FIT file for this ride.' }}
               </p>
@@ -1282,7 +1414,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
 
               <p v-if="uploadError" class="text-xs text-rose-400 mt-3">{{ uploadError }}</p>
 
-              <div class="flex justify-center gap-4 mt-5">
+              <div v-if="pickerPurpose === 'create'" class="flex justify-center gap-4 mt-5">
                 <button
                   type="button"
                   class="text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors"
@@ -1340,6 +1472,43 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
         </div>
       </div>
     </Teleport>
+
+    <!-- ── User settings (weight + training plan) ────────────────────── -->
+    <Teleport to="body">
+      <div
+        v-if="showUserSettings"
+        class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-label="User settings"
+      >
+        <div
+          class="fixed inset-0 bg-black/25 backdrop-blur-sm"
+          @click="closeUserSettings"
+        />
+
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 my-8">
+          <div class="flex items-start justify-between mb-6">
+            <div>
+              <h2 class="text-lg font-semibold text-stone-900">Settings</h2>
+              <p class="text-sm text-stone-400 mt-0.5">Weight and training plan used by the AI coach.</p>
+            </div>
+            <button
+              class="text-stone-300 hover:text-stone-600 transition-colors ml-4 mt-0.5"
+              aria-label="Close"
+              @click="closeUserSettings"
+            >
+              <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+            </button>
+          </div>
+
+          <UserSettingsModal @saved="closeUserSettings" @close="closeUserSettings" />
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ── Ride stats overlay ─────────────────────────────────────────── -->
+    <WorkoutFitOverlay :workout="fitOverlayWorkout" @close="closeFitOverlay" />
 
   </div>
 </template>

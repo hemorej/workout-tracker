@@ -34,6 +34,8 @@ interface FitRecord {
   power?: number
   /** Cumulative distance in meters (lengthUnit: 'm' below) */
   distance?: number
+  heart_rate?: number
+  cadence?: number
 }
 
 export interface ParsedFitMetrics {
@@ -47,6 +49,12 @@ export interface ParsedFitMetrics {
   bests: Partial<Record<PowerBestDuration, number>>
   /** Total distance recorded, if the device provided it (0 for trainer rides with no distance data). */
   distanceMeters: number
+  /** Null if the file has no heart-rate readings (not every ride uses a HR strap). */
+  avgHr: number | null
+  maxHr: number | null
+  /** Null if the file has no cadence readings (not every sensor reports it). */
+  avgCadence: number | null
+  maxCadence: number | null
 }
 
 function mean(arr: number[] | Float64Array): number {
@@ -134,6 +142,9 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     if (r.distance !== undefined) distanceMeters = r.distance
   }
 
+  const heartRates = records.map((r) => r.heart_rate).filter((v): v is number => v !== undefined)
+  const cadences = records.map((r) => r.cadence).filter((v): v is number => v !== undefined)
+
   const avgPower = mean(watts)
   const maxPower = Math.max(...watts)
   const np = normalizedPower(watts)
@@ -150,5 +161,9 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     tss: Math.round(tss),
     bests: computeBests(watts),
     distanceMeters: Math.round(distanceMeters),
+    avgHr: heartRates.length > 0 ? Math.round(mean(heartRates)) : null,
+    maxHr: heartRates.length > 0 ? Math.round(Math.max(...heartRates)) : null,
+    avgCadence: cadences.length > 0 ? Math.round(mean(cadences)) : null,
+    maxCadence: cadences.length > 0 ? Math.round(Math.max(...cadences)) : null,
   }
 }

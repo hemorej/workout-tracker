@@ -10,7 +10,8 @@
  *   close — user pressed Cancel; parent should close the modal
  */
 
-import type { NewWorkoutPayload, PowerBestEntry } from '~/stores/workouts'
+import type { NewWorkoutPayload, PowerBestEntry, WorkoutFitData } from '~/stores/workouts'
+import { useWorkoutsStore } from '~/stores/workouts'
 
 export interface WorkoutPrefill {
   date: string
@@ -24,17 +25,26 @@ export interface WorkoutPrefill {
   rideType?: 'trainer' | 'outdoor' | null
   /** Computed from a Wahoo FIT file's power-curve bests, if any. Still user-editable. */
   powerBests?: PowerBestEntry[] | null
+  /** Only set by the "refresh ride data" flow, carrying the existing workout's notes/rpe/ftpWatts/fitData through. */
+  notes?: string | null
+  rpe?: number | null
+  ftpWatts?: number | null
+  fitData?: WorkoutFitData | null
 }
 
 const props = defineProps<{
-  /** Pre-fills date/name/duration/tss/powerBests, e.g. from a matched Wahoo activity. RPE is never pre-filled. */
+  /** Pre-fills date/name/duration/tss/powerBests, e.g. from a matched Wahoo activity. RPE is never pre-filled, except in edit mode. */
   prefill?: WorkoutPrefill | null
+  /** When set, the form edits this existing workout (PATCH) instead of creating a new one (POST). */
+  editWorkoutId?: number | null
 }>()
 
 const emit = defineEmits<{
   saved: []
   close: []
 }>()
+
+const workoutsStore = useWorkoutsStore()
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -55,7 +65,7 @@ const form = reactive({
   durationMinutes: props.prefill?.durationMinutes ?? null as number | null,
   distanceKm: props.prefill?.distanceKm ?? null as number | null,
   tss: props.prefill?.tss ?? null as number | null,
-  rpe: null as number | null,
+  rpe: props.prefill?.rpe ?? null as number | null,
 })
 
 // Not user-editable — carried straight through from the matched Wahoo activity, if any.
@@ -63,8 +73,8 @@ const rideType = ref<'trainer' | 'outdoor' | null>(props.prefill?.rideType ?? nu
 
 // Auto-expand so pre-filled power bests (from a parsed Wahoo FIT file) are visible immediately.
 const optionalExpanded = ref((props.prefill?.powerBests?.length ?? 0) > 0)
-const notes = ref('')
-const ftpWatts = ref<number | null>(null)
+const notes = ref(props.prefill?.notes ?? '')
+const ftpWatts = ref<number | null>(props.prefill?.ftpWatts ?? null)
 const powerBestRows = ref<{ duration: string; watts: number | null }[]>(
   (props.prefill?.powerBests ?? []).map((pb) => ({ duration: pb.duration, watts: pb.watts })),
 )
@@ -158,11 +168,18 @@ async function handleSubmit() {
     ftpWatts: ftpWatts.value ? Math.round(ftpWatts.value) : null,
     rideType: rideType.value,
     powerBests: validPowerBests.length > 0 ? validPowerBests : undefined,
+    fitData: props.prefill?.fitData ?? undefined,
   }
 
   try {
-    await $fetch('/api/workouts', { method: 'POST', body: payload })
-    toast.add({ title: 'Workout logged!', color: 'success' })
+    if (props.editWorkoutId) {
+      await workoutsStore.updateWorkout(props.editWorkoutId, payload)
+      toast.add({ title: 'Workout updated', color: 'success' })
+    }
+    else {
+      await $fetch('/api/workouts', { method: 'POST', body: payload })
+      toast.add({ title: 'Workout logged!', color: 'success' })
+    }
     emit('saved')
   }
   catch (err: unknown) {
@@ -367,7 +384,7 @@ async function handleSubmit() {
         Cancel
       </button>
       <UButton type="submit" :loading="isLoading" size="md" class="rounded-lg font-semibold">
-        Log workout
+        {{ editWorkoutId ? 'Save changes' : 'Log workout' }}
       </UButton>
     </div>
 
