@@ -517,6 +517,7 @@ async function onGenerateInsights(day: DayEntry) {
       { method: 'POST' },
     )
     workout.insights = insights
+    toast.add({ title: 'Ride insights ready', color: 'success' })
   }
   catch {
     toast.add({

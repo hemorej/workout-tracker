@@ -305,7 +305,8 @@ function confirmDelete() {
         title="Ride insights"
         aria-label="Ride insights"
         :disabled="isGeneratingInsights"
-        class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-amber-500 hover:bg-amber-50 disabled:opacity-100"
+        class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none transition-all opacity-55 hover:opacity-100 hover:text-amber-500 hover:bg-amber-50 disabled:opacity-100"
+        :class="isGeneratingInsights ? 'text-amber-500 bg-amber-50 opacity-100' : 'text-stone-300 bg-transparent'"
         @click="emit('generate-insights')"
       >
         <BikeSpinner v-if="isGeneratingInsights" :size="12" />
@@ -521,7 +522,8 @@ function confirmDelete() {
         title="Ride insights"
         aria-label="Ride insights"
         :disabled="isGeneratingInsights"
-        class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-amber-500 hover:bg-amber-50 disabled:opacity-100"
+        class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none transition-all opacity-55 hover:opacity-100 hover:text-amber-500 hover:bg-amber-50 disabled:opacity-100"
+        :class="isGeneratingInsights ? 'text-amber-500 bg-amber-50 opacity-100' : 'text-stone-300 bg-transparent'"
         @click="emit('generate-insights')"
       >
         <BikeSpinner v-if="isGeneratingInsights" :size="16" />
