@@ -36,8 +36,42 @@ interface FitRecord {
   distance?: number
   heart_rate?: number
   cadence?: number
-  /** Cumulative moving-time seconds (elapsed_time minus accumulated paused time) — see parseFitFile. */
-  timer_time?: number
+}
+
+interface FitEvent {
+  event?: string
+  event_type?: string
+  timestamp?: Date
+}
+
+/**
+ * Pause windows derived from raw 'timer' events. fit-file-parser's own
+ * `timer_time` field (elapsedRecordField option) only subtracts pauses whose
+ * event_type is 'stop_all' (auto-pause) — it ignores 'stop', which is what
+ * Wahoo's ELEMNT firmware tags *every* pause with, auto or manual, so
+ * timer_time never actually got reduced. We compute pause windows ourselves
+ * from all stop/stop_all → start pairs. Note the device already omits
+ * records entirely during a pause (confirmed against a real ELEMNT ROAM
+ * file — record count exactly matches the file's own total_timer_time in
+ * seconds), so these windows aren't for filtering records; they're for
+ * reconstructing moving-time-elapsed per record (see pausedSecondsBefore),
+ * since consecutive kept records straddle the paused gap and a naive
+ * timestamp-delta sum would silently re-add it.
+ */
+function computePausedIntervals(events: FitEvent[]): { start: number, end: number }[] {
+  const pauses: { start: number, end: number }[] = []
+  let openStart: number | null = null
+  for (const e of events) {
+    if (e.event !== 'timer' || !e.timestamp) continue
+    if ((e.event_type === 'stop' || e.event_type === 'stop_all') && openStart === null) {
+      openStart = e.timestamp.getTime()
+    }
+    else if (e.event_type === 'start' && openStart !== null) {
+      pauses.push({ start: openStart, end: e.timestamp.getTime() })
+      openStart = null
+    }
+  }
+  return pauses
 }
 
 export interface ParsedFitMetrics {
@@ -109,56 +143,36 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     mode: 'list',
     lengthUnit: 'm',
     speedUnit: 'km/h',
-    elapsedRecordField: true,
   })
 
-  const data = await parser.parseAsync(content as unknown as ArrayBuffer) as { records?: FitRecord[] }
+  const data = await parser.parseAsync(content as unknown as ArrayBuffer) as { records?: FitRecord[], events?: FitEvent[] }
   const records: FitRecord[] = data.records ?? []
 
   if (records.length === 0) {
     throw new Error('No record data found in FIT file.')
   }
 
-  // Records are typically ~1Hz but can have gaps — most notably auto-pause,
-  // where the device stops writing records entirely for the paused stretch.
-  // `elapsedRecordField` (enabled above) adds a `timer_time` field per record:
-  // fit-file-parser tracks accumulated paused time internally from the file's
-  // own start/stop events and reports `timer_time = elapsed_time - pausedTime`
-  // — i.e. moving time only, matching the device's own "moving time" stat.
-  // Bucketing by that instead of raw wall-clock elapsed time means an
-  // auto-pause gap simply isn't allocated any array slots, rather than being
-  // zero-filled as if it were low-power pedaling (which previously inflated
-  // duration and dragged down avg power/NP toward the paused stretch's watts).
-  // Older files without usable timestamps fall back to the wall-clock method.
-  const hasTimerTime = records.some((r) => r.timer_time !== undefined)
-
-  let totalSeconds: number
-  let watts: number[]
-
-  if (hasTimerTime) {
-    let lastSec = 0
-    watts = []
-    for (const r of records) {
-      if (r.timer_time === undefined) continue
-      const sec = Math.round(r.timer_time)
-      if (sec > lastSec) lastSec = sec
-      while (watts.length <= sec) watts.push(0)
-      if (r.power !== undefined) watts[sec] = r.power
-    }
-    totalSeconds = Math.max(1, lastSec)
+  const pauses = computePausedIntervals(data.events ?? [])
+  /** Total paused seconds fully elapsed before `ts` — pauses straddling `ts` don't occur since the device emits no records mid-pause. */
+  function pausedSecondsBefore(ts: number): number {
+    let sum = 0
+    for (const p of pauses) if (p.end <= ts) sum += (p.end - p.start) / 1000
+    return sum
   }
-  else {
-    const start = records[0]!.timestamp?.getTime() ?? 0
-    const end = records[records.length - 1]!.timestamp?.getTime() ?? start
-    totalSeconds = Math.max(1, Math.round((end - start) / 1000))
-    watts = new Array<number>(totalSeconds + 1).fill(0)
-    for (const r of records) {
-      if (r.timestamp && r.power !== undefined) {
-        const sec = Math.round((r.timestamp.getTime() - start) / 1000)
-        if (sec >= 0 && sec < watts.length) watts[sec] = r.power
-      }
-    }
+
+  const startTs = records[0]!.timestamp?.getTime() ?? 0
+  let totalSeconds = 0
+  const watts: number[] = []
+  for (const r of records) {
+    if (!r.timestamp) continue
+    const ts = r.timestamp.getTime()
+    const movingTime = Math.round((ts - startTs) / 1000 - pausedSecondsBefore(ts))
+    if (movingTime < 0) continue
+    if (movingTime > totalSeconds) totalSeconds = movingTime
+    while (watts.length <= movingTime) watts.push(0)
+    if (r.power !== undefined) watts[movingTime] = r.power
   }
+  totalSeconds = Math.max(1, totalSeconds)
 
   if (!watts.some((w) => w > 0)) {
     throw new Error('No power data found in FIT file — not a power-meter/trainer ride?')
@@ -170,14 +184,15 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     if (r.distance !== undefined) distanceMeters = r.distance
   }
 
-  // Same moving-time-only filter for HR/cadence: skip records with no
-  // timer_time (i.e. recorded while paused, for devices that keep sampling
-  // through a pause instead of stopping recording entirely).
-  const movingRecords = hasTimerTime ? records.filter((r) => r.timer_time !== undefined) : records
-  const heartRates = movingRecords.map((r) => r.heart_rate).filter((v): v is number => v !== undefined)
-  const cadences = movingRecords.map((r) => r.cadence).filter((v): v is number => v !== undefined)
+  const heartRates = records.map((r) => r.heart_rate).filter((v): v is number => v !== undefined)
+  const cadences = records.map((r) => r.cadence).filter((v): v is number => v !== undefined)
 
-  const avgPower = mean(watts)
+  // Average power display convention (matches Wahoo/Garmin head units):
+  // exclude zero-power (freewheeling/coasting) seconds. NP and TSS keep the
+  // full watts array including zeros — that's the whole point of the 4th-power
+  // rolling average, and it already tracks the device's own NP closely.
+  const nonZeroWatts = watts.filter((w) => w > 0)
+  const avgPower = mean(nonZeroWatts.length > 0 ? nonZeroWatts : watts)
   const maxPower = Math.max(...watts)
   const np = normalizedPower(watts)
   const intensityFactor = np / ftp
