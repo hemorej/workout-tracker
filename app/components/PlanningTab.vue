@@ -93,6 +93,13 @@ function weekDiverged(days: typeof planning.plans) {
   return days.some(tssDiverged)
 }
 
+/** Whether any day in the week has been logged yet — only then is a logged/planned
+ * split meaningful. A fully future week has nothing logged, so it should just show
+ * its planned total instead of a "0 ⁄ planned" split. */
+function weekHasLogged(days: typeof planning.plans) {
+  return days.some(d => d.isPast)
+}
+
 function weekHours(days: typeof planning.plans) {
   const mins = days.reduce((sum, d) => sum + effectiveMinutes(d), 0)
   if (!mins) return null
@@ -321,16 +328,24 @@ async function saveNote() {
               </div>
               <div class="flex items-baseline gap-1.5 sm:block">
                 <!-- Narrow/vertical layout: inline fraction, like the row cells -->
-                <div class="sm:hidden text-sm font-semibold tabular text-stone-700 leading-tight">
+                <div v-if="weekHasLogged(week.days)" class="sm:hidden text-sm font-semibold tabular text-stone-700 leading-tight">
                   {{ weekLoggedTss(week.days) }}<span class="text-[11px] tabular text-stone-300 mx-0.5">⁄</span><span class="text-[11px] tabular text-stone-300">{{ weekPlannedTss(week.days) }}</span><span class="text-[10px] font-medium text-stone-400"> TSS</span>
+                </div>
+                <div v-else class="sm:hidden text-sm font-semibold tabular text-stone-700 leading-tight">
+                  {{ weekPlannedTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
                 </div>
 
                 <!-- sm+ layout: unchanged two-line footnote -->
-                <div class="hidden sm:block text-sm font-semibold tabular text-stone-700 leading-tight">
-                  {{ weekLoggedTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
-                </div>
-                <div class="hidden sm:block text-[11px] tabular text-stone-400 leading-tight">
-                  {{ weekPlannedTss(week.days) }} planned
+                <template v-if="weekHasLogged(week.days)">
+                  <div class="hidden sm:block text-sm font-semibold tabular text-stone-700 leading-tight">
+                    {{ weekLoggedTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
+                  </div>
+                  <div class="hidden sm:block text-[11px] tabular text-stone-400 leading-tight">
+                    {{ weekPlannedTss(week.days) }} planned
+                  </div>
+                </template>
+                <div v-else class="hidden sm:block text-sm font-semibold tabular text-stone-700 leading-tight">
+                  {{ weekPlannedTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
                 </div>
               </div>
             </div>
