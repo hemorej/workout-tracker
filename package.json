@@ -47,6 +47,6 @@
         "@types/pg": "^8.20.4",
         "drizzle-kit": "^0.31.10",
         "typescript": "^5.7.0",
-        "vue-tsc": "^3.3.8"
+        "vue-tsc": "^3.3.9"
     }
 }
