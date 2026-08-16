@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
     const client = getAnthropicClient()
     const response = await client.messages.parse({
       model: 'claude-sonnet-5',
-      max_tokens: 6000,
+      max_tokens: 7500,
       system: [
         { type: 'text', text: row.trainingPlan, cache_control: { type: 'ephemeral' } },
         {
