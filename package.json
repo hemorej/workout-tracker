@@ -23,7 +23,7 @@
         "workout-search": "node --experimental-strip-types scripts/workout-search.ts"
     },
     "dependencies": {
-        "@adonisjs/hash": "^10.1.0",
+        "@adonisjs/hash": "^10.1.1",
         "@anthropic-ai/sdk": "^0.116.0",
         "@fontsource-variable/hanken-grotesk": "^5.3.0",
         "@nuxt/ui": "^4.10.0",
@@ -41,12 +41,12 @@
     },
     "devDependencies": {
         "@iconify-json/heroicons": "^1.2.3",
-        "@iconify-json/lucide": "^1.2.122",
+        "@iconify-json/lucide": "^1.2.123",
         "@nuxt/devtools": "^3.4.1",
         "@types/node": "^26.2.0",
         "@types/pg": "^8.20.4",
         "drizzle-kit": "^0.31.10",
         "typescript": "^5.7.0",
-        "vue-tsc": "^3.3.8"
+        "vue-tsc": "^3.3.9"
     }
 }
