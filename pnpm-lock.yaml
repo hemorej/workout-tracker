@@ -19,8 +19,8 @@ importers:
   .:
     dependencies:
       '@adonisjs/hash':
-        specifier: ^10.1.0
-        version: 10.1.0
+        specifier: ^10.1.1
+        version: 10.1.1
       '@anthropic-ai/sdk':
         specifier: ^0.116.0
         version: 0.116.0(zod@4.4.3)
@@ -91,11 +91,11 @@ importers:
 
 packages:
 
-  '@adonisjs/hash@10.1.0':
-    resolution: {integrity: sha512-lW0lGwpscu9PUo3Sb3PF580jYU29I9wsPn3dIKzZbTVedqkpaNpBK3YKedwZYkDpYmiyYXi08eTTNhdWjiGLQw==}
+  '@adonisjs/hash@10.1.1':
+    resolution: {integrity: sha512-i12srCoJ2uomD8fTMPEp16lcRTsB9pI8AlGFrtkrq7xcoLPBVi67lovXkdS6BNHdvdciH9HLcRe73KB2kUvgfw==}
     engines: {node: '>=20.6.0'}
     peerDependencies:
-      argon2: ^0.31.2 || ^0.41.0 || ^0.43.0 || ^0.44.0
+      argon2: ^0.31.2 || ^0.41.0 || ^0.43.0 || ^0.44.0 || ^0.45.1
       bcrypt: ^5.1.1 || ^6.0.0
     peerDependenciesMeta:
       argon2:
@@ -4869,7 +4869,7 @@ packages:
 
 snapshots:
 
-  '@adonisjs/hash@10.1.0':
+  '@adonisjs/hash@10.1.1':
     dependencies:
       '@phc/format': 1.0.0
       '@poppinss/utils': 7.0.1
