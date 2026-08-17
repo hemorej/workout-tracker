@@ -286,6 +286,14 @@ function closeNoteModal() {
   noteModalDate.value = null
 }
 
+// Grows the textarea with note length (4 rows minimum, matching the old fixed
+// size) but caps out at 12 so a very long note scrolls instead of pushing the
+// modal off-screen — roughly 60 chars/line at the modal's current width.
+const noteTextareaRows = computed(() => {
+  const length = noteModalDate.value ? (getDraft(noteModalDate.value).notes?.length ?? 0) : 0
+  return Math.min(12, Math.max(4, Math.ceil(length / 60) + 1))
+})
+
 async function saveNote() {
   if (!noteModalDate.value) return
   await save(noteModalDate.value)
@@ -567,9 +575,9 @@ async function saveNote() {
           <textarea
             ref="noteTextarea"
             v-model="getDraft(noteModalDate).notes"
-            rows="4"
+            :rows="noteTextareaRows"
             placeholder="Add a note for this day…"
-            class="w-full text-sm text-stone-700 placeholder-stone-300 border border-stone-200 rounded-lg p-3 outline-none focus:border-stone-400 resize-none"
+            class="w-full text-sm text-stone-700 placeholder-stone-300 border border-stone-200 rounded-lg p-3 outline-none focus:border-stone-400 resize-none overflow-y-auto"
           />
           <div class="flex justify-end gap-3 mt-4">
             <button class="text-sm text-stone-400 hover:text-stone-600 cursor-pointer" @click="closeNoteModal">Cancel</button>
