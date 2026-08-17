@@ -79,33 +79,23 @@ watch(() => props.workout?.id, () => {
               {{ durationDisplay }}<template v-if="distanceDisplay"> &nbsp;·&nbsp; {{ distanceDisplay }}</template>
             </p>
           </div>
-          <button
-            class="text-stone-300 hover:text-stone-600 transition-colors ml-4 mt-0.5"
-            aria-label="Close"
-            @click="$emit('close')"
-          >
-            <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
-          </button>
-        </div>
-
-        <!-- Tab bar — only shown once insights exist -->
-        <div v-if="workout.insights" class="flex gap-1 mb-5 bg-stone-100 rounded-full p-1 w-fit">
-          <button
-            type="button"
-            class="text-xs font-semibold rounded-full px-3 py-1 transition-colors"
-            :class="activeTab === 'overview' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-400 hover:text-stone-600'"
-            @click="activeTab = 'overview'"
-          >
-            Overview
-          </button>
-          <button
-            type="button"
-            class="text-xs font-semibold rounded-full px-3 py-1 transition-colors"
-            :class="activeTab === 'insights' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-400 hover:text-stone-600'"
-            @click="activeTab = 'insights'"
-          >
-            Insights
-          </button>
+          <div class="flex flex-col items-end ml-4">
+            <button
+              class="text-stone-300 hover:text-stone-600 transition-colors"
+              aria-label="Close"
+              @click="$emit('close')"
+            >
+              <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+            </button>
+            <button
+              v-if="workout.insights"
+              type="button"
+              class="text-sm font-medium text-primary hover:text-primary/80 transition-colors mt-1.5"
+              @click="activeTab = activeTab === 'overview' ? 'insights' : 'overview'"
+            >
+              {{ activeTab === 'overview' ? 'Insights' : 'Overview' }}
+            </button>
+          </div>
         </div>
 
         <!-- Insights tab -->

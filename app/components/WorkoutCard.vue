@@ -260,18 +260,16 @@ function confirmDelete() {
       >
         RPE {{ day.workout?.rpe }}/10
       </span>
-      <!-- Plain, non-interactive-in-practice pill on mobile: the Workout
-           Builder tab (and thus both "from scratch" and "auto-build") is
-           unavailable below `lg`, so there's no choice to offer here — see
-           the desktop pill below for the real interaction. -->
-      <button
+      <!-- Non-interactive pill on mobile: the Workout Builder tab (and thus
+           both "from scratch" and "auto-build") is unavailable below `lg`,
+           so there's no choice to offer here — see the desktop pill below
+           for the real interaction. -->
+      <span
         v-else-if="isPlannedDay"
-        title="Go to workout builder"
-        class="inline-block text-[10px] text-violet-600 font-semibold bg-violet-100 border border-violet-200 rounded-full px-1.5 py-[1px] whitespace-nowrap cursor-pointer transition-colors hover:bg-violet-200"
-        @click="emit('go-to-builder')"
+        class="inline-block text-[10px] text-violet-600 font-semibold bg-violet-100 border border-violet-200 rounded-full px-1.5 py-[1px] whitespace-nowrap"
       >
         Planned
-      </button>
+      </span>
       <button
         v-if="isPlannedDay"
         title="Mark as completed"
