@@ -32,7 +32,7 @@
         "fit-file-parser": "^4.1.0",
         "nuxt": "^4.5.2",
         "nuxt-auth-utils": "^0.5.30",
-        "pg": "8.22.0",
+        "pg": "8.23.0",
         "pinia": "^3.0.1",
         "tslog": "^5.1.0",
         "vue": "^3.5.40",
@@ -44,7 +44,7 @@
         "@iconify-json/lucide": "^1.2.122",
         "@nuxt/devtools": "^3.4.1",
         "@types/node": "^26.2.0",
-        "@types/pg": "^8.20.4",
+        "@types/pg": "^8.21.0",
         "drizzle-kit": "^0.31.10",
         "typescript": "^5.7.0",
         "vue-tsc": "^3.3.9"
