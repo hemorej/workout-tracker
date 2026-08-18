@@ -16,6 +16,9 @@
  *   rideType?:       string   — optional, 'trainer' | 'outdoor'
  *   powerBests?:     { duration: string; watts: number }[]
  *   fitData?:        WorkoutFitData — optional, extra stats from a parsed FIT file
+ *   stravaActivityId?: number — optional, set when created via the "Mark as
+ *                      completed" picker; lets insights.post.ts fetch the raw
+ *                      power/HR stream from Strava later
  * }
  *
  * Returns:
@@ -89,6 +92,14 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: "Ride type must be 'trainer' or 'outdoor'." })
     }
     rideType = body.rideType
+  }
+
+  let stravaActivityId: number | null = null
+  if (body.stravaActivityId !== undefined && body.stravaActivityId !== null) {
+    stravaActivityId = Number(body.stravaActivityId)
+    if (!Number.isInteger(stravaActivityId) || stravaActivityId <= 0) {
+      throw createError({ statusCode: 400, statusMessage: 'stravaActivityId must be a positive integer.' })
+    }
   }
 
   let fitData: WorkoutFitData | null = null
@@ -174,6 +185,7 @@ export default defineEventHandler(async (event) => {
       ftpWatts,
       rideType,
       fitData,
+      stravaActivityId,
     })
     .returning()
 

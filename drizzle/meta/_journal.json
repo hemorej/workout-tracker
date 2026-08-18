@@ -92,6 +92,13 @@
       "when": 1786735230418,
       "tag": "0012_ambitious_ultimatum",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787055615417,
+      "tag": "0013_slow_earthquake",
+      "breakpoints": true
     }
   ]
 }

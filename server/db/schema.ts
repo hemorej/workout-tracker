@@ -172,6 +172,16 @@ export const workouts = pgTable(
     rideType: text('ride_type'),
 
     /**
+     * The Strava activity this workout was created from, if it was created
+     * via the "Mark as completed" picker (see CLAUDE.md's Completed-workout
+     * picker). Null for manually-entered workouts or ones logged before this
+     * field existed. Used by insights.post.ts to fetch the raw per-second
+     * power/HR stream from Strava's API on demand — nothing about the stream
+     * itself is persisted locally, only this id.
+     */
+    stravaActivityId: bigint('strava_activity_id', { mode: 'number' }),
+
+    /**
      * Extra stats from a parsed FIT file (avg/max power, NP, IF, avg/max HR,
      * avg/max cadence) — see WorkoutFitData above. Null until a FIT file has
      * been parsed for this workout (via "Mark as completed" or "Refresh ride

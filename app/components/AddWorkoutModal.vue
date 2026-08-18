@@ -23,6 +23,8 @@ export interface WorkoutPrefill {
   tss?: number | null
   /** Pre-filled from a matched Wahoo activity's type, if any. */
   rideType?: 'trainer' | 'outdoor' | null
+  /** The Strava activity this workout was created from, if picked via "Mark as completed". */
+  stravaActivityId?: number | null
   /** Computed from a Wahoo FIT file's power-curve bests, if any. Still user-editable. */
   powerBests?: PowerBestEntry[] | null
   /** Only set by the "refresh ride data" flow, carrying the existing workout's notes/rpe/ftpWatts/fitData through. */
@@ -169,6 +171,7 @@ async function handleSubmit() {
     rideType: rideType.value,
     powerBests: validPowerBests.length > 0 ? validPowerBests : undefined,
     fitData: props.prefill?.fitData ?? undefined,
+    stravaActivityId: props.prefill?.stravaActivityId ?? undefined,
   }
 
   try {

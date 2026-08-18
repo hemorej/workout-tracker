@@ -251,6 +251,8 @@ interface UploadTarget {
   name: string
   rideType: 'trainer' | 'outdoor'
   startDateLocal: string
+  /** Absent for the "refresh ride data" flow, which synthesizes an UploadTarget with no Strava activity. */
+  id?: number
 }
 const pendingUploadActivity = ref<UploadTarget | null>(null)
 const isUploadingFit = ref(false)
@@ -334,6 +336,7 @@ function fallbackPrefillFromStrava(activity: StravaRideSummary): WorkoutPrefill 
     distanceKm: activity.distanceMeters > 0 ? Math.round((activity.distanceMeters / 1000) * 10) / 10 : null,
     tss: todayPlan.value?.plan?.tss ?? null,
     rideType: activity.rideType,
+    stravaActivityId: activity.id,
   }
 }
 
@@ -347,6 +350,7 @@ function prefillFromParsedFit(activity: UploadTarget, parsed: ParsedFitPrefill):
     rideType: activity.rideType,
     powerBests: parsed.powerBests,
     fitData: parsed.fitData,
+    stravaActivityId: activity.id ?? null,
   }
 }
 

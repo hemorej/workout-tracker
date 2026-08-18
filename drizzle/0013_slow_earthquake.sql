@@ -1,0 +1,1 @@
+ALTER TABLE "workouts" ADD COLUMN "strava_activity_id" bigint;
