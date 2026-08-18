@@ -83,6 +83,63 @@ interface StravaActivity {
   distance: number
 }
 
+export interface StravaStreamPoint {
+  /** Elapsed seconds from ride start */
+  t: number
+  watts: number | null
+  heartrate: number | null
+}
+
+interface StravaStreamSet {
+  time?: { data: number[] }
+  watts?: { data: number[] }
+  heartrate?: { data: number[] }
+}
+
+/**
+ * Fetches the raw per-second power/HR stream for a Strava activity and
+ * downsamples it to ~maxPoints evenly-spaced samples (simple bucket
+ * averaging) — a multi-hour ride's raw stream is one point per second, far
+ * more than an insights prompt needs or should spend tokens on. Streams are
+ * kept on Strava's side indefinitely; the app never persists them (see
+ * workouts.stravaActivityId in server/db/schema.ts).
+ *
+ * Returns an empty array if the activity has no power/HR streams at all
+ * (e.g. a ride with no power meter) rather than throwing — callers should
+ * treat that the same as "no stream available".
+ */
+export async function fetchActivityStreams(activityId: number, maxPoints = 120): Promise<StravaStreamPoint[]> {
+  const accessToken = await getStravaAccessToken()
+
+  const streams = await $fetch<StravaStreamSet>(`https://www.strava.com/api/v3/activities/${activityId}/streams`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    query: { keys: 'time,watts,heartrate', key_by_type: true },
+  })
+
+  const time = streams.time?.data ?? []
+  const watts = streams.watts?.data ?? []
+  const heartrate = streams.heartrate?.data ?? []
+  if (time.length === 0 || (watts.length === 0 && heartrate.length === 0)) return []
+
+  const bucketSize = Math.max(1, Math.ceil(time.length / maxPoints))
+  const points: StravaStreamPoint[] = []
+  for (let start = 0; start < time.length; start += bucketSize) {
+    const end = Math.min(start + bucketSize, time.length)
+    const wattsSlice = watts.slice(start, end).filter((w) => w !== undefined)
+    const hrSlice = heartrate.slice(start, end).filter((h) => h !== undefined)
+    points.push({
+      t: time[start]!,
+      watts: wattsSlice.length > 0 ? Math.round(mean(wattsSlice)) : null,
+      heartrate: hrSlice.length > 0 ? Math.round(mean(hrSlice)) : null,
+    })
+  }
+  return points
+}
+
+function mean(arr: number[]): number {
+  return arr.reduce((sum, v) => sum + v, 0) / arr.length
+}
+
 /** Fetches the most recent Strava activities of type "Ride", newest first. */
 export async function fetchRecentStravaRides(limit = 3): Promise<StravaRideSummary[]> {
   const accessToken = await getStravaAccessToken()

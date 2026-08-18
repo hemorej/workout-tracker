@@ -116,6 +116,8 @@ export interface NewWorkoutPayload {
   rideType?: 'trainer' | 'outdoor' | null
   powerBests?: PowerBestEntry[]
   fitData?: WorkoutFitData | null
+  /** Strava activity this workout was created from, if any — see server/db/schema.ts. */
+  stravaActivityId?: number | null
 }
 
 // ── Store ───────────────────────────────────────────────────────────────────
