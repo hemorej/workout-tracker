@@ -681,11 +681,11 @@ function downloadOverlay() {
           </div>
         </div>
 
-        <div class="rounded-xl overflow-hidden bg-stone-200 flex items-center justify-center">
+        <div class="rounded-xl overflow-hidden flex items-center justify-center">
           <canvas
             v-show="photoImage"
             ref="canvasRef"
-            class="max-w-full h-auto block"
+            class="max-w-full max-h-[60vh] h-auto block"
             :class="dragging ? 'cursor-grabbing' : 'cursor-grab'"
             style="touch-action: none;"
             @pointerdown="onOverlayPointerDown"
