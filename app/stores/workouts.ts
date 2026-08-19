@@ -54,6 +54,8 @@ export interface WorkoutDetail {
   rideType: 'trainer' | 'outdoor' | null
   fitData: WorkoutFitData | null
   insights: WorkoutInsights | null
+  /** Strava activity this workout was created from, if any — see server/db/schema.ts. */
+  stravaActivityId: number | null
   powerBests: PowerBestEntry[]
 }
 

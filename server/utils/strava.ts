@@ -83,6 +83,28 @@ interface StravaActivity {
   distance: number
 }
 
+interface StravaActivityDetail extends StravaActivity {
+  map?: {
+    summary_polyline?: string
+  }
+  average_watts?: number | null
+  total_elevation_gain?: number | null
+  average_speed?: number | null
+}
+
+export interface StravaActivityOverlayData {
+  name: string
+  distanceMeters: number
+  movingTimeSeconds: number
+  /** Decoded [lat, lng] points, empty if the activity has no route (e.g. manually entered). */
+  points: [number, number][]
+  /** Null if the activity has no power data (e.g. no power meter). */
+  avgWatts: number | null
+  elevationGainMeters: number
+  /** Meters per second, null if unavailable (e.g. manually entered ride). */
+  avgSpeedMetersPerSecond: number | null
+}
+
 export interface StravaStreamPoint {
   /** Elapsed seconds from ride start */
   t: number
@@ -138,6 +160,31 @@ export async function fetchActivityStreams(activityId: number, maxPoints = 120):
 
 function mean(arr: number[]): number {
   return arr.reduce((sum, v) => sum + v, 0) / arr.length
+}
+
+/**
+ * Fetches a single Strava activity's detail (name, distance, moving time,
+ * and route) for the photo-overlay feature. `summary_polyline` is used
+ * rather than the full-resolution `polyline` — smaller payload, plenty
+ * precise for a photo overlay rendered at typical canvas sizes.
+ */
+export async function fetchStravaActivityOverlayData(activityId: number): Promise<StravaActivityOverlayData> {
+  const accessToken = await getStravaAccessToken()
+
+  const activity = await $fetch<StravaActivityDetail>(`https://www.strava.com/api/v3/activities/${activityId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+
+  const encoded = activity.map?.summary_polyline
+  return {
+    name: activity.name,
+    distanceMeters: activity.distance,
+    movingTimeSeconds: activity.moving_time,
+    points: encoded ? decodePolyline(encoded) : [],
+    avgWatts: activity.average_watts ?? null,
+    elevationGainMeters: activity.total_elevation_gain ?? 0,
+    avgSpeedMetersPerSecond: activity.average_speed ?? null,
+  }
 }
 
 /** Fetches the most recent Strava activities of type "Ride", newest first. */
