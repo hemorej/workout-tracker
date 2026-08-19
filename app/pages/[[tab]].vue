@@ -61,10 +61,10 @@ definePageMeta({ middleware: 'auth' })
 // `[[tab]].vue`), so the active tab is driven by the URL — `/planning` loads
 // straight into the planning tab, and clicking a tab pushes a matching URL.
 const tabs = [
-  { id: 'log', label: 'Training log' },
-  { id: 'planning', label: 'Planning' },
-  { id: 'builder', label: 'Workout builder' },
-  { id: 'history', label: 'History' },
+  { id: 'log', label: 'Training log', title: 'Training Log' },
+  { id: 'planning', label: 'Planning', title: 'Planning' },
+  { id: 'builder', label: 'Workout builder', title: 'Workout Builder' },
+  { id: 'history', label: 'History', title: 'History' },
 ] as const
 
 type TabId = typeof tabs[number]['id']
@@ -79,6 +79,10 @@ const routeTab = computed<TabId>(() => {
 
 const activeTab = ref<TabId>(routeTab.value)
 watch(routeTab, (tab) => { activeTab.value = tab })
+
+useHead({
+  title: computed(() => tabs.find(t => t.id === activeTab.value)?.title ?? 'Training Log'),
+})
 
 /** Sets the active tab and pushes the matching URL (`/` for the default log tab) */
 function setTab(id: TabId) {
@@ -784,8 +788,6 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
 
 <template>
   <div class="min-h-screen" style="background-color: #fafaf9;">
-    <title>Sprocket</title>
-
     <!-- ── Auto-build overlay — blocks the page while the AI coach generates
          a workout, so an accidental click/back-nav can't interrupt the
          in-flight request before it lands in the builder ──────────────── -->

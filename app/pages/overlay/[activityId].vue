@@ -17,6 +17,8 @@
 
 definePageMeta({ middleware: 'auth' })
 
+useHead({ title: 'Photo Overlay' })
+
 interface ActivityOverlayData {
   name: string
   distanceMeters: number

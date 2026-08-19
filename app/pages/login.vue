@@ -11,6 +11,8 @@ import { useAuthStore } from '~/stores/auth'
 // Redirect already-logged-in users away from this page
 definePageMeta({ middleware: 'guest' })
 
+useHead({ title: 'Log In' })
+
 const auth = useAuthStore()
 const toast = useToast()
 

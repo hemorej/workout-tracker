@@ -1,3 +1,11 @@
+<script setup lang="ts">
+// Per-page titles (set via useHead({ title: ... }) in each page) are
+// injected into this template as "Sprocket — <page title>".
+useHead({
+  titleTemplate: (titleChunk) => titleChunk ? `Sprocket — ${titleChunk}` : 'Sprocket',
+})
+</script>
+
 <template>
   <!--
     Root application shell.
