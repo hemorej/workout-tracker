@@ -25,6 +25,7 @@ interface ActivityOverlayData {
   avgWatts: number | null
   elevationGainMeters: number
   avgSpeedMetersPerSecond: number | null
+  startDateLocal: string
 }
 
 /** Matches the app's theme accent — Tailwind's orange-600 (see CLAUDE.md palette), used for the route line. */
@@ -42,9 +43,12 @@ const activityData = ref<ActivityOverlayData | null>(null)
 
 const photoImage = ref<HTMLImageElement | null>(null)
 const bwFilterEnabled = ref(false)
+const duotoneEnabled = ref(false)
+const blurEnabled = ref(false)
 const showAvgPower = ref(false)
 const showElevation = ref(false)
 const showAvgSpeed = ref(false)
+const showDate = ref(false)
 const tintTextOrange = ref(false)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
@@ -127,6 +131,13 @@ const hasAvgSpeed = computed(() => activityData.value?.avgSpeedMetersPerSecond !
 const avgSpeedGroup = computed((): StatGroup | null => {
   const mps = activityData.value?.avgSpeedMetersPerSecond
   return mps != null ? [{ value: (mps * 3.6).toFixed(1), unit: 'km/h avg' }] : null
+})
+
+/** "Dec 11, 2025" */
+const dateDisplay = computed(() => {
+  const iso = activityData.value?.startDateLocal
+  if (!iso) return null
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 })
 
 /** Plain-text distance/duration summary shown above the upload form, before a canvas exists. */
@@ -213,6 +224,38 @@ function applyBwNoiseFilter(imageData: ImageData, contrastAmount = 40, noiseAmou
   return imageData
 }
 
+// ── Duotone filter ────────────────────────────────────────────────────────
+
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+/**
+ * Maps each pixel's luminance onto a gradient between two colors — a
+ * punchy, posterized look (bold shadow color, pale near-white highlight),
+ * matching the two-tone print/halftone poster style rather than a smooth
+ * gray-to-color gradient. Contrast is boosted before mapping so midtones
+ * push toward one end or the other instead of sitting muddy in between.
+ * App-themed default: a deep rust shadow (darkened orange-600) to a warm
+ * off-white highlight.
+ */
+function applyDuotoneFilter(imageData: ImageData, shadowHex = '#7c2d12', highlightHex = '#fdf6ec', contrastAmount = 35) {
+  const [sr, sg, sb] = hexToRgb(shadowHex)
+  const [hr, hg, hb] = hexToRgb(highlightHex)
+  const contrastFactor = (259 * (contrastAmount + 255)) / (255 * (259 - contrastAmount))
+  const d = imageData.data
+  for (let i = 0; i < d.length; i += 4) {
+    let gray = 0.299 * d[i]! + 0.587 * d[i + 1]! + 0.114 * d[i + 2]!
+    gray = contrastFactor * (gray - 128) + 128
+    const lum = Math.min(255, Math.max(0, gray)) / 255
+    d[i] = sr + (hr - sr) * lum
+    d[i + 1] = sg + (hg - sg) * lum
+    d[i + 2] = sb + (hb - sb) * lum
+  }
+  return imageData
+}
+
 // ── Render pipeline ──────────────────────────────────────────────────────
 
 async function renderCanvas() {
@@ -235,7 +278,11 @@ async function renderCanvas() {
   if (!ctx) return
 
   ctx.clearRect(0, 0, w, h)
+  // Blur applies only to this draw call — reset immediately after so the
+  // route line, text, and any filters drawn below stay sharp.
+  ctx.filter = blurEnabled.value ? `blur(${Math.max(2, Math.round(w * 0.006))}px)` : 'none'
   ctx.drawImage(img, 0, 0, w, h)
+  ctx.filter = 'none'
 
   if (bwFilterEnabled.value) {
     const imageData = ctx.getImageData(0, 0, w, h)
@@ -243,9 +290,18 @@ async function renderCanvas() {
     ctx.putImageData(imageData, 0, 0)
   }
 
+  if (duotoneEnabled.value) {
+    const imageData = ctx.getImageData(0, 0, w, h)
+    applyDuotoneFilter(imageData)
+    ctx.putImageData(imageData, 0, 0)
+  }
+
   const points = activityData.value?.points ?? []
   if (points.length > 1) {
-    const padding = Math.round(Math.min(w, h) * 0.12)
+    // Larger padding = smaller route relative to the canvas; projectPoints
+    // centers the route within the padded box, which is itself centered
+    // in the full canvas since padding is uniform on every side.
+    const padding = Math.round(Math.min(w, h) * 0.2)
     const projected = projectPoints(points, w, h, padding)
 
     ctx.save()
@@ -255,7 +311,7 @@ async function renderCanvas() {
       else ctx.lineTo(x, y)
     })
     ctx.strokeStyle = THEME_ORANGE
-    ctx.lineWidth = Math.max(4, w * 0.008)
+    ctx.lineWidth = Math.max(3, w * 0.007)
     ctx.lineJoin = 'round'
     ctx.lineCap = 'round'
     ctx.shadowColor = 'rgba(0,0,0,0.5)'
@@ -266,28 +322,46 @@ async function renderCanvas() {
 
   if (activityData.value) {
     const pad = Math.round(w * 0.06)
-    const lineHeight = Math.round(w * 0.03)
+    const lineHeight = Math.round(w * 0.039)
     const lines = statLines.value
     const baseY = h - pad - (lines.length - 1) * lineHeight
-    const valueFont = `700 ${Math.round(w * 0.023)}px ${OVERLAY_FONT_FAMILY}`
-    const unitFont = `700 ${Math.round(w * 0.016)}px ${OVERLAY_FONT_FAMILY}`
+    const titleFont = `800 ${Math.round(w * 0.043)}px ${OVERLAY_FONT_FAMILY}`
+    const dateFont = `700 ${Math.round(w * 0.022)}px ${OVERLAY_FONT_FAMILY}`
+    const valueFont = `700 ${Math.round(w * 0.03)}px ${OVERLAY_FONT_FAMILY}`
+    const unitFont = `700 ${Math.round(w * 0.021)}px ${OVERLAY_FONT_FAMILY}`
     const unitGap = Math.round(w * 0.004)
+    const titleText = capitalizeFirst(activityData.value.name)
+    const dateText = showDate.value ? dateDisplay.value : null
+
+    // Title sits directly above the stats block; if the date is shown it's
+    // squeezed in between, on its own smaller line.
+    const dateY = dateText ? baseY - Math.round(w * 0.041) : null
+    const titleY = (dateY ?? baseY) - Math.round(w * (dateText ? 0.052 : 0.064))
 
     // Text is white by default (works over most photos); the tint toggle
-    // switches every bit of text — title, values, units — to a lighter
-    // shade of the app's orange, for photos with light/white backgrounds
-    // where white text would disappear.
+    // switches every bit of text — title, date, values, units — to a
+    // lighter shade of the app's orange, for photos with light/white
+    // backgrounds where white text would disappear.
     const textColor = tintTextOrange.value ? THEME_ORANGE_LIGHT : 'white'
     const separatorColor = tintTextOrange.value ? 'rgba(253,186,116,0.6)' : 'rgba(255,255,255,0.6)'
+
+    function drawText(text: string, x: number, y: number) {
+      ctx!.fillStyle = textColor
+      ctx!.fillText(text, x, y)
+    }
 
     ctx.save()
     ctx.textBaseline = 'alphabetic'
     ctx.shadowColor = 'rgba(0,0,0,0.6)'
     ctx.shadowBlur = 6
 
-    ctx.font = `800 ${Math.round(w * 0.032)}px ${OVERLAY_FONT_FAMILY}`
-    ctx.fillStyle = textColor
-    ctx.fillText(capitalizeFirst(activityData.value.name), pad, baseY - Math.round(w * 0.05))
+    ctx.font = titleFont
+    drawText(titleText, pad, titleY)
+
+    if (dateText && dateY != null) {
+      ctx.font = dateFont
+      drawText(dateText, pad, dateY)
+    }
 
     lines.forEach((line, i) => {
       let x = pad
@@ -295,8 +369,8 @@ async function renderCanvas() {
       line.forEach((group, gi) => {
         if (gi > 0) {
           ctx.font = valueFont
-          ctx.fillStyle = separatorColor
           const sep = '   ·   '
+          ctx.fillStyle = separatorColor
           ctx.fillText(sep, x, y)
           x += ctx.measureText(sep).width
         }
@@ -304,13 +378,11 @@ async function renderCanvas() {
           if (si > 0) x += Math.round(w * 0.006)
 
           ctx.font = valueFont
-          ctx.fillStyle = textColor
-          ctx.fillText(segment.value, x, y)
+          drawText(segment.value, x, y)
           x += ctx.measureText(segment.value).width + unitGap
 
           ctx.font = unitFont
-          ctx.fillStyle = textColor
-          ctx.fillText(segment.unit, x, y)
+          drawText(segment.unit, x, y)
           x += ctx.measureText(segment.unit).width
         })
       })
@@ -320,13 +392,16 @@ async function renderCanvas() {
 }
 
 watchEffect(() => {
-  // Reactive dependencies: photoImage, bwFilterEnabled, showAvgPower, showElevation,
-  // showAvgSpeed, tintTextOrange, activityData
+  // Reactive dependencies: photoImage, bwFilterEnabled, duotoneEnabled,
+  // blurEnabled, showAvgPower, showElevation, showAvgSpeed, showDate, tintTextOrange, activityData
   void photoImage.value
   void bwFilterEnabled.value
+  void duotoneEnabled.value
+  void blurEnabled.value
   void showAvgPower.value
   void showElevation.value
   void showAvgSpeed.value
+  void showDate.value
   void tintTextOrange.value
   void activityData.value
   nextTick(() => renderCanvas())
@@ -399,6 +474,16 @@ function downloadOverlay() {
               </label>
 
               <label class="flex items-center gap-2 text-sm text-stone-600 select-none">
+                <input v-model="duotoneEnabled" type="checkbox" class="rounded border-stone-300 text-orange-600 focus:ring-orange-500">
+                Duotone
+              </label>
+
+              <label class="flex items-center gap-2 text-sm text-stone-600 select-none">
+                <input v-model="blurEnabled" type="checkbox" class="rounded border-stone-300 text-orange-600 focus:ring-orange-500">
+                Subtle blur
+              </label>
+
+              <label class="flex items-center gap-2 text-sm text-stone-600 select-none">
                 <input v-model="tintTextOrange" type="checkbox" class="rounded border-stone-300 text-orange-600 focus:ring-orange-500">
                 Tint text orange
               </label>
@@ -433,6 +518,11 @@ function downloadOverlay() {
                   :disabled="!hasAvgSpeed"
                 >
                 Average speed{{ !hasAvgSpeed ? ' (no speed data for this ride)' : '' }}
+              </label>
+
+              <label class="flex items-center gap-2 text-sm text-stone-600 select-none">
+                <input v-model="showDate" type="checkbox" class="rounded border-stone-300 text-orange-600 focus:ring-orange-500">
+                Date
               </label>
             </div>
           </div>

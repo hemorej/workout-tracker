@@ -6,7 +6,7 @@
  * the route line and stat row over a user-uploaded photo.
  *
  * Returns:
- *   200 { name, distanceMeters, movingTimeSeconds, points, avgWatts, elevationGainMeters, avgSpeedMetersPerSecond }
+ *   200 { name, distanceMeters, movingTimeSeconds, points, avgWatts, elevationGainMeters, avgSpeedMetersPerSecond, startDateLocal }
  *     `points` is an empty array if the activity has no route (e.g.
  *     manually entered, no GPS) — the overlay page still gets name/distance/
  *     duration and simply skips drawing a route line. `avgWatts` and

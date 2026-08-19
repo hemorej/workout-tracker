@@ -103,6 +103,8 @@ export interface StravaActivityOverlayData {
   elevationGainMeters: number
   /** Meters per second, null if unavailable (e.g. manually entered ride). */
   avgSpeedMetersPerSecond: number | null
+  /** Local start time, ISO-ish "YYYY-MM-DDTHH:mm:ssZ" per Strava's activity schema. */
+  startDateLocal: string
 }
 
 export interface StravaStreamPoint {
@@ -184,6 +186,7 @@ export async function fetchStravaActivityOverlayData(activityId: number): Promis
     avgWatts: activity.average_watts ?? null,
     elevationGainMeters: activity.total_elevation_gain ?? 0,
     avgSpeedMetersPerSecond: activity.average_speed ?? null,
+    startDateLocal: activity.start_date_local,
   }
 }
 
