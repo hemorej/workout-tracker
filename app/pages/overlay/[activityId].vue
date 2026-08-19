@@ -49,6 +49,26 @@ const showAvgSpeed = ref(false)
 const showDate = ref(false)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
+// ── Draggable overlay positions ──────────────────────────────────────────
+//
+// The route line and the text block (title/date/stats, moved as one unit)
+// can each be dragged to a different spot on the photo. Offsets are in
+// canvas pixel space, relative to each element's default layout position.
+const textOffsetX = ref(0)
+const textOffsetY = ref(0)
+const routeOffsetX = ref(0)
+const routeOffsetY = ref(0)
+const dragging = ref<'text' | 'route' | null>(null)
+
+interface Box { x: number, y: number, w: number, h: number }
+// Updated on every renderOverlay() call, read by the pointerdown hit test —
+// plain (non-reactive) module state, not worth a ref since nothing renders
+// off of it directly.
+let textBounds: Box | null = null
+let routeBounds: Box | null = null
+let dragStartPoint = { x: 0, y: 0 }
+let dragStartOffset = { x: 0, y: 0 }
+
 onMounted(async () => {
   try {
     activityData.value = await $fetch<ActivityOverlayData>(`/api/strava/activity/${activityId}`)
@@ -79,9 +99,23 @@ function onFileChange(e: Event) {
   const img = new Image()
   img.onload = () => {
     photoImage.value = img
+    // A new photo can have very different dimensions — start overlays back
+    // at their default layout position rather than carrying over an offset
+    // that may no longer make sense.
+    textOffsetX.value = 0
+    textOffsetY.value = 0
+    routeOffsetX.value = 0
+    routeOffsetY.value = 0
     URL.revokeObjectURL(url)
   }
   img.src = url
+}
+
+function resetPositions() {
+  textOffsetX.value = 0
+  textOffsetY.value = 0
+  routeOffsetX.value = 0
+  routeOffsetY.value = 0
 }
 
 // ── Stat formatting ──────────────────────────────────────────────────────
@@ -254,20 +288,62 @@ function applyDuotoneFilter(imageData: ImageData, shadowHex = '#7c2d12', highlig
 }
 
 // ── Render pipeline ──────────────────────────────────────────────────────
+//
+// Split in two so dragging stays smooth: buildBackground() does the
+// expensive part (draw the photo, apply pixel-level filters) onto an
+// offscreen canvas whenever the photo or a Photo-style toggle changes.
+// renderOverlay() just copies that cached background onto the visible
+// canvas and draws the route line + text block on top at their current
+// (possibly dragged) offsets — cheap enough to run on every pointermove.
 
-async function renderCanvas() {
-  const canvas = canvasRef.value
+let bgCanvas: HTMLCanvasElement | null = null
+
+async function buildBackground() {
   const img = photoImage.value
-  if (!canvas || !img) return
+  if (!img) return
+
+  const scale = Math.min(1, MAX_CANVAS_EDGE / Math.max(img.naturalWidth, img.naturalHeight))
+  const w = Math.round(img.naturalWidth * scale)
+  const h = Math.round(img.naturalHeight * scale)
+
+  if (!bgCanvas) bgCanvas = document.createElement('canvas')
+  bgCanvas.width = w
+  bgCanvas.height = h
+
+  const bctx = bgCanvas.getContext('2d')
+  if (!bctx) return
+
+  bctx.clearRect(0, 0, w, h)
+  // Blur applies only to this draw call — reset immediately after so
+  // subsequent pixel filters (and the overlay drawn later) stay sharp.
+  bctx.filter = blurEnabled.value ? `blur(${Math.max(2, Math.round(w * 0.006))}px)` : 'none'
+  bctx.drawImage(img, 0, 0, w, h)
+  bctx.filter = 'none'
+
+  if (bwFilterEnabled.value) {
+    const imageData = bctx.getImageData(0, 0, w, h)
+    applyBwNoiseFilter(imageData)
+    bctx.putImageData(imageData, 0, 0)
+  }
+
+  if (duotoneEnabled.value) {
+    const imageData = bctx.getImageData(0, 0, w, h)
+    applyDuotoneFilter(imageData)
+    bctx.putImageData(imageData, 0, 0)
+  }
+}
+
+async function renderOverlay() {
+  const canvas = canvasRef.value
+  if (!canvas || !bgCanvas) return
 
   // Canvas text uses whatever font is already loaded at draw time — without
   // this, the first render can fall back to the system font before the
   // self-hosted variable woff2 finishes loading.
   await document.fonts.load(`700 16px ${OVERLAY_FONT_FAMILY}`)
 
-  const scale = Math.min(1, MAX_CANVAS_EDGE / Math.max(img.naturalWidth, img.naturalHeight))
-  const w = Math.round(img.naturalWidth * scale)
-  const h = Math.round(img.naturalHeight * scale)
+  const w = bgCanvas.width
+  const h = bgCanvas.height
   canvas.width = w
   canvas.height = h
 
@@ -275,27 +351,9 @@ async function renderCanvas() {
   if (!ctx) return
 
   ctx.clearRect(0, 0, w, h)
-  // Blur applies only to this draw call — reset immediately after so the
-  // route line, text, and any filters drawn below stay sharp.
-  ctx.filter = blurEnabled.value ? `blur(${Math.max(2, Math.round(w * 0.006))}px)` : 'none'
-  ctx.drawImage(img, 0, 0, w, h)
-  ctx.filter = 'none'
+  ctx.drawImage(bgCanvas, 0, 0)
 
-  if (bwFilterEnabled.value) {
-    const imageData = ctx.getImageData(0, 0, w, h)
-    applyBwNoiseFilter(imageData)
-    ctx.putImageData(imageData, 0, 0)
-  }
-
-  if (duotoneEnabled.value) {
-    const imageData = ctx.getImageData(0, 0, w, h)
-    applyDuotoneFilter(imageData)
-    ctx.putImageData(imageData, 0, 0)
-  }
-
-  // Portrait photos get a smaller, more centered route and the text block
-  // anchored at the classic rule-of-thirds "bottom-left" point (1/3 across,
-  // 2/3 down) instead of hugging the bottom-left corner.
+  // Portrait photos get a smaller, more centered default route.
   const isPortrait = h > w
 
   const points = activityData.value?.points ?? []
@@ -305,6 +363,17 @@ async function renderCanvas() {
     // in the full canvas since padding is uniform on every side.
     const padding = Math.round(Math.min(w, h) * (isPortrait ? 0.3 : 0.2))
     const projected = projectPoints(points, w, h, padding)
+      .map(([x, y]) => [x + routeOffsetX.value, y + routeOffsetY.value] as [number, number])
+
+    const lineWidth = Math.max(3, w * 0.007)
+    const xs = projected.map((p) => p[0])
+    const ys = projected.map((p) => p[1])
+    routeBounds = {
+      x: Math.min(...xs) - lineWidth,
+      y: Math.min(...ys) - lineWidth,
+      w: Math.max(...xs) - Math.min(...xs) + lineWidth * 2,
+      h: Math.max(...ys) - Math.min(...ys) + lineWidth * 2,
+    }
 
     ctx.save()
     ctx.beginPath()
@@ -313,7 +382,7 @@ async function renderCanvas() {
       else ctx.lineTo(x, y)
     })
     ctx.strokeStyle = THEME_ORANGE
-    ctx.lineWidth = Math.max(3, w * 0.007)
+    ctx.lineWidth = lineWidth
     ctx.lineJoin = 'round'
     ctx.lineCap = 'round'
     ctx.shadowColor = 'rgba(0,0,0,0.5)'
@@ -321,13 +390,16 @@ async function renderCanvas() {
     ctx.stroke()
     ctx.restore()
   }
+  else {
+    routeBounds = null
+  }
 
   if (activityData.value) {
     const lineHeight = Math.round(w * 0.039)
     const lines = statLines.value
 
-    const pad = Math.round(w * 0.06)
-    const baseY = h - pad - (lines.length - 1) * lineHeight
+    const pad = Math.round(w * 0.06) + textOffsetX.value
+    const baseY = h - Math.round(w * 0.06) - (lines.length - 1) * lineHeight + textOffsetY.value
     const titleFont = `800 ${Math.round(w * 0.043)}px ${OVERLAY_FONT_FAMILY}`
     const dateFont = `700 ${Math.round(w * 0.022)}px ${OVERLAY_FONT_FAMILY}`
     const valueFont = `700 ${Math.round(w * 0.03)}px ${OVERLAY_FONT_FAMILY}`
@@ -349,8 +421,46 @@ async function renderCanvas() {
       ctx!.fillText(text, x, y)
     }
 
+    // Measures a stat line's rendered width without drawing, so the drag
+    // bounding box can be sized to match exactly what's on screen.
+    function measureLineWidth(line: StatGroup[]): number {
+      let x = 0
+      line.forEach((group, gi) => {
+        if (gi > 0) {
+          ctx!.font = valueFont
+          x += ctx!.measureText('   ·   ').width
+        }
+        group.forEach((segment, si) => {
+          if (si > 0) x += Math.round(w * 0.006)
+          ctx!.font = valueFont
+          x += ctx!.measureText(segment.value).width + unitGap
+          ctx!.font = unitFont
+          x += ctx!.measureText(segment.unit).width
+        })
+      })
+      return x
+    }
+
     ctx.save()
     ctx.textBaseline = 'alphabetic'
+
+    ctx.font = titleFont
+    const titleWidth = ctx.measureText(titleText).width
+    ctx.font = dateFont
+    const dateWidth = dateText ? ctx.measureText(dateText).width : 0
+    const lineWidths = lines.map((line) => measureLineWidth(line))
+    const maxTextWidth = Math.max(titleWidth, dateWidth, ...lineWidths)
+
+    const titleSize = Math.round(w * 0.043)
+    const statSize = Math.round(w * 0.03)
+    const boundsPadding = Math.round(w * 0.015)
+    textBounds = {
+      x: pad - boundsPadding,
+      y: titleY - titleSize * 0.85 - boundsPadding,
+      w: maxTextWidth + boundsPadding * 2,
+      h: (baseY + (lines.length - 1) * lineHeight + statSize * 0.3) - (titleY - titleSize * 0.85) + boundsPadding * 2,
+    }
+
     ctx.shadowColor = 'rgba(0,0,0,0.6)'
     ctx.shadowBlur = 6
 
@@ -388,22 +498,72 @@ async function renderCanvas() {
     })
     ctx.restore()
   }
+  else {
+    textBounds = null
+  }
 }
 
-watchEffect(() => {
-  // Reactive dependencies: photoImage, bwFilterEnabled, duotoneEnabled,
-  // blurEnabled, showAvgPower, showElevation, showAvgSpeed, showDate, activityData
-  void photoImage.value
-  void bwFilterEnabled.value
-  void duotoneEnabled.value
-  void blurEnabled.value
-  void showAvgPower.value
-  void showElevation.value
-  void showAvgSpeed.value
-  void showDate.value
-  void activityData.value
-  nextTick(() => renderCanvas())
+watch([photoImage, bwFilterEnabled, duotoneEnabled, blurEnabled], async () => {
+  await buildBackground()
+  nextTick(() => renderOverlay())
 })
+
+watch(
+  [showAvgPower, showElevation, showAvgSpeed, showDate, activityData, textOffsetX, textOffsetY, routeOffsetX, routeOffsetY],
+  () => {
+    nextTick(() => renderOverlay())
+  },
+)
+
+// ── Drag-to-reposition ───────────────────────────────────────────────────
+
+function getCanvasPoint(e: PointerEvent): { x: number, y: number } {
+  const canvas = canvasRef.value!
+  const rect = canvas.getBoundingClientRect()
+  const scaleX = canvas.width / rect.width
+  const scaleY = canvas.height / rect.height
+  return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY }
+}
+
+function pointInBox(p: { x: number, y: number }, box: Box | null): boolean {
+  return !!box && p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h
+}
+
+function onOverlayPointerDown(e: PointerEvent) {
+  const p = getCanvasPoint(e)
+  if (pointInBox(p, textBounds)) {
+    dragging.value = 'text'
+    dragStartOffset = { x: textOffsetX.value, y: textOffsetY.value }
+  }
+  else if (pointInBox(p, routeBounds)) {
+    dragging.value = 'route'
+    dragStartOffset = { x: routeOffsetX.value, y: routeOffsetY.value }
+  }
+  else {
+    return
+  }
+  dragStartPoint = p
+  canvasRef.value?.setPointerCapture(e.pointerId)
+}
+
+function onOverlayPointerMove(e: PointerEvent) {
+  if (!dragging.value) return
+  const p = getCanvasPoint(e)
+  const dx = p.x - dragStartPoint.x
+  const dy = p.y - dragStartPoint.y
+  if (dragging.value === 'text') {
+    textOffsetX.value = dragStartOffset.x + dx
+    textOffsetY.value = dragStartOffset.y + dy
+  }
+  else {
+    routeOffsetX.value = dragStartOffset.x + dx
+    routeOffsetY.value = dragStartOffset.y + dy
+  }
+}
+
+function onOverlayPointerUp() {
+  dragging.value = null
+}
 
 // ── Download ──────────────────────────────────────────────────────────────
 
@@ -526,11 +686,24 @@ function downloadOverlay() {
             v-show="photoImage"
             ref="canvasRef"
             class="max-w-full h-auto block"
+            :class="dragging ? 'cursor-grabbing' : 'cursor-grab'"
+            style="touch-action: none;"
+            @pointerdown="onOverlayPointerDown"
+            @pointermove="onOverlayPointerMove"
+            @pointerup="onOverlayPointerUp"
+            @pointercancel="onOverlayPointerUp"
           />
           <p v-if="!photoImage" class="text-sm text-stone-400 py-16">
             Upload a photo to preview the overlay.
           </p>
         </div>
+
+        <p v-if="photoImage" class="text-xs text-stone-400 -mt-2">
+          Drag the route line or the text block to reposition them.
+          <button type="button" class="underline hover:text-stone-600" @click="resetPositions">
+            Reset positions
+          </button>
+        </p>
 
         <UButton
           :disabled="!photoImage"
