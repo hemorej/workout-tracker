@@ -154,6 +154,11 @@ const statLines = computed((): StatGroup[][] => {
   return [groups]
 })
 
+/** Uppercases only the first character — leaves the rest of the ride name as Strava has it. */
+function capitalizeFirst(text: string): string {
+  return text.length > 0 ? text[0]!.toUpperCase() + text.slice(1) : text
+}
+
 // ── Route projection: lat/lng -> canvas xy (equirectangular, scale-to-fit) ─
 
 function projectPoints(
@@ -261,11 +266,11 @@ async function renderCanvas() {
 
   if (activityData.value) {
     const pad = Math.round(w * 0.06)
-    const lineHeight = Math.round(w * 0.026)
+    const lineHeight = Math.round(w * 0.03)
     const lines = statLines.value
     const baseY = h - pad - (lines.length - 1) * lineHeight
-    const valueFont = `700 ${Math.round(w * 0.02)}px ${OVERLAY_FONT_FAMILY}`
-    const unitFont = `700 ${Math.round(w * 0.014)}px ${OVERLAY_FONT_FAMILY}`
+    const valueFont = `700 ${Math.round(w * 0.023)}px ${OVERLAY_FONT_FAMILY}`
+    const unitFont = `700 ${Math.round(w * 0.016)}px ${OVERLAY_FONT_FAMILY}`
     const unitGap = Math.round(w * 0.004)
 
     // Text is white by default (works over most photos); the tint toggle
@@ -280,9 +285,9 @@ async function renderCanvas() {
     ctx.shadowColor = 'rgba(0,0,0,0.6)'
     ctx.shadowBlur = 6
 
-    ctx.font = `800 ${Math.round(w * 0.028)}px ${OVERLAY_FONT_FAMILY}`
+    ctx.font = `800 ${Math.round(w * 0.032)}px ${OVERLAY_FONT_FAMILY}`
     ctx.fillStyle = textColor
-    ctx.fillText(activityData.value.name.toUpperCase(), pad, baseY - Math.round(w * 0.045))
+    ctx.fillText(capitalizeFirst(activityData.value.name), pad, baseY - Math.round(w * 0.05))
 
     lines.forEach((line, i) => {
       let x = pad
