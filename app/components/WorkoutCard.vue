@@ -126,6 +126,11 @@ const hasFtp = computed(() => !!props.day.workout?.ftpWatts)
 const hasPowerBests = computed(() => (props.day.workout?.powerBests?.length ?? 0) > 0)
 const hasFitData = computed(() => !!props.day.workout?.fitData)
 const hasInsights = computed(() => !!props.day.workout?.insights)
+const hasStravaActivity = computed(() => !!props.day.workout?.stravaActivityId)
+
+function openOverlay() {
+  navigateTo(`/overlay/${props.day.workout?.stravaActivityId}`)
+}
 
 // ── Mobile swipe-row summary (panel 1) ───────────────────────────────────
 const mobileTitle = computed(() => {
@@ -310,6 +315,19 @@ function confirmDelete() {
         <BikeSpinner v-if="isGeneratingInsights" :size="12" />
         <svg v-else class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
           <path d="M13.5 2L4 14h6l-1 8 9.5-12h-6l1-8z" />
+        </svg>
+      </button>
+      <button
+        v-if="!day.isRestDay && !isPlannedDay && hasStravaActivity"
+        title="Create photo overlay"
+        aria-label="Create photo overlay"
+        class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
+        @click="openOverlay"
+      >
+        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <path d="M21 15l-5-5L5 21" />
         </svg>
       </button>
       <template v-if="!day.isRestDay && !isPlannedDay">
@@ -527,6 +545,21 @@ function confirmDelete() {
         <BikeSpinner v-if="isGeneratingInsights" :size="16" />
         <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <path d="M13.5 2L4 14h6l-1 8 9.5-12h-6l1-8z" />
+        </svg>
+      </button>
+
+      <!-- Create photo overlay — shown once the workout has a linked Strava activity -->
+      <button
+        v-if="!day.isRestDay && !isPlannedDay && hasStravaActivity"
+        title="Create photo overlay"
+        aria-label="Create photo overlay"
+        class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
+        @click="openOverlay"
+      >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <path d="M21 15l-5-5L5 21" />
         </svg>
       </button>
 

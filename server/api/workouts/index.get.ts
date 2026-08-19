@@ -151,6 +151,7 @@ export default defineEventHandler(async (event) => {
     rideType: string | null
     fitData: WorkoutFitData | null
     insights: WorkoutInsights | null
+    stravaActivityId: number | null
   }
 
   async function powerBestsByWorkoutId(workoutIds: number[]) {
@@ -182,6 +183,7 @@ export default defineEventHandler(async (event) => {
       rideType: row.rideType,
       fitData: row.fitData,
       insights: row.insights,
+      stravaActivityId: row.stravaActivityId,
       powerBests: pbByWorkoutId.get(row.id) ?? [],
     }
   }
@@ -226,6 +228,7 @@ export default defineEventHandler(async (event) => {
         rideType: workouts.rideType,
         fitData: workouts.fitData,
         insights: workouts.insights,
+        stravaActivityId: workouts.stravaActivityId,
       })
       .from(workouts)
       .where(whereClause)
@@ -269,6 +272,7 @@ export default defineEventHandler(async (event) => {
         rideType: workouts.rideType,
         fitData: workouts.fitData,
         insights: workouts.insights,
+        stravaActivityId: workouts.stravaActivityId,
       })
       .from(workouts)
       .where(eq(workouts.userId, user.id))

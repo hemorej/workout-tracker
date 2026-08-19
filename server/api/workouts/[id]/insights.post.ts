@@ -161,7 +161,7 @@ export default defineEventHandler(async (event) => {
             + '(surges vs steady/rest sections), pacing/fade within efforts, and HR drift over time, rather '
             + 'than guessing. It\'s downsampled, so treat exact per-second values '
             + 'as approximate, but the overall shape (number of efforts, roughly how long, how hard) is reliable.'
-            + ' Produce exactly two things: '
+            + 'Produce exactly two things: '
             + '1) recovery — grounded in the athlete\'s ride.'
             + '2) rideAnalysis — a focused read on how the ride went. '
             + 'Be direct and concise, coach-to-athlete tone, no hedging disclaimers about missing data beyond '
