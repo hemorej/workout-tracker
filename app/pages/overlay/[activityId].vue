@@ -30,8 +30,6 @@ interface ActivityOverlayData {
 
 /** Matches the app's theme accent — Tailwind's orange-600 (see CLAUDE.md palette), used for the route line. */
 const THEME_ORANGE = '#ea580c'
-/** A lighter shade of the same orange — Tailwind's orange-300 — used for the optional text tint. */
-const THEME_ORANGE_LIGHT = '#fdba74'
 const OVERLAY_FONT_FAMILY = '"Hanken Grotesk", system-ui, sans-serif'
 
 const route = useRoute()
@@ -49,7 +47,6 @@ const showAvgPower = ref(false)
 const showElevation = ref(false)
 const showAvgSpeed = ref(false)
 const showDate = ref(false)
-const tintTextOrange = ref(false)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
 onMounted(async () => {
@@ -296,12 +293,17 @@ async function renderCanvas() {
     ctx.putImageData(imageData, 0, 0)
   }
 
+  // Portrait photos get a smaller, more centered route and the text block
+  // anchored at the classic rule-of-thirds "bottom-left" point (1/3 across,
+  // 2/3 down) instead of hugging the bottom-left corner.
+  const isPortrait = h > w
+
   const points = activityData.value?.points ?? []
   if (points.length > 1) {
     // Larger padding = smaller route relative to the canvas; projectPoints
     // centers the route within the padded box, which is itself centered
     // in the full canvas since padding is uniform on every side.
-    const padding = Math.round(Math.min(w, h) * 0.2)
+    const padding = Math.round(Math.min(w, h) * (isPortrait ? 0.3 : 0.2))
     const projected = projectPoints(points, w, h, padding)
 
     ctx.save()
@@ -321,9 +323,10 @@ async function renderCanvas() {
   }
 
   if (activityData.value) {
-    const pad = Math.round(w * 0.06)
     const lineHeight = Math.round(w * 0.039)
     const lines = statLines.value
+
+    const pad = Math.round(w * 0.06)
     const baseY = h - pad - (lines.length - 1) * lineHeight
     const titleFont = `800 ${Math.round(w * 0.043)}px ${OVERLAY_FONT_FAMILY}`
     const dateFont = `700 ${Math.round(w * 0.022)}px ${OVERLAY_FONT_FAMILY}`
@@ -338,12 +341,8 @@ async function renderCanvas() {
     const dateY = dateText ? baseY - Math.round(w * 0.041) : null
     const titleY = (dateY ?? baseY) - Math.round(w * (dateText ? 0.052 : 0.064))
 
-    // Text is white by default (works over most photos); the tint toggle
-    // switches every bit of text — title, date, values, units — to a
-    // lighter shade of the app's orange, for photos with light/white
-    // backgrounds where white text would disappear.
-    const textColor = tintTextOrange.value ? THEME_ORANGE_LIGHT : 'white'
-    const separatorColor = tintTextOrange.value ? 'rgba(253,186,116,0.6)' : 'rgba(255,255,255,0.6)'
+    const textColor = 'white'
+    const separatorColor = 'rgba(255,255,255,0.6)'
 
     function drawText(text: string, x: number, y: number) {
       ctx!.fillStyle = textColor
@@ -393,7 +392,7 @@ async function renderCanvas() {
 
 watchEffect(() => {
   // Reactive dependencies: photoImage, bwFilterEnabled, duotoneEnabled,
-  // blurEnabled, showAvgPower, showElevation, showAvgSpeed, showDate, tintTextOrange, activityData
+  // blurEnabled, showAvgPower, showElevation, showAvgSpeed, showDate, activityData
   void photoImage.value
   void bwFilterEnabled.value
   void duotoneEnabled.value
@@ -402,7 +401,6 @@ watchEffect(() => {
   void showElevation.value
   void showAvgSpeed.value
   void showDate.value
-  void tintTextOrange.value
   void activityData.value
   nextTick(() => renderCanvas())
 })
@@ -481,11 +479,6 @@ function downloadOverlay() {
               <label class="flex items-center gap-2 text-sm text-stone-600 select-none">
                 <input v-model="blurEnabled" type="checkbox" class="rounded border-stone-300 text-orange-600 focus:ring-orange-500">
                 Subtle blur
-              </label>
-
-              <label class="flex items-center gap-2 text-sm text-stone-600 select-none">
-                <input v-model="tintTextOrange" type="checkbox" class="rounded border-stone-300 text-orange-600 focus:ring-orange-500">
-                Tint text orange
               </label>
             </div>
           </div>
