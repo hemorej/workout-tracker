@@ -49,20 +49,6 @@ export interface WorkoutFitData {
   maxCadence: number | null
 }
 
-/**
- * AI-generated post-ride analysis (see server/api/workouts/[id]/insights.post.ts).
- * Generated once, on demand — null until the user triggers it, and never
- * regenerated after that (the "Ride insights" button hides permanently once set).
- */
-export interface WorkoutInsights {
-  /** Rest-of-day recovery actions + tomorrow's training recommendation */
-  recovery: string
-  /** Qualitative read on how the ride itself went */
-  rideAnalysis: string
-  /** ISO timestamp of generation */
-  generatedAt: string
-}
-
 // ---------------------------------------------------------------------------
 // users
 // ---------------------------------------------------------------------------
@@ -175,9 +161,7 @@ export const workouts = pgTable(
      * The Strava activity this workout was created from, if it was created
      * via the "Mark as completed" picker (see CLAUDE.md's Completed-workout
      * picker). Null for manually-entered workouts or ones logged before this
-     * field existed. Used by insights.post.ts to fetch the raw per-second
-     * power/HR stream from Strava's API on demand — nothing about the stream
-     * itself is persisted locally, only this id.
+     * field existed.
      */
     stravaActivityId: bigint('strava_activity_id', { mode: 'number' }),
 
@@ -188,13 +172,6 @@ export const workouts = pgTable(
      * data"); older/manually-entered workouts never get one.
      */
     fitData: jsonb('fit_data').$type<WorkoutFitData>(),
-
-    /**
-     * AI-generated post-ride analysis — see WorkoutInsights above. Null
-     * until generated via the "Ride insights" action (only available once
-     * fitData is present); once set, it is never regenerated or cleared.
-     */
-    insights: jsonb('insights').$type<WorkoutInsights>(),
 
     /** Row creation timestamp (UTC) */
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

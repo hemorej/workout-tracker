@@ -43,7 +43,6 @@ const activityData = ref<ActivityOverlayData | null>(null)
 
 const photoImage = ref<HTMLImageElement | null>(null)
 const bwFilterEnabled = ref(false)
-const duotoneEnabled = ref(false)
 const blurEnabled = ref(false)
 const showAvgPower = ref(false)
 const showElevation = ref(false)
@@ -257,38 +256,6 @@ function applyBwNoiseFilter(imageData: ImageData, contrastAmount = 40, noiseAmou
   return imageData
 }
 
-// ── Duotone filter ────────────────────────────────────────────────────────
-
-function hexToRgb(hex: string): [number, number, number] {
-  const n = parseInt(hex.slice(1), 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
-
-/**
- * Maps each pixel's luminance onto a gradient between two colors — a
- * punchy, posterized look (bold shadow color, pale near-white highlight),
- * matching the two-tone print/halftone poster style rather than a smooth
- * gray-to-color gradient. Contrast is boosted before mapping so midtones
- * push toward one end or the other instead of sitting muddy in between.
- * App-themed default: a deep rust shadow (darkened orange-600) to a warm
- * off-white highlight.
- */
-function applyDuotoneFilter(imageData: ImageData, shadowHex = '#7c2d12', highlightHex = '#fdf6ec', contrastAmount = 35) {
-  const [sr, sg, sb] = hexToRgb(shadowHex)
-  const [hr, hg, hb] = hexToRgb(highlightHex)
-  const contrastFactor = (259 * (contrastAmount + 255)) / (255 * (259 - contrastAmount))
-  const d = imageData.data
-  for (let i = 0; i < d.length; i += 4) {
-    let gray = 0.299 * d[i]! + 0.587 * d[i + 1]! + 0.114 * d[i + 2]!
-    gray = contrastFactor * (gray - 128) + 128
-    const lum = Math.min(255, Math.max(0, gray)) / 255
-    d[i] = sr + (hr - sr) * lum
-    d[i + 1] = sg + (hg - sg) * lum
-    d[i + 2] = sb + (hb - sb) * lum
-  }
-  return imageData
-}
-
 // ── Render pipeline ──────────────────────────────────────────────────────
 //
 // Split in two so dragging stays smooth: buildBackground() does the
@@ -325,12 +292,6 @@ async function buildBackground() {
   if (bwFilterEnabled.value) {
     const imageData = bctx.getImageData(0, 0, w, h)
     applyBwNoiseFilter(imageData)
-    bctx.putImageData(imageData, 0, 0)
-  }
-
-  if (duotoneEnabled.value) {
-    const imageData = bctx.getImageData(0, 0, w, h)
-    applyDuotoneFilter(imageData)
     bctx.putImageData(imageData, 0, 0)
   }
 }
@@ -505,7 +466,7 @@ async function renderOverlay() {
   }
 }
 
-watch([photoImage, bwFilterEnabled, duotoneEnabled, blurEnabled], async () => {
+watch([photoImage, bwFilterEnabled, blurEnabled], async () => {
   await buildBackground()
   nextTick(() => renderOverlay())
 })
@@ -631,11 +592,6 @@ function downloadOverlay() {
               <label class="flex items-center gap-2 text-sm text-stone-600 select-none">
                 <input v-model="bwFilterEnabled" type="checkbox" class="rounded border-stone-300 text-orange-600 focus:ring-orange-500">
                 High-contrast noisy black &amp; white
-              </label>
-
-              <label class="flex items-center gap-2 text-sm text-stone-600 select-none">
-                <input v-model="duotoneEnabled" type="checkbox" class="rounded border-stone-300 text-orange-600 focus:ring-orange-500">
-                Duotone
               </label>
 
               <label class="flex items-center gap-2 text-sm text-stone-600 select-none">

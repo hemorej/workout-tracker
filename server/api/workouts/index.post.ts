@@ -17,8 +17,7 @@
  *   powerBests?:     { duration: string; watts: number }[]
  *   fitData?:        WorkoutFitData — optional, extra stats from a parsed FIT file
  *   stravaActivityId?: number — optional, set when created via the "Mark as
- *                      completed" picker; lets insights.post.ts fetch the raw
- *                      power/HR stream from Strava later
+ *                      completed" picker
  * }
  *
  * Returns:

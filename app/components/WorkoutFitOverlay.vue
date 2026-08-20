@@ -47,14 +47,6 @@ const distanceDisplay = computed(() => {
   const km = props.workout?.distanceKm
   return km != null ? `${km.toFixed(1)} km` : null
 })
-
-// ── Tabs — only surfaced once AI insights exist for this workout; otherwise
-// the overlay stays a single flat panel (unchanged for older/ungenerated rides).
-const activeTab = ref<'overview' | 'insights'>('overview')
-
-watch(() => props.workout?.id, () => {
-  activeTab.value = 'overview'
-})
 </script>
 
 <template>
@@ -79,38 +71,15 @@ watch(() => props.workout?.id, () => {
               {{ durationDisplay }}<template v-if="distanceDisplay"> &nbsp;·&nbsp; {{ distanceDisplay }}</template>
             </p>
           </div>
-          <div class="flex flex-col items-end ml-4">
-            <button
-              class="text-stone-300 hover:text-stone-600 transition-colors"
-              aria-label="Close"
-              @click="$emit('close')"
-            >
-              <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
-            </button>
-            <button
-              v-if="workout.insights"
-              type="button"
-              class="text-sm font-medium text-primary hover:text-primary/80 transition-colors mt-1.5"
-              @click="activeTab = activeTab === 'overview' ? 'insights' : 'overview'"
-            >
-              {{ activeTab === 'overview' ? 'Insights' : 'Overview' }}
-            </button>
-          </div>
+          <button
+            class="text-stone-300 hover:text-stone-600 transition-colors"
+            aria-label="Close"
+            @click="$emit('close')"
+          >
+            <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+          </button>
         </div>
 
-        <!-- Insights tab -->
-        <div v-if="workout.insights && activeTab === 'insights'">
-          <div class="mb-5">
-            <p class="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Recovery & Tomorrow</p>
-            <p class="text-sm text-stone-600 whitespace-pre-line">{{ workout.insights.recovery }}</p>
-          </div>
-          <div>
-            <p class="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Ride Analysis</p>
-            <p class="text-sm text-stone-600 whitespace-pre-line">{{ workout.insights.rideAnalysis }}</p>
-          </div>
-        </div>
-
-        <template v-if="!workout.insights || activeTab === 'overview'">
         <!-- Headline stats grid -->
         <div class="grid grid-cols-3 gap-3 mb-5">
           <div class="bg-stone-50 rounded-lg px-3 py-2.5 text-center">
@@ -171,7 +140,6 @@ watch(() => props.workout?.id, () => {
           <p class="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Notes</p>
           <p class="text-sm text-stone-600 whitespace-pre-wrap">{{ workout.notes }}</p>
         </div>
-        </template>
       </div>
     </div>
   </Teleport>
