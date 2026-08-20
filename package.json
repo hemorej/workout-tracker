@@ -23,7 +23,6 @@
         "workout-search": "node --experimental-strip-types scripts/workout-search.ts"
     },
     "dependencies": {
-        "@adonisjs/hash": "^10.1.1",
         "@anthropic-ai/sdk": "^0.116.0",
         "@fontsource-variable/hanken-grotesk": "^5.3.0",
         "@nuxt/ui": "^4.10.0",
@@ -40,6 +39,7 @@
         "zod": "^4.4.3"
     },
     "devDependencies": {
+        "@adonisjs/hash": "^10.1.1",
         "@iconify-json/heroicons": "^1.2.3",
         "@iconify-json/lucide": "^1.2.123",
         "@nuxt/devtools": "^3.4.1",
