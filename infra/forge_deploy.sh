@@ -9,4 +9,4 @@ $PNPM_PATH prune --prod
 
 $ACTIVATE_RELEASE()
 
-sudo supervisorctl restart all
+sudo supervisorctl restart daemon-912439:daemon-912439_00
