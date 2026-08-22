@@ -239,6 +239,77 @@ function projectPoints(
   ])
 }
 
+// ── Blur (manual box-blur, not canvas ctx.filter) ────────────────────────
+//
+// WebKit's CanvasRenderingContext2D.filter support for drawImage() is
+// unreliable on iOS Safari (the B&W pixel-manipulation filter below works
+// fine there, but a `filter = 'blur(Npx)'` before drawImage silently has no
+// effect) — so blur is implemented as pixel manipulation too, same as the
+// B&W filter, instead of relying on the canvas filter property.
+//
+// Three passes of a separable box blur (horizontal sliding-window sum, then
+// vertical) is a standard cheap approximation of a Gaussian blur — cost is
+// O(width * height) per pass regardless of radius, rather than growing with
+// radius like a naive neighborhood-sample blur would.
+
+function boxBlurPass(
+  src: Uint8ClampedArray,
+  dst: Uint8ClampedArray,
+  width: number,
+  height: number,
+  radius: number,
+  horizontal: boolean,
+) {
+  const size = horizontal ? width : height
+  const lineCount = horizontal ? height : width
+  const windowSize = radius * 2 + 1
+  const idx = (line: number, pos: number) =>
+    (horizontal ? line * width + pos : pos * width + line) * 4
+
+  for (let line = 0; line < lineCount; line++) {
+    let rSum = 0
+    let gSum = 0
+    let bSum = 0
+    let aSum = 0
+    for (let k = -radius; k <= radius; k++) {
+      const i = idx(line, Math.min(size - 1, Math.max(0, k)))
+      rSum += src[i]!
+      gSum += src[i + 1]!
+      bSum += src[i + 2]!
+      aSum += src[i + 3]!
+    }
+    for (let pos = 0; pos < size; pos++) {
+      const i = idx(line, pos)
+      dst[i] = rSum / windowSize
+      dst[i + 1] = gSum / windowSize
+      dst[i + 2] = bSum / windowSize
+      dst[i + 3] = aSum / windowSize
+
+      const removeI = idx(line, Math.min(size - 1, Math.max(0, pos - radius)))
+      const addI = idx(line, Math.min(size - 1, Math.max(0, pos + radius + 1)))
+      rSum += src[addI]! - src[removeI]!
+      gSum += src[addI + 1]! - src[removeI + 1]!
+      bSum += src[addI + 2]! - src[removeI + 2]!
+      aSum += src[addI + 3]! - src[removeI + 3]!
+    }
+  }
+}
+
+function boxBlurImageData(imageData: ImageData, radius: number, passes = 3) {
+  if (radius < 1) return imageData
+  const { width, height, data } = imageData
+  let a = new Uint8ClampedArray(data)
+  let b = new Uint8ClampedArray(data.length)
+  const perPassRadius = Math.max(1, Math.round(radius / passes))
+
+  for (let p = 0; p < passes; p++) {
+    boxBlurPass(a, b, width, height, perPassRadius, true)
+    boxBlurPass(b, a, width, height, perPassRadius, false)
+  }
+  data.set(a)
+  return imageData
+}
+
 // ── Black & white noisy filter ───────────────────────────────────────────
 
 function applyBwNoiseFilter(imageData: ImageData, contrastAmount = 40, noiseAmount = 25, brightnessReduction = 0.08) {
@@ -283,11 +354,13 @@ async function buildBackground() {
   if (!bctx) return
 
   bctx.clearRect(0, 0, w, h)
-  // Blur applies only to this draw call — reset immediately after so
-  // subsequent pixel filters (and the overlay drawn later) stay sharp.
-  bctx.filter = blurEnabled.value ? `blur(${Math.max(2, Math.round(w * 0.006))}px)` : 'none'
   bctx.drawImage(img, 0, 0, w, h)
-  bctx.filter = 'none'
+
+  if (blurEnabled.value) {
+    const imageData = bctx.getImageData(0, 0, w, h)
+    boxBlurImageData(imageData, Math.max(2, Math.round(w * 0.006)))
+    bctx.putImageData(imageData, 0, 0)
+  }
 
   if (bwFilterEnabled.value) {
     const imageData = bctx.getImageData(0, 0, w, h)
