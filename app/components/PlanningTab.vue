@@ -273,9 +273,16 @@ function tsbStyle(tsb: number | null | undefined) {
 
 const noteModalDate = ref<string | null>(null)
 const noteTextarea = ref<HTMLTextAreaElement | null>(null)
+// Edited independently of the shared draft so Cancel can discard changes —
+// the textarea used to `v-model` straight onto the draft's `notes` field,
+// which mutated it on every keystroke; Cancel just closed the modal without
+// reverting it, and the stray edit would then get persisted for real by the
+// next unrelated `save()` on that date (e.g. blurring the TSS input).
+const noteBuffer = ref('')
 
 function openNoteModal(date: string) {
   noteModalDate.value = date
+  noteBuffer.value = getDraft(date).notes ?? ''
   // Native `autofocus` isn't reliably honored for elements inserted dynamically
   // via Teleport (Firefox in particular ignores it here), so focus explicitly
   // once the textarea has mounted.
@@ -290,14 +297,21 @@ function closeNoteModal() {
 // size) but caps out at 12 so a very long note scrolls instead of pushing the
 // modal off-screen — roughly 60 chars/line at the modal's current width.
 const noteTextareaRows = computed(() => {
-  const length = noteModalDate.value ? (getDraft(noteModalDate.value).notes?.length ?? 0) : 0
-  return Math.min(12, Math.max(4, Math.ceil(length / 60) + 1))
+  return Math.min(12, Math.max(4, Math.ceil(noteBuffer.value.length / 60) + 1))
 })
 
 async function saveNote() {
   if (!noteModalDate.value) return
+  const draft = getDraft(noteModalDate.value)
+  draft.notes = noteBuffer.value || null
   await save(noteModalDate.value)
   closeNoteModal()
+}
+
+async function clearNote() {
+  if (!noteModalDate.value) return
+  noteBuffer.value = ''
+  await saveNote()
 }
 </script>
 
@@ -574,14 +588,25 @@ async function saveNote() {
           </div>
           <textarea
             ref="noteTextarea"
-            v-model="getDraft(noteModalDate).notes"
+            v-model="noteBuffer"
             :rows="noteTextareaRows"
             placeholder="Add a note for this day…"
             class="w-full text-sm text-stone-700 placeholder-stone-300 border border-stone-200 rounded-lg p-3 outline-none focus:border-stone-400 resize-none overflow-y-auto"
           />
-          <div class="flex justify-end gap-3 mt-4">
-            <button class="text-sm text-stone-400 hover:text-stone-600 cursor-pointer" @click="closeNoteModal">Cancel</button>
-            <button class="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 cursor-pointer" @click="saveNote">Save</button>
+          <div class="flex items-center justify-between gap-3 mt-4">
+            <button
+              v-if="getDraft(noteModalDate).notes"
+              type="button"
+              class="text-sm text-stone-400 hover:text-red-600 cursor-pointer"
+              @click="clearNote"
+            >
+              Clear note
+            </button>
+            <div v-else />
+            <div class="flex gap-3">
+              <button class="text-sm text-stone-400 hover:text-stone-600 cursor-pointer" @click="closeNoteModal">Cancel</button>
+              <button class="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 cursor-pointer" @click="saveNote">Save</button>
+            </div>
           </div>
         </div>
       </div>
