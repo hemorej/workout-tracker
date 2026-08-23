@@ -49,6 +49,26 @@ export interface WorkoutFitData {
   maxCadence: number | null
 }
 
+/**
+ * One lap/split from a parsed FIT file's `lap` messages (device auto-lap or a
+ * manual lap-button press) — distinct from the per-second `record` stream
+ * `WorkoutFitData` is derived from. `lapNumber` is our own 1-based index into
+ * the file's lap order, not the FIT `message_index` field. Stored as a JSON
+ * array rather than a child table — same reasoning as `WorkoutFitData`: it's
+ * small, read-only once parsed, and the UI reads it straight off the workout.
+ */
+export interface WorkoutLap {
+  lapNumber: number
+  durationSeconds: number
+  distanceMeters: number
+  avgPower: number | null
+  maxPower: number | null
+  avgHr: number | null
+  maxHr: number | null
+  avgCadence: number | null
+  avgSpeedKph: number | null
+}
+
 // ---------------------------------------------------------------------------
 // users
 // ---------------------------------------------------------------------------
@@ -172,6 +192,15 @@ export const workouts = pgTable(
      * data"); older/manually-entered workouts never get one.
      */
     fitData: jsonb('fit_data').$type<WorkoutFitData>(),
+
+    /**
+     * Per-lap splits from the same parsed FIT file, if it had 2+ lap
+     * messages — see WorkoutLap above. Null for a file with 0 or 1 laps (no
+     * lap button pressed / no auto-lap) as well as for workouts with no FIT
+     * data at all; the UI hides the "Laps" link whenever this isn't at least
+     * a 2-element array.
+     */
+    laps: jsonb('laps').$type<WorkoutLap[]>(),
 
     /** Row creation timestamp (UTC) */
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

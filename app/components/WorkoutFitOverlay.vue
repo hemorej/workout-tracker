@@ -47,6 +47,18 @@ const distanceDisplay = computed(() => {
   const km = props.workout?.distanceKm
   return km != null ? `${km.toFixed(1)} km` : null
 })
+
+/** Only worth a "Laps" page when there are at least 2 splits — a single lap covering the whole ride isn't worth its own view. */
+const hasLaps = computed(() => (props.workout?.laps?.length ?? 0) >= 2)
+
+const page = ref<'summary' | 'laps'>('summary')
+watch(() => props.workout, () => { page.value = 'summary' })
+
+function lapDurationDisplay(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.round(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
 </script>
 
 <template>
@@ -71,15 +83,52 @@ const distanceDisplay = computed(() => {
               {{ durationDisplay }}<template v-if="distanceDisplay"> &nbsp;·&nbsp; {{ distanceDisplay }}</template>
             </p>
           </div>
-          <button
-            class="text-stone-300 hover:text-stone-600 transition-colors"
-            aria-label="Close"
-            @click="$emit('close')"
-          >
-            <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
-          </button>
+          <div class="flex items-center gap-3">
+            <button
+              v-if="hasLaps"
+              type="button"
+              class="text-xs text-orange-500 hover:text-orange-700 font-medium transition-colors"
+              @click="page = page === 'summary' ? 'laps' : 'summary'"
+            >
+              {{ page === 'summary' ? 'Laps' : '← Summary' }}
+            </button>
+            <button
+              class="text-stone-300 hover:text-stone-600 transition-colors"
+              aria-label="Close"
+              @click="$emit('close')"
+            >
+              <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
+        <!-- Laps page -->
+        <div v-if="page === 'laps'">
+          <div class="grid grid-cols-6 gap-x-1.5 text-[9px] font-semibold text-stone-400 uppercase tracking-wide px-1.5 pb-1">
+            <span>#</span>
+            <span class="text-right">Time</span>
+            <span class="text-right">Km</span>
+            <span class="text-right">W</span>
+            <span class="text-right">Bpm</span>
+            <span class="text-right">Km/h</span>
+          </div>
+          <div class="laps-scroll max-h-[34rem] overflow-y-auto space-y-0.5 pr-1">
+            <div
+              v-for="lap in workout.laps"
+              :key="lap.lapNumber"
+              class="grid grid-cols-6 gap-x-1.5 text-xs bg-stone-50 rounded-md px-1.5 py-1 tabular"
+            >
+              <span class="text-stone-500">{{ lap.lapNumber }}</span>
+              <span class="text-right text-stone-700 font-medium">{{ lapDurationDisplay(lap.durationSeconds) }}</span>
+              <span class="text-right text-stone-700 font-medium">{{ (lap.distanceMeters / 1000).toFixed(2) }}</span>
+              <span class="text-right text-stone-700 font-medium">{{ lap.avgPower ?? '—' }}</span>
+              <span class="text-right text-stone-700 font-medium">{{ lap.avgHr ?? '—' }}</span>
+              <span class="text-right text-stone-700 font-medium">{{ lap.avgSpeedKph ?? '—' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <template v-else>
         <!-- Headline stats grid -->
         <div class="grid grid-cols-3 gap-3 mb-5">
           <div class="bg-stone-50 rounded-lg px-3 py-2.5 text-center">
@@ -140,7 +189,28 @@ const distanceDisplay = computed(() => {
           <p class="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Notes</p>
           <p class="text-sm text-stone-600 whitespace-pre-wrap">{{ workout.notes }}</p>
         </div>
+        </template>
       </div>
     </div>
   </Teleport>
 </template>
+
+<style scoped>
+/* Thin orange-themed scrollbar for the laps list — Firefox */
+.laps-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-primary) transparent;
+}
+
+/* Chrome/Safari */
+.laps-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.laps-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.laps-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--ui-primary);
+  border-radius: 9999px;
+}
+</style>

@@ -16,6 +16,7 @@
  *   rideType?:       string   — optional, 'trainer' | 'outdoor'
  *   powerBests?:     { duration: string; watts: number }[]
  *   fitData?:        WorkoutFitData — optional, extra stats from a parsed FIT file
+ *   laps?:           WorkoutLap[] — optional, per-lap splits from a parsed FIT file
  *   stravaActivityId?: number — optional, set when created via the "Mark as
  *                      completed" picker
  * }
@@ -27,7 +28,7 @@
  */
 
 import { eq, and } from 'drizzle-orm'
-import { workouts, powerBests, POWER_BEST_DURATIONS, type WorkoutFitData } from '../../db/schema'
+import { workouts, powerBests, POWER_BEST_DURATIONS, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
 import { useDB } from '../../db'
 import { invalidateMetrics } from '../../utils/metricsCache'
 
@@ -131,6 +132,38 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  let laps: WorkoutLap[] | null = null
+  if (body.laps !== undefined && body.laps !== null) {
+    if (!Array.isArray(body.laps)) {
+      throw createError({ statusCode: 400, statusMessage: 'laps must be an array.' })
+    }
+    laps = body.laps.map((lap: Record<string, unknown>, i: number) => {
+      const requiredNumericFields: (keyof WorkoutLap)[] = ['lapNumber', 'durationSeconds', 'distanceMeters']
+      for (const key of requiredNumericFields) {
+        if (typeof lap[key] !== 'number' || !Number.isFinite(lap[key])) {
+          throw createError({ statusCode: 400, statusMessage: `laps[${i}].${key} must be a number.` })
+        }
+      }
+      const optionalNumericFields: (keyof WorkoutLap)[] = ['avgPower', 'maxPower', 'avgHr', 'maxHr', 'avgCadence', 'avgSpeedKph']
+      for (const key of optionalNumericFields) {
+        if (lap[key] !== null && lap[key] !== undefined && (typeof lap[key] !== 'number' || !Number.isFinite(lap[key]))) {
+          throw createError({ statusCode: 400, statusMessage: `laps[${i}].${key} must be a number or null.` })
+        }
+      }
+      return {
+        lapNumber: lap.lapNumber as number,
+        durationSeconds: lap.durationSeconds as number,
+        distanceMeters: lap.distanceMeters as number,
+        avgPower: (lap.avgPower as number | null) ?? null,
+        maxPower: (lap.maxPower as number | null) ?? null,
+        avgHr: (lap.avgHr as number | null) ?? null,
+        maxHr: (lap.maxHr as number | null) ?? null,
+        avgCadence: (lap.avgCadence as number | null) ?? null,
+        avgSpeedKph: (lap.avgSpeedKph as number | null) ?? null,
+      }
+    })
+  }
+
   const validDurations = new Set(POWER_BEST_DURATIONS as readonly string[])
   const pbInput: { duration: string; watts: number }[] = []
   if (Array.isArray(body.powerBests)) {
@@ -184,6 +217,7 @@ export default defineEventHandler(async (event) => {
       ftpWatts,
       rideType,
       fitData,
+      laps,
       stravaActivityId,
     })
     .returning()

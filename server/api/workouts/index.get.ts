@@ -35,7 +35,7 @@
  */
 
 import { eq, asc, desc, and, gte, lte, ilike, inArray, sql, type SQL } from 'drizzle-orm'
-import { workouts, users, powerBests, type WorkoutFitData } from '../../db/schema'
+import { workouts, users, powerBests, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
 import { useDB } from '../../db'
 import { computeMetricsSeries, computeWeeklyStats, type DayMetrics } from '../../utils/tss'
 import { getCachedMetrics, setCachedMetrics } from '../../utils/metricsCache'
@@ -150,6 +150,7 @@ export default defineEventHandler(async (event) => {
     ftpWatts: number | null
     rideType: string | null
     fitData: WorkoutFitData | null
+    laps: WorkoutLap[] | null
     stravaActivityId: number | null
   }
 
@@ -181,6 +182,7 @@ export default defineEventHandler(async (event) => {
       ftpWatts: row.ftpWatts,
       rideType: row.rideType,
       fitData: row.fitData,
+      laps: row.laps,
       stravaActivityId: row.stravaActivityId,
       powerBests: pbByWorkoutId.get(row.id) ?? [],
     }
@@ -225,6 +227,7 @@ export default defineEventHandler(async (event) => {
         ftpWatts: workouts.ftpWatts,
         rideType: workouts.rideType,
         fitData: workouts.fitData,
+        laps: workouts.laps,
         stravaActivityId: workouts.stravaActivityId,
       })
       .from(workouts)
@@ -268,6 +271,7 @@ export default defineEventHandler(async (event) => {
         ftpWatts: workouts.ftpWatts,
         rideType: workouts.rideType,
         fitData: workouts.fitData,
+        laps: workouts.laps,
         stravaActivityId: workouts.stravaActivityId,
       })
       .from(workouts)

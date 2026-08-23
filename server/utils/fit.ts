@@ -9,7 +9,7 @@
  */
 
 import FitParser from 'fit-file-parser'
-import { POWER_BEST_DURATIONS, type PowerBestDuration } from '../db/schema'
+import { POWER_BEST_DURATIONS, type PowerBestDuration, type WorkoutLap } from '../db/schema'
 
 // duration label -> seconds, matches POWER_BEST_DURATIONS in server/db/schema.ts
 const DURATION_SECONDS: Record<PowerBestDuration, number> = {
@@ -42,6 +42,35 @@ interface FitEvent {
   event?: string
   event_type?: string
   timestamp?: Date
+}
+
+/** Raw shape of a FIT `lap` message, per the Garmin profile (mesg_num 19). */
+interface FitLap {
+  total_elapsed_time?: number
+  total_timer_time?: number
+  total_distance?: number
+  avg_power?: number
+  max_power?: number
+  avg_heart_rate?: number
+  max_heart_rate?: number
+  avg_cadence?: number
+  /** Already converted to km/h — FitParser is constructed with speedUnit: 'km/h' below. */
+  avg_speed?: number
+}
+
+/** Maps raw FIT lap messages to our stored shape, numbering them 1-based in file order. */
+function computeLaps(rawLaps: FitLap[]): WorkoutLap[] {
+  return rawLaps.map((lap, i) => ({
+    lapNumber: i + 1,
+    durationSeconds: Math.round(lap.total_timer_time ?? lap.total_elapsed_time ?? 0),
+    distanceMeters: Math.round(lap.total_distance ?? 0),
+    avgPower: lap.avg_power ?? null,
+    maxPower: lap.max_power ?? null,
+    avgHr: lap.avg_heart_rate ?? null,
+    maxHr: lap.max_heart_rate ?? null,
+    avgCadence: lap.avg_cadence ?? null,
+    avgSpeedKph: lap.avg_speed != null ? Math.round(lap.avg_speed * 10) / 10 : null,
+  }))
 }
 
 /**
@@ -91,6 +120,8 @@ export interface ParsedFitMetrics {
   /** Null if the file has no cadence readings (not every sensor reports it). */
   avgCadence: number | null
   maxCadence: number | null
+  /** Per-lap splits, in file order. Empty if the file has no lap messages at all. */
+  laps: WorkoutLap[]
 }
 
 function mean(arr: number[] | Float64Array): number {
@@ -145,7 +176,7 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     speedUnit: 'km/h',
   })
 
-  const data = await parser.parseAsync(content as unknown as ArrayBuffer) as { records?: FitRecord[], events?: FitEvent[] }
+  const data = await parser.parseAsync(content as unknown as ArrayBuffer) as { records?: FitRecord[], events?: FitEvent[], laps?: FitLap[] }
   const records: FitRecord[] = data.records ?? []
 
   if (records.length === 0) {
@@ -212,5 +243,6 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     maxHr: heartRates.length > 0 ? Math.round(Math.max(...heartRates)) : null,
     avgCadence: cadences.length > 0 ? Math.round(mean(cadences)) : null,
     maxCadence: cadences.length > 0 ? Math.round(Math.max(...cadences)) : null,
+    laps: computeLaps(data.laps ?? []),
   }
 }

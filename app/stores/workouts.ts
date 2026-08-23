@@ -35,6 +35,19 @@ export interface WorkoutFitData {
   maxCadence: number | null
 }
 
+/** One lap/split from a parsed FIT file — mirrors WorkoutLap in server/db/schema.ts */
+export interface WorkoutLap {
+  lapNumber: number
+  durationSeconds: number
+  distanceMeters: number
+  avgPower: number | null
+  maxPower: number | null
+  avgHr: number | null
+  maxHr: number | null
+  avgCadence: number | null
+  avgSpeedKph: number | null
+}
+
 export interface WorkoutDetail {
   id: number
   name: string
@@ -46,6 +59,8 @@ export interface WorkoutDetail {
   ftpWatts: number | null
   rideType: 'trainer' | 'outdoor' | null
   fitData: WorkoutFitData | null
+  /** Per-lap splits, if the FIT file had 2+ laps — see server/db/schema.ts. */
+  laps: WorkoutLap[] | null
   /** Strava activity this workout was created from, if any — see server/db/schema.ts. */
   stravaActivityId: number | null
   powerBests: PowerBestEntry[]
@@ -110,6 +125,7 @@ export interface NewWorkoutPayload {
   rideType?: 'trainer' | 'outdoor' | null
   powerBests?: PowerBestEntry[]
   fitData?: WorkoutFitData | null
+  laps?: WorkoutLap[] | null
   /** Strava activity this workout was created from, if any — see server/db/schema.ts. */
   stravaActivityId?: number | null
 }

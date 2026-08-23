@@ -26,7 +26,7 @@
  */
 
 import { useAuthStore } from '~/stores/auth'
-import { useWorkoutsStore, type LogFilters, type WorkoutDetail, type WorkoutFitData, type DayEntry } from '~/stores/workouts'
+import { useWorkoutsStore, type LogFilters, type WorkoutDetail, type WorkoutFitData, type WorkoutLap, type DayEntry } from '~/stores/workouts'
 import { usePlanningStore } from '~/stores/planning'
 import { useCoachStore, type CoachWorkout } from '~/stores/coach'
 import type { WorkoutPrefill } from '~/components/AddWorkoutModal.vue'
@@ -47,6 +47,7 @@ interface ParsedFitPrefill {
   durationSeconds: number
   distanceMeters: number
   fitData: WorkoutFitData
+  laps: WorkoutLap[] | null
 }
 
 interface WahooByDateResponse extends ParsedFitPrefill {
@@ -352,6 +353,7 @@ function prefillFromParsedFit(activity: UploadTarget, parsed: ParsedFitPrefill):
     rideType: activity.rideType,
     powerBests: parsed.powerBests,
     fitData: parsed.fitData,
+    laps: parsed.laps,
     stravaActivityId: activity.id ?? null,
   }
 }

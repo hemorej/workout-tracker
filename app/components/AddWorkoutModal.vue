@@ -10,7 +10,7 @@
  *   close — user pressed Cancel; parent should close the modal
  */
 
-import type { NewWorkoutPayload, PowerBestEntry, WorkoutFitData } from '~/stores/workouts'
+import type { NewWorkoutPayload, PowerBestEntry, WorkoutFitData, WorkoutLap } from '~/stores/workouts'
 import { useWorkoutsStore } from '~/stores/workouts'
 
 export interface WorkoutPrefill {
@@ -32,6 +32,7 @@ export interface WorkoutPrefill {
   rpe?: number | null
   ftpWatts?: number | null
   fitData?: WorkoutFitData | null
+  laps?: WorkoutLap[] | null
 }
 
 const props = defineProps<{
@@ -171,6 +172,7 @@ async function handleSubmit() {
     rideType: rideType.value,
     powerBests: validPowerBests.length > 0 ? validPowerBests : undefined,
     fitData: props.prefill?.fitData ?? undefined,
+    laps: props.prefill?.laps ?? undefined,
     stravaActivityId: props.prefill?.stravaActivityId ?? undefined,
   }
 

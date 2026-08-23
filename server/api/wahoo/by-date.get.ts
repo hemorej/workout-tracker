@@ -20,7 +20,7 @@
  * replaces).
  *
  * Returns:
- *   200 { ride: WahooRideSummary, tss, powerBests, durationSeconds, distanceMeters, fitData }
+ *   200 { ride: WahooRideSummary, tss, powerBests, durationSeconds, distanceMeters, fitData, laps }
  *   400 for a missing/invalid date
  *   404 if no Wahoo workout matches that date
  *   422 if the matched workout has no FIT file yet, or the file has no power data
@@ -135,5 +135,6 @@ export default defineEventHandler(async (event) => {
       avgCadence: metrics.avgCadence,
       maxCadence: metrics.maxCadence,
     },
+    laps: metrics.laps.length >= 2 ? metrics.laps : null,
   }
 })
