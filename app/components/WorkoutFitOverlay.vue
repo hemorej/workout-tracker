@@ -87,7 +87,8 @@ function lapDurationDisplay(seconds: number): string {
             <button
               v-if="hasLaps"
               type="button"
-              class="text-xs text-orange-500 hover:text-orange-700 font-medium transition-colors"
+              class="text-orange-500 hover:text-orange-700 font-medium transition-colors whitespace-nowrap"
+              :class="page === 'summary' ? 'text-xs' : 'text-[11px]'"
               @click="page = page === 'summary' ? 'laps' : 'summary'"
             >
               {{ page === 'summary' ? 'Laps' : '← Summary' }}
@@ -114,14 +115,15 @@ function lapDurationDisplay(seconds: number): string {
           </div>
           <div class="laps-scroll max-h-[34rem] overflow-y-auto space-y-0.5 pr-1">
             <div
-              v-for="lap in workout.laps"
+              v-for="(lap, i) in workout.laps"
               :key="lap.lapNumber"
-              class="grid grid-cols-6 gap-x-1.5 text-xs bg-stone-50 rounded-md px-1.5 py-1 tabular"
+              class="grid grid-cols-6 gap-x-1.5 text-xs rounded-md px-1.5 py-1 tabular"
+              :class="i % 2 === 0 ? 'bg-stone-50' : 'bg-white'"
             >
               <span class="text-stone-500">{{ lap.lapNumber }}</span>
               <span class="text-right text-stone-700 font-medium">{{ lapDurationDisplay(lap.durationSeconds) }}</span>
               <span class="text-right text-stone-700 font-medium">{{ (lap.distanceMeters / 1000).toFixed(2) }}</span>
-              <span class="text-right text-stone-700 font-medium">{{ lap.avgPower ?? '—' }}</span>
+              <span class="text-right text-orange-500 font-semibold">{{ lap.avgPower ?? '—' }}</span>
               <span class="text-right text-stone-700 font-medium">{{ lap.avgHr ?? '—' }}</span>
               <span class="text-right text-stone-700 font-medium">{{ lap.avgSpeedKph ?? '—' }}</span>
             </div>
