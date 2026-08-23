@@ -591,7 +591,7 @@ async function clearNote() {
             v-model="noteBuffer"
             :rows="noteTextareaRows"
             placeholder="Add a note for this day…"
-            class="w-full text-sm text-stone-700 placeholder-stone-300 border border-stone-200 rounded-lg p-3 outline-none focus:border-stone-400 resize-none overflow-y-auto"
+            class="note-scroll w-full text-sm text-stone-700 placeholder-stone-300 border border-stone-200 rounded-lg p-3 outline-none focus:border-stone-400 resize-none overflow-y-auto"
           />
           <div class="flex items-center justify-between gap-3 mt-4">
             <button
@@ -614,3 +614,23 @@ async function clearNote() {
 
   </div>
 </template>
+
+<style scoped>
+/* Thin orange-themed scrollbar for the note textarea — Firefox */
+.note-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-primary) transparent;
+}
+
+/* Chrome/Safari */
+.note-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.note-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.note-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--ui-primary);
+  border-radius: 9999px;
+}
+</style>
