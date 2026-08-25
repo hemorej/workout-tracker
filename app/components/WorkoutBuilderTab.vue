@@ -12,6 +12,7 @@
  */
 
 import { useCoachStore } from '~/stores/coach'
+import { usePlanningStore } from '~/stores/planning'
 
 // ── Data model ───────────────────────────────────────────────────────────
 
@@ -70,6 +71,34 @@ if (typeof route.query.planName === 'string') {
 const nextId = ref(1)
 const selectedId = ref<number | null>(null)
 const blocks = ref<Block[]>([])
+
+// ── Current week summary (reminder of what's already planned) ──────────────
+// planning.plans is the 4-week grid starting at the current Monday (see
+// stores/planning.ts), so the first 7 entries are this week.
+const planning = usePlanningStore()
+onMounted(() => planning.fetchPlans())
+
+const currentWeekPlan = computed(() =>
+  planning.plans.slice(0, 7).filter(day => day.plan && (day.plan.name || day.plan.tss || day.plan.durationMinutes)),
+)
+
+function weekSummaryDateLabel(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00`)
+  return d.toLocaleDateString('en-US', { weekday: 'short' })
+}
+
+function isToday(dateStr: string) {
+  return dateStr === todayLocalDate()
+}
+
+function weekSummaryDurationLabel(mins: number | null) {
+  if (!mins) return '—'
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
 
 // ── Fuelling guide + save-to-planned-workout ────────────────────────────
 
@@ -1146,44 +1175,72 @@ function download() {
       </button>
     </div>
 
-    <!-- ── Fuelling guide + save to planned workout ──────────────────── -->
-    <div class="max-w-3xl mx-auto space-y-3" style="padding-bottom: 8px;">
-      <div>
-        <label class="block mb-[7px]" style="font: 600 12px 'Hanken Grotesk'; color: #78716c; letter-spacing: .04em; text-transform: uppercase;">
-          Fuelling guide
-        </label>
-        <textarea
-          v-model="fuellingNotes"
-          rows="4"
-          placeholder="Optional — pre/during/post-ride fuelling notes"
-          class="w-full outline-none resize-y"
-          style="font: 400 14px 'Hanken Grotesk'; color: #1c1917; border: 1.5px solid #e7e5e4; border-radius: 10px; padding: 12px 14px; background: #fff;"
-        />
+    <!-- ── Week reminder + fuelling guide/save — even 50/50 split, divided
+         by a thin vertical rule. Falls back to a single stacked column below
+         `lg` (the builder tab itself is lg+ only, but the split still needs
+         real width to avoid squeezing either side). -->
+    <div class="max-w-3xl mx-auto grid gap-0" style="padding-bottom: 8px;" :class="currentWeekPlan.length ? 'lg:[grid-template-columns:1fr_1px_1fr]' : ''">
+      <div v-if="currentWeekPlan.length" class="pr-6">
+        <p class="mb-2" style="font: 600 12px 'Hanken Grotesk'; letter-spacing: .04em; text-transform: uppercase; color: #78716c;">
+          This week's plan
+        </p>
+        <table class="w-full" style="font: 500 13px 'Hanken Grotesk'; color: #44403c; border-collapse: collapse; table-layout: fixed;">
+          <tbody>
+            <tr v-for="day in currentWeekPlan" :key="day.date">
+              <td
+                class="py-1 pr-2 whitespace-nowrap"
+                :style="isToday(day.date) ? 'color: #EA580C; font-weight: 700; width: 34px;' : 'color: #a8a29e; width: 34px;'"
+              >
+                {{ weekSummaryDateLabel(day.date) }}
+              </td>
+              <td class="py-1 pr-2 truncate">{{ day.plan?.name || '—' }}</td>
+              <td class="py-1 pr-2 text-right tabular whitespace-nowrap" style="width: 60px;">{{ day.plan?.tss ?? '—' }}</td>
+              <td class="py-1 text-right tabular whitespace-nowrap" style="width: 52px;">{{ weekSummaryDurationLabel(day.plan?.durationMinutes ?? null) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <div class="flex items-end gap-3 flex-wrap">
-        <div class="flex-none" style="width: 160px;">
+      <div v-if="currentWeekPlan.length" class="hidden lg:block" style="background: #e7e5e4;" />
+
+      <div :class="currentWeekPlan.length ? 'lg:pl-6 space-y-3 mt-6 lg:mt-0' : 'space-y-3'">
+        <div>
           <label class="block mb-[7px]" style="font: 600 12px 'Hanken Grotesk'; color: #78716c; letter-spacing: .04em; text-transform: uppercase;">
-            Date
+            Fuelling guide
           </label>
-          <input
-            v-model="saveDate"
-            type="date"
-            class="w-full outline-none"
-            style="font: 600 14px 'Hanken Grotesk'; color: #1c1917; border: 1.5px solid #e7e5e4; border-radius: 10px; padding: 11px 12px; background: #fff;"
-          >
+          <textarea
+            v-model="fuellingNotes"
+            rows="4"
+            placeholder="Optional — pre/during/post-ride fuelling notes"
+            class="w-full outline-none resize-y"
+            style="font: 400 14px 'Hanken Grotesk'; color: #1c1917; border: 1.5px solid #e7e5e4; border-radius: 10px; padding: 12px 14px; background: #fff;"
+          />
         </div>
 
-        <button
-          :disabled="blocks.length === 0 || isSaving"
-          class="inline-flex items-center justify-center shrink-0"
-          :class="blocks.length === 0 || isSaving ? 'cursor-not-allowed' : 'cursor-pointer'"
-          style="font: 600 14px 'Hanken Grotesk'; color: #fff; background: #7c3aed; border: none; border-radius: 10px; padding: 11px 18px;"
-          :style="{ opacity: blocks.length === 0 || isSaving ? 0.5 : 1 }"
-          @click="saveToPlannedWorkout"
-        >
-          {{ isSaving ? 'Saving…' : 'Save to planned workout' }}
-        </button>
+        <div class="flex items-end gap-2 flex-wrap">
+          <div class="flex-1 min-w-[110px]">
+            <label class="block mb-[7px]" style="font: 600 12px 'Hanken Grotesk'; color: #78716c; letter-spacing: .04em; text-transform: uppercase;">
+              Date
+            </label>
+            <input
+              v-model="saveDate"
+              type="date"
+              class="w-full outline-none"
+              style="font: 600 14px 'Hanken Grotesk'; color: #1c1917; border: 1.5px solid #e7e5e4; border-radius: 10px; padding: 11px 12px; background: #fff;"
+            >
+          </div>
+
+          <button
+            :disabled="blocks.length === 0 || isSaving"
+            class="inline-flex items-center justify-center flex-1 min-w-[140px]"
+            :class="blocks.length === 0 || isSaving ? 'cursor-not-allowed' : 'cursor-pointer'"
+            style="font: 600 14px 'Hanken Grotesk'; color: #fff; background: #7c3aed; border: none; border-radius: 10px; padding: 11px 14px;"
+            :style="{ opacity: blocks.length === 0 || isSaving ? 0.5 : 1 }"
+            @click="saveToPlannedWorkout"
+          >
+            {{ isSaving ? 'Saving…' : 'Save to planned workout' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>

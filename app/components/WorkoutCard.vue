@@ -107,6 +107,8 @@ const hasLongNotes = computed(
 // ── Planned workout state ────────────────────────────────────────────────
 const plannedPlan = computed(() => props.plannedWorkout?.plan ?? null)
 const isPlannedDay = computed(() => props.day.isRestDay && !!plannedPlan.value)
+/** Outdoor plans have no workout builder (manual/auto) to send the rider to — just a placeholder pill */
+const isPlannedOutdoor = computed(() => plannedPlan.value?.type === 'outdoor')
 
 const plannedDurationDisplay = computed(() => {
   const mins = plannedPlan.value?.durationMinutes ?? 0
@@ -123,6 +125,8 @@ const hasFtp = computed(() => !!props.day.workout?.ftpWatts)
 const hasPowerBests = computed(() => (props.day.workout?.powerBests?.length ?? 0) > 0)
 const hasFitData = computed(() => !!props.day.workout?.fitData)
 const hasStravaActivity = computed(() => !!props.day.workout?.stravaActivityId)
+/** Photo overlay builder only makes sense for outdoor rides — no route/map data for indoor/trainer rides */
+const isOutdoorRide = computed(() => props.day.workout?.rideType === 'outdoor')
 
 function openOverlay() {
   navigateTo(`/overlay/${props.day.workout?.stravaActivityId}`)
@@ -300,7 +304,7 @@ function confirmDelete() {
         </svg>
       </button>
       <button
-        v-if="!day.isRestDay && !isPlannedDay && hasStravaActivity"
+        v-if="!day.isRestDay && !isPlannedDay && hasStravaActivity && isOutdoorRide"
         title="Create photo overlay"
         aria-label="Create photo overlay"
         class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
@@ -458,7 +462,13 @@ function confirmDelete() {
         RPE {{ day.workout?.rpe }}/10
       </span>
       <template v-else-if="isPlannedDay">
-        <BikeSpinner v-if="isAutoBuilding" :size="20" />
+        <span
+          v-if="isPlannedOutdoor"
+          class="inline-block text-xs text-violet-600 font-semibold bg-violet-100 border border-violet-200 rounded-full px-2.5 py-0.5 whitespace-nowrap"
+        >
+          Planned
+        </span>
+        <BikeSpinner v-else-if="isAutoBuilding" :size="20" />
         <div v-else-if="showBuildChoice" class="flex items-center gap-2">
           <button class="text-xs text-violet-600 hover:text-violet-700 font-semibold" @click="chooseFromScratch">
             Manual
@@ -515,7 +525,7 @@ function confirmDelete() {
 
       <!-- Create photo overlay — shown once the workout has a linked Strava activity -->
       <button
-        v-if="!day.isRestDay && !isPlannedDay && hasStravaActivity"
+        v-if="!day.isRestDay && !isPlannedDay && hasStravaActivity && isOutdoorRide"
         title="Create photo overlay"
         aria-label="Create photo overlay"
         class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
