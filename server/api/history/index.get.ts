@@ -20,13 +20,16 @@
  *   powerBestsPanel:  {
  *     last8Weeks: Record<duration, watts>,     // single best value
  *     allTime:    Record<duration, watts[]>,   // top 3, descending
+ *     durations:  duration[],
+ *     bestMeta:   Record<duration, { date: string, isFresh: boolean }>,
  *   }
  *   currentFtp:       number | null
+ *   weightKg:         number | null
  * }
  */
 
 import { eq, asc, inArray } from 'drizzle-orm'
-import { workouts, powerBests as powerBestsTable, wahooPowerBests, POWER_BEST_DURATIONS } from '../../db/schema'
+import { workouts, powerBests as powerBestsTable, wahooPowerBests, users, POWER_BEST_DURATIONS } from '../../db/schema'
 import { useDB } from '../../db'
 
 type GroupBy = 'week' | 'month' | 'year'
@@ -192,6 +195,7 @@ export default defineEventHandler(async (event) => {
 
   const last8wBests: Record<string, number> = {}
   const allTimeTop3: Record<string, number[]> = {}
+  const bestMeta: Record<string, { date: string; isFresh: boolean }> = {}
 
   for (const [duration, candidates] of candidatesByDuration) {
     const sorted = [...candidates].sort((a, b) => b.watts - a.watts)
@@ -199,10 +203,22 @@ export default defineEventHandler(async (event) => {
 
     const best8w = sorted.find((c) => c.date >= cutoffStr)
     if (best8w) last8wBests[duration] = best8w.watts
+
+    const top = sorted[0]!
+    bestMeta[duration] = {
+      date: top.date,
+      isFresh: best8w != null && best8w.watts === top.watts,
+    }
   }
 
   // Current FTP: most recent non-null ftpWatts (allWorkouts sorted asc, so last wins)
   const currentFtp = allWorkouts.filter((w) => w.ftpWatts != null).at(-1)?.ftpWatts ?? null
+
+  const [userRow] = await db
+    .select({ weightKg: users.weightKg })
+    .from(users)
+    .where(eq(users.id, user.id))
+  const weightKg = userRow?.weightKg ?? null
 
   // Surface which durations have any data for the panel
   const durationsWithData = POWER_BEST_DURATIONS.filter(
@@ -215,7 +231,9 @@ export default defineEventHandler(async (event) => {
       last8Weeks: last8wBests,
       allTime: allTimeTop3,
       durations: durationsWithData,
+      bestMeta,
     },
     currentFtp,
+    weightKg,
   }
 })
