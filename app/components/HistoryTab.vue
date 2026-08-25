@@ -77,30 +77,31 @@ function formatHours(h: number): string {
 
       <div
         v-else
-        class="bg-white rounded-xl border border-stone-100 overflow-hidden divide-y divide-stone-50"
+        class="bg-white rounded-xl border border-stone-100 overflow-hidden"
       >
         <div
-          v-for="period in data.periods"
+          v-for="(period, i) in data.periods"
           :key="period.key"
-          class="flex items-center gap-4 px-6 py-4 hover:bg-stone-50 transition-colors"
+          class="flex items-center gap-4 px-6 py-2 hover:bg-stone-100 transition-colors"
+          :class="i % 2 === 0 ? 'bg-stone-50' : 'bg-white'"
         >
           <!-- Period label -->
           <div class="flex-1 min-w-0">
             <p class="text-sm font-semibold text-stone-700 truncate">{{ period.label }}</p>
-            <p class="text-xs text-stone-300 mt-0.5">
+            <p class="text-xs text-stone-300">
               {{ period.workoutCount }} workout{{ period.workoutCount !== 1 ? 's' : '' }}
             </p>
           </div>
 
           <!-- Stats -->
           <div class="flex items-center gap-3 shrink-0">
-            <span class="text-sm tabular-nums text-stone-600 font-medium w-16 text-right">
+            <span class="text-sm tabular-nums text-stone-600 font-medium w-20 text-right">
               {{ period.tssTotal }} TSS
             </span>
-            <span class="text-sm tabular-nums text-stone-400 w-14 text-right">
+            <span class="text-sm tabular-nums text-stone-400 w-16 text-right">
               {{ formatHours(period.hoursTotal) }}
             </span>
-            <span class="text-sm tabular-nums text-stone-400 w-16 text-right">
+            <span class="text-sm tabular-nums text-stone-400 w-20 text-right">
               {{ period.kmTotal }} km
             </span>
           </div>
@@ -136,10 +137,6 @@ function formatHours(h: number): string {
 
     <!-- ── Power bests panel ───────────────────────────────────────────── -->
     <div v-else class="bg-white rounded-xl border border-stone-100 overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-stone-50">
-        <p class="text-xs font-semibold uppercase tracking-wide text-stone-400">Power bests</p>
-      </div>
-
       <!-- No data state -->
       <div
         v-if="!data?.powerBestsPanel?.durations?.length"
@@ -151,17 +148,21 @@ function formatHours(h: number): string {
       <table v-else class="w-full text-sm">
         <thead>
           <tr class="border-b border-stone-50">
+            <th class="px-5 py-2.5"></th>
             <th class="px-5 py-2.5 text-left font-semibold text-stone-400 w-24"></th>
-            <th class="px-4 py-2.5 text-right font-semibold text-stone-400">8w</th>
-            <th class="px-5 py-2.5 text-right font-semibold text-stone-400">All time</th>
+            <th class="px-4 py-2.5 text-right font-semibold text-stone-400 w-24">8w</th>
+            <th class="px-4 py-2.5 text-right font-semibold text-stone-400 w-36">All time</th>
+            <th class="px-5 py-2.5"></th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-stone-50">
+        <tbody>
           <tr
-            v-for="dur in POWER_BEST_DURATIONS.filter(d => data?.powerBestsPanel?.durations?.includes(d))"
+            v-for="(dur, i) in POWER_BEST_DURATIONS.filter(d => data?.powerBestsPanel?.durations?.includes(d))"
             :key="dur"
-            class="hover:bg-stone-50 transition-colors"
+            class="hover:bg-stone-100 transition-colors"
+            :class="i % 2 === 0 ? 'bg-stone-50' : 'bg-white'"
           >
+            <td class="px-5 py-2.5"></td>
             <td class="px-5 py-2.5 font-medium text-stone-500">{{ dur }}</td>
             <td class="px-4 py-2.5 text-right tabular-nums text-stone-600">
               <span v-if="data?.powerBestsPanel?.last8Weeks?.[dur]">
@@ -169,7 +170,7 @@ function formatHours(h: number): string {
               </span>
               <span v-else class="text-stone-200">—</span>
             </td>
-            <td class="px-5 py-2.5 text-right tabular-nums">
+            <td class="px-4 py-2.5 text-right tabular-nums">
               <span v-if="data?.powerBestsPanel?.allTime?.[dur]?.length" class="font-semibold text-stone-700">
                 <template v-for="(watts, i) in data.powerBestsPanel.allTime[dur]" :key="i">
                   <span v-if="i > 0" class="mx-1 font-normal text-stone-300">/</span>
@@ -178,6 +179,7 @@ function formatHours(h: number): string {
               </span>
               <span v-else class="text-stone-200">—</span>
             </td>
+            <td class="px-5 py-2.5"></td>
           </tr>
         </tbody>
       </table>
