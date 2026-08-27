@@ -120,6 +120,14 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 400, statusMessage: `fitData.${key} must be a number or null.` })
       }
     }
+    let zoneBuckets: number[] | null = null
+    if (fd.zoneBuckets !== null && fd.zoneBuckets !== undefined) {
+      if (!Array.isArray(fd.zoneBuckets) || fd.zoneBuckets.length !== 6
+        || fd.zoneBuckets.some((s: unknown) => typeof s !== 'number' || !Number.isFinite(s) || s < 0)) {
+        throw createError({ statusCode: 400, statusMessage: 'fitData.zoneBuckets must be an array of 6 non-negative numbers.' })
+      }
+      zoneBuckets = fd.zoneBuckets
+    }
     fitData = {
       avgPower: fd.avgPower,
       maxPower: fd.maxPower,
@@ -129,6 +137,7 @@ export default defineEventHandler(async (event) => {
       maxHr: fd.maxHr ?? null,
       avgCadence: fd.avgCadence ?? null,
       maxCadence: fd.maxCadence ?? null,
+      zoneBuckets,
     }
   }
 

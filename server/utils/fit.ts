@@ -122,6 +122,32 @@ export interface ParsedFitMetrics {
   maxCadence: number | null
   /** Per-lap splits, in file order. Empty if the file has no lap messages at all. */
   laps: WorkoutLap[]
+  /** Seconds in each of the six power zones [Z1..Z6], bucketed against `ftp`. */
+  zoneBuckets: number[]
+}
+
+/**
+ * Upper FTP-fraction bound of Z1…Z5 (Z6 is the open-ended tail). Mirrors
+ * `ZONES` in app/components/WorkoutBuilderTab.vue and `zoneFor`'s `pct <= z.max`
+ * (upper bound inclusive). Keep in sync with the design ramp in
+ * design_handoff_time_in_zone/README.md.
+ */
+const ZONE_UPPER_PCT = [0.55, 0.75, 0.90, 1.05, 1.20]
+
+/**
+ * Seconds in each of the six power zones, one sample per second, no smoothing.
+ * Zero-power (coasting) seconds fall in Z1. Returns a fixed 6-element array
+ * [Z1..Z6]; the sum equals `w.length` (≈ moving-time seconds).
+ */
+function computeZoneBuckets(w: number[], ftp: number): number[] {
+  const buckets = [0, 0, 0, 0, 0, 0]
+  for (const watts of w) {
+    const pct = watts / ftp
+    let zi = ZONE_UPPER_PCT.findIndex((max) => pct <= max)
+    if (zi === -1) zi = 5
+    buckets[zi]!++
+  }
+  return buckets
 }
 
 function mean(arr: number[] | Float64Array): number {
@@ -244,5 +270,6 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     avgCadence: cadences.length > 0 ? Math.round(mean(cadences)) : null,
     maxCadence: cadences.length > 0 ? Math.round(Math.max(...cadences)) : null,
     laps: computeLaps(data.laps ?? []),
+    zoneBuckets: computeZoneBuckets(watts, ftp),
   }
 }
