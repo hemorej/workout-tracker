@@ -290,10 +290,10 @@ function lapIsWork(w: number | null): boolean {
 </template>
 
 <style scoped>
-/* Thin scrollbar for the laps list, retinted from the orange primary to a neutral stone — Firefox */
+/* Thin orange-themed scrollbar for the laps list — Firefox */
 .laps-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #d6d3d1 transparent;
+  scrollbar-color: var(--ui-primary) transparent;
 }
 
 /* Chrome/Safari */
@@ -304,7 +304,7 @@ function lapIsWork(w: number | null): boolean {
   background: transparent;
 }
 .laps-scroll::-webkit-scrollbar-thumb {
-  background-color: #d6d3d1;
+  background-color: var(--ui-primary);
   border-radius: 9999px;
 }
 </style>
