@@ -88,17 +88,22 @@ const zoneBuckets = computed<number[] | null>(() => {
 const hasPower = computed(() => !!zoneBuckets.value && zoneBuckets.value.some((s) => s > 0))
 
 /**
- * Current FTP (most recent logged `ftp_watts`, or the 230 fallback), used
- * only to render each zone's watt band. Fetched lazily the first time a
- * power-capable overlay opens rather than on dashboard load.
+ * FTP the zone watt bands are drawn against. Prefer the value the split was
+ * actually computed with (`fitData.zoneFtp`, stored alongside the buckets),
+ * so the bands can't drift from the split; then the ride's own FTP marker;
+ * then the athlete's current FTP, fetched lazily only when nothing else is
+ * available (older blobs with no `zoneFtp`).
  */
 const { data: ftpData, execute: loadFtp } = useFetch<{ currentFtp: number }>('/api/ftp/current', {
   immediate: false,
   server: false,
 })
-const currentFtp = computed(() => ftpData.value?.currentFtp ?? null)
+const zoneFtp = computed(() =>
+  props.workout?.fitData?.zoneFtp ?? props.workout?.ftpWatts ?? ftpData.value?.currentFtp ?? null,
+)
 watch(
-  () => hasPower.value && !!props.workout,
+  () => hasPower.value && !!props.workout
+    && props.workout.fitData?.zoneFtp == null && props.workout.ftpWatts == null,
   (need) => { if (need && ftpData.value == null) loadFtp() },
   { immediate: true },
 )
@@ -131,7 +136,7 @@ const zoneRows = computed(() => {
       ...z,
       seconds,
       time: zoneTime(seconds),
-      watts: zoneWattRange(z, currentFtp.value),
+      watts: zoneWattRange(z, zoneFtp.value),
       pct: Math.round((seconds / total) * 100),
       bar: Math.round((seconds / largest) * 100),
     }

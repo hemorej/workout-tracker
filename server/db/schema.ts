@@ -49,13 +49,21 @@ export interface WorkoutFitData {
   maxCadence: number | null
   /**
    * Seconds spent in each of the six power zones (index 0 = Z1 … 5 = Z6),
-   * bucketed sample-by-sample at 1 Hz against the ride-time FTP using the
-   * same thresholds as `ZONES` in app/components/WorkoutBuilderTab.vue (see
+   * bucketed sample-by-sample at 1 Hz against `zoneFtp` using the same
+   * thresholds as `ZONES` in app/components/WorkoutBuilderTab.vue (see
    * computeZoneBuckets in server/utils/fit.ts). Null on rows whose FIT file
    * was parsed before this field existed — the Power tab in
    * WorkoutFitOverlay.vue hides itself when it's absent.
    */
   zoneBuckets: number[] | null
+
+  /**
+   * The FTP (watts) the `zoneBuckets` split was computed against — the
+   * marker in effect on the ride's date (getFtpAsOf), not necessarily the
+   * athlete's current FTP. Stored so the Power tab's per-zone watt bands
+   * line up with the split. Null on blobs written before this existed.
+   */
+  zoneFtp: number | null
 }
 
 /**

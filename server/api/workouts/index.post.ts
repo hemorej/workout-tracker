@@ -128,6 +128,13 @@ export default defineEventHandler(async (event) => {
       }
       zoneBuckets = fd.zoneBuckets
     }
+    let zoneFtp: number | null = null
+    if (fd.zoneFtp !== null && fd.zoneFtp !== undefined) {
+      if (typeof fd.zoneFtp !== 'number' || !Number.isFinite(fd.zoneFtp) || fd.zoneFtp <= 0) {
+        throw createError({ statusCode: 400, statusMessage: 'fitData.zoneFtp must be a positive number.' })
+      }
+      zoneFtp = fd.zoneFtp
+    }
     fitData = {
       avgPower: fd.avgPower,
       maxPower: fd.maxPower,
@@ -138,6 +145,7 @@ export default defineEventHandler(async (event) => {
       avgCadence: fd.avgCadence ?? null,
       maxCadence: fd.maxCadence ?? null,
       zoneBuckets,
+      zoneFtp,
     }
   }
 
