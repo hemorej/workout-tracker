@@ -75,7 +75,7 @@ export default defineEventHandler(async (event) => {
     // nothing partial.
     const stream = client.messages.stream({
       model: 'claude-sonnet-5',
-      max_tokens: 7500,
+      max_tokens: 9000,
       system: [
         { type: 'text', text: row.trainingPlan, cache_control: { type: 'ephemeral' } },
         {
