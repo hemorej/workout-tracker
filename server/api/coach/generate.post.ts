@@ -5,11 +5,14 @@
  * current FTP, and current weight, and returns a structured workout
  * (matching WorkoutBuilderTab.vue's Block union) plus a fuelling guide.
  *
- * Non-streaming, single structured response — output is small (a handful
- * of blocks + a paragraph of text), well under where streaming becomes
- * necessary. Every failure path (missing plan, upstream timeout, exhausted
- * retries, refusal, schema mismatch) collapses to a single error response;
- * nothing partial is ever returned.
+ * Streamed request, but collected server-side into a single structured
+ * response via stream.finalMessage() — the stream is only used so the SDK
+ * request timeout bounds time-to-first-token instead of the whole
+ * generation (a slow structured response was tripping the 45s timeout and
+ * getting logged upstream as a 499 "client disconnected"). Every failure
+ * path (missing plan, upstream timeout, exhausted retries, refusal, schema
+ * mismatch) collapses to a single error response; nothing partial is ever
+ * returned.
  */
 
 import { eq, and } from 'drizzle-orm'
@@ -63,7 +66,14 @@ export default defineEventHandler(async (event) => {
 
   try {
     const client = getAnthropicClient()
-    const response = await client.messages.parse({
+    // Streamed rather than a plain messages.parse() call: with streaming the
+    // SDK's REQUEST_TIMEOUT_MS only bounds time-to-first-token, not the whole
+    // generation, so a long structured response no longer trips the timeout and
+    // aborts the connection (which Anthropic logs as a 499 "client disconnected").
+    // finalMessage() still assembles + Zod-parses the complete response, so the
+    // contract here is unchanged: a full parsed_output object or a thrown error,
+    // nothing partial.
+    const stream = client.messages.stream({
       model: 'claude-sonnet-5',
       max_tokens: 7500,
       system: [
@@ -86,6 +96,8 @@ export default defineEventHandler(async (event) => {
       output_config: { format: zodOutputFormat(CoachWorkoutSchema) },
     })
 
+    const response = await stream.finalMessage()
+
     if (!response.parsed_output) {
       throw createError({ statusCode: 502, statusMessage: 'Coach response did not match the expected format' })
     }
@@ -102,8 +114,9 @@ export default defineEventHandler(async (event) => {
     // as-is — don't let it fall through to the generic wrapping below.
     if (err && typeof err === 'object' && 'statusCode' in err) throw err
 
-    // Covers the 45s client timeout, retries-exhausted 5xx/429, and a
-    // safety refusal — every path lands here as a clean 502. The frontend
+    // Covers a time-to-first-token timeout, a mid-stream disconnect,
+    // retries-exhausted 5xx/429, and a safety refusal — every path lands
+    // here as a clean 502. The frontend
     // never sees a half-built workout: it either gets the full object or
     // an error, and nothing is written to the DB either way.
     const e = err as Record<string, any>
