@@ -1,4 +1,19 @@
 <script setup lang="ts">
+/**
+ * History tab
+ *
+ * Two views behind one sub-tab bar:
+ *  - Week / Month / Year — aggregated ride totals (TSS, hours, distance,
+ *    ride count) grouped by the selected period, from GET /api/history.
+ *  - ⚡️PBs — the power-bests panel: best-ever power for each duration,
+ *    grouped into effort bands (Sprint … Endurance), with a bar scaled to a
+ *    fixed %FTP ceiling and a notch marking the last-8-weeks best.
+ *
+ * `groupBy` drives the API query; `activeView` also covers the non-grouping
+ * 'bests' view, so selectTab() only mirrors it back into `groupBy` for the
+ * three period tabs.
+ */
+
 type GroupBy = 'week' | 'month' | 'year'
 type ActiveView = GroupBy | 'bests'
 
@@ -12,6 +27,7 @@ const tabs = [
   { id: 'bests', label: '⚡️PBs' },
 ] as const
 
+/** Switch sub-tab; keep `groupBy` in sync for the three period views. */
 function selectTab(id: ActiveView) {
   activeView.value = id
   if (id !== 'bests') groupBy.value = id

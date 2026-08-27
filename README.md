@@ -2,9 +2,9 @@
 
 [![Laravel Forge Site Deployment Status](https://img.shields.io/endpoint?url=https%3A%2F%2Fforge.laravel.com%2Fsite-badges%2Fa0b639e9-8525-463d-afcd-29ef34240d2e&style=plastic)](https://forge.laravel.com/jerome-zpm/resilient-bird/3264841)
 
-A personal workout logging app built to practice the modern Nuxt 4 + Vue 3.5 + TypeScript stack.
+A personal cycling training tracker built on the modern Nuxt 4 + Vue 3.5 + TypeScript stack.
 
-Track your daily training sessions, visualise your fitness and fatigue over time, and understand your "form" at a glance using industry-standard training load metrics.
+Track your daily sessions, visualise fitness and fatigue over time, and understand your "form" at a glance using industry-standard training load metrics. Also includes: a structured workout builder that exports Zwift `.zwo` files, a 4-week planner with live CTL/TSB projections, a single-user "mark planned workout as completed" flow that pulls the ride title from Strava and the real power/TSS numbers from a parsed FIT file (via Wahoo's Cloud API or manual upload), and an AI coach that turns a written training plan into a structured workout.
 
 ---
 
@@ -15,7 +15,7 @@ Track your daily training sessions, visualise your fitness and fatigue over time
 | Framework | Nuxt 4 (`compatibilityVersion: 4`) |
 | Frontend | Vue 3.5, TypeScript |
 | State | Pinia (`@pinia/nuxt`) |
-| UI | Nuxt UI v3 (built on Tailwind CSS) |
+| UI | Nuxt UI v4 (Tailwind v4) |
 | Auth | `nuxt-auth-utils` (cookie sessions) + scrypt (`@adonisjs/hash`) |
 | Database | PostgreSQL 18 |
 | ORM | Drizzle ORM (`drizzle-orm/node-postgres`) |
@@ -30,53 +30,61 @@ sprocket/
 ├── app/                        ← Nuxt 4 source directory
 │   ├── app.vue                 ← Root component (UApp wrapper)
 │   ├── pages/
-│   │   ├── index.vue           ← Dashboard with Log + Planning + Builder + History tabs (protected)
-│   │   └── login.vue           ← Login page (registration disabled — no signup form)
+│   │   ├── [[tab]].vue         ← Dashboard: Log / Planning / Builder / History tabs (protected)
+│   │   ├── login.vue           ← Login page (registration disabled — no signup form)
+│   │   └── overlay/[activityId].vue ← Standalone FIT ride overlay view
 │   ├── components/
-│   │   ├── BikeLogo.vue        ← App wordmark icon
+│   │   ├── BikeLogo.vue / BikeSpinner.vue ← Wordmark icon / loading spinner
 │   │   ├── MetricsSummary.vue  ← Weekly stats + CTL/TSB cards
+│   │   ├── MetricsHistoryChart.vue ← Inline-SVG CTL/TSB line chart
 │   │   ├── WorkoutCard.vue     ← Single day row (workout or rest)
-│   │   ├── AddWorkoutModal.vue ← Log workout form (modal), pre-fillable from recent Strava rides
+│   │   ├── WorkoutFitOverlay.vue ← "Brief ride stats" popup for workouts with parsed FIT data
+│   │   ├── AddWorkoutModal.vue ← Log workout form (modal); Strava/Wahoo/manual-FIT completed-workout flow
+│   │   ├── UserSettingsModal.vue ← Edit FTP seed, weight, training plan
 │   │   ├── PlanningTab.vue     ← 4-week planning grid with live projections
 │   │   ├── WorkoutBuilderTab.vue ← Structured workout builder, exports Zwift .zwo files
 │   │   └── HistoryTab.vue      ← Aggregated history + power bests panel
 │   ├── stores/
 │   │   ├── auth.ts             ← Login, logout actions
 │   │   ├── workouts.ts         ← Day list, weekly stats, pagination
-│   │   └── planning.ts         ← Planned workouts + live CTL/TSB projection
+│   │   ├── planning.ts         ← Planned workouts + live CTL/TSB projection
+│   │   └── coach.ts            ← Read-once hand-off of an AI-generated workout to the builder
+│   ├── utils/trend.ts          ← Shared ▲/▼ trend-arrow helper
 │   └── middleware/
 │       ├── auth.ts             ← Redirects guests → /login
 │       └── guest.ts            ← Redirects logged-in users → /
 │
 ├── server/
 │   ├── api/
-│   │   ├── auth/
-│   │   │   ├── login.post.ts
-│   │   │   ├── logout.post.ts
-│   │   │   └── register.post.ts    ← Currently disabled (returns 403)
-│   │   ├── strava/
-│   │   │   └── recent-rides.get.ts ← Last 3 Strava rides, used to pre-fill the Add Workout form
-│   │   ├── workouts/
-│   │   │   ├── index.get.ts        ← Paginated list + metrics
-│   │   │   ├── index.post.ts       ← Create workout
-│   │   │   └── [id].delete.ts      ← Delete workout
-│   │   ├── planned-workouts/
-│   │   │   ├── index.get.ts        ← 4-week plan grid + projections
-│   │   │   ├── index.put.ts        ← Upsert planned workout
-│   │   │   └── [date].delete.ts    ← Delete planned workout
-│   │   └── history/
-│   │       └── index.get.ts        ← Aggregated history + power bests panel
+│   │   ├── auth/               ← login / logout / register (register returns 403)
+│   │   ├── coach/generate.post.ts    ← AI coach: Anthropic → structured workout + fuelling guide
+│   │   ├── fit/upload.post.ts        ← Manual FIT upload (indoor/Zwift completed-workout branch)
+│   │   ├── history/index.get.ts      ← Aggregated history periods + power bests panel
+│   │   ├── metrics/series.get.ts     ← Daily CTL/TSB series for charting (?weeks=8)
+│   │   ├── planned-workouts/         ← index.get / index.put / [date].delete
+│   │   ├── strava/                   ← recent-rides.get, activity/[id].get
+│   │   ├── users/                    ← me.get / me.put (FTP seed, weight, training plan)
+│   │   ├── wahoo/by-date.get.ts      ← Wahoo workout for a calendar day + parsed FIT metrics
+│   │   └── workouts/                 ← index.get / index.post / [id].patch / [id].delete
 │   ├── db/
 │   │   ├── index.ts            ← Drizzle client (singleton pool)
 │   │   └── schema.ts           ← Table definitions + inferred types
+│   ├── plugins/requestLogger.ts ← Nitro plugin: request IDs + one log line per /api/* call
 │   └── utils/
 │       ├── tss.ts              ← CTL / ATL / TSB formula engine
 │       ├── metricsCache.ts     ← In-process series cache (TTL + write invalidation)
-│       ├── strava.ts           ← Refresh-token exchange + fetchRecentRides()
-│       └── session.d.ts        ← UserSession type augmentation for nuxt-auth-utils
+│       ├── fit.ts              ← FIT parsing: normalized power, TSS, power-curve bests, distance
+│       ├── ftp.ts              ← Shared "current FTP" lookup (fallback 230 W)
+│       ├── strava.ts / wahoo.ts ← Refresh-token exchange + activity/FIT fetching (single-user OAuth)
+│       ├── anthropic.ts        ← Anthropic client + CoachWorkoutSchema (structured output)
+│       ├── polyline.ts         ← Google-encoded polyline decoder
+│       └── logger.ts           ← getLogger(domain), tslog structured logging
 │
+├── shared/types/session.d.ts   ← UserSession type augmentation for nuxt-auth-utils
 ├── scripts/
-│   └── reset-password.ts       ← CLI utility to reset a user's password
+│   ├── reset-password.ts       ← CLI utility to reset a user's password (AdonisJS Scrypt)
+│   ├── zwift-workout-tss.ts / workout-search.ts ← ad-hoc CLI helpers
+│   └── backfill-strava-*.ts    ← spent one-off historical backfills, kept for reference
 │
 ├── drizzle/                    ← Auto-generated migration SQL files
 ├── drizzle.config.ts
@@ -131,6 +139,21 @@ NUXT_SESSION_PASSWORD="replace-this-with-a-long-random-secret!!"
 STRAVA_CLIENT_ID=
 STRAVA_CLIENT_SECRET=
 STRAVA_REFRESH_TOKEN=
+
+# Optional — Wahoo Cloud API (fetches the actual recorded FIT file for the
+# completed-workout flow; Strava's API has no FIT download). Single-user,
+# out-of-band OAuth like Strava. Wahoo rotates the refresh token on every
+# use — after the first refresh the live token lives in the wahoo_tokens
+# table, and this value is only the bootstrap fallback.
+WAHOO_CLIENT_ID=
+WAHOO_CLIENT_SECRET=
+WAHOO_REFRESH_TOKEN=
+
+# Optional — Anthropic API key for the AI coach workout generator. Static, no rotation.
+ANTHROPIC_API_KEY=
+
+# Optional — app log verbosity (silly|trace|debug|info|warn|error|fatal), default info
+LOG_LEVEL=info
 ```
 
 ### 4. Create the database
@@ -226,10 +249,14 @@ One row per duration per workout. Unique index on `(workout_id, duration)`.
 | `user_id` | integer FK | → users.id (cascade delete) |
 | `date` | date | One plan per user per day (unique index) |
 | `name` | text | Optional workout name |
-| `type` | text | Training zone: `zone2`, `zone4`, `zone5`, `zone6`, `rest` |
+| `type` | text | Training zone: `zone2`, `zone4`, `zone5`, `zone6`, `rest`, `outdoor` |
 | `tss` | integer | Optional planned TSS |
 | `duration_minutes` | integer | Optional planned duration |
 | `created_at` | timestamptz | Default: now() |
+
+### `wahoo_power_bests` / `wahoo_tokens`
+
+`wahoo_power_bests` records power-curve bests auto-detected from rides seen via the Wahoo API (keyed on the Wahoo activity id), merged into the History tab alongside `power_bests`. `wahoo_tokens` holds the single connected account's rotating OAuth refresh token — Wahoo issues a new one on every refresh, so it must be persisted rather than read from `.env` after the first exchange (see `server/utils/wahoo.ts`).
 
 ---
 
@@ -292,8 +319,15 @@ All routes require a valid session cookie except `/api/auth/login` and `/api/aut
 | GET | `/api/planned-workouts` | 4-week plan grid with projected CTL/TSB |
 | PUT | `/api/planned-workouts` | Upsert a planned workout |
 | DELETE | `/api/planned-workouts/:date` | Delete a planned workout by date |
+| PATCH | `/api/workouts/:id` | Edit a logged workout |
 | GET | `/api/history?groupBy=week\|month\|year` | Aggregated history periods + power bests panel |
-| GET | `/api/strava/recent-rides` | Last 3 Strava rides, used to pre-fill the Add Workout form |
+| GET | `/api/metrics/series?weeks=8` | Daily CTL/TSB series for charting |
+| GET | `/api/users/me` · PUT `/api/users/me` | Read / update FTP seed, weight, training plan |
+| GET | `/api/strava/recent-rides` | Last 3 Strava rides for the completed-workout picker |
+| GET | `/api/strava/activity/:id` | One Strava activity's detail |
+| GET | `/api/wahoo/by-date?date=YYYY-MM-DD` | Wahoo workout for that day + parsed FIT metrics |
+| POST | `/api/fit/upload` | Manual FIT upload (multipart), indoor/Zwift branch |
+| POST | `/api/coach/generate` | AI coach: generate a structured workout from the training plan |
 
 ### GET /api/workouts response shape
 
