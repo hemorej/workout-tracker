@@ -60,13 +60,23 @@ const hasLaps = computed(() => (props.workout?.laps?.length ?? 0) >= 2)
  * design_handoff_time_in_zone/README.md.
  */
 const ZONE_RAMP = [
-  { label: 'Z1', name: 'Recovery', range: '<55%', midpoint: 0.45, color: '#d6d3d1' },
-  { label: 'Z2', name: 'Endurance', range: '55–75%', midpoint: 0.65, color: '#fed7aa' },
-  { label: 'Z3', name: 'Tempo', range: '75–90%', midpoint: 0.825, color: '#fdba74' },
-  { label: 'Z4', name: 'Threshold', range: '90–105%', midpoint: 0.975, color: '#fb923c' },
-  { label: 'Z5', name: 'VO2 max', range: '105–120%', midpoint: 1.125, color: '#f97316' },
-  { label: 'Z6', name: 'Anaerobic', range: '120%+', midpoint: 1.30, color: '#ea580c' },
+  { label: 'Z1', name: 'Recovery', pctRange: '<55%', loPct: 0, hiPct: 0.55, midpoint: 0.45, color: '#d6d3d1' },
+  { label: 'Z2', name: 'Endurance', pctRange: '55–75%', loPct: 0.55, hiPct: 0.75, midpoint: 0.65, color: '#fed7aa' },
+  { label: 'Z3', name: 'Tempo', pctRange: '75–90%', loPct: 0.75, hiPct: 0.90, midpoint: 0.825, color: '#fdba74' },
+  { label: 'Z4', name: 'Threshold', pctRange: '90–105%', loPct: 0.90, hiPct: 1.05, midpoint: 0.975, color: '#fb923c' },
+  { label: 'Z5', name: 'VO2 max', pctRange: '105–120%', loPct: 1.05, hiPct: 1.20, midpoint: 1.125, color: '#f97316' },
+  { label: 'Z6', name: 'Anaerobic', pctRange: '120%+', loPct: 1.20, hiPct: Infinity, midpoint: 1.30, color: '#ea580c' },
 ] as const
+
+/** Watt band for a zone at the given FTP, e.g. "127–173 W". Falls back to the %FTP text while FTP is still loading. */
+function zoneWattRange(z: typeof ZONE_RAMP[number], ftp: number | null): string {
+  if (!ftp) return `${z.pctRange} FTP`
+  const lo = Math.round(z.loPct * ftp)
+  const hi = Math.round(z.hiPct * ftp)
+  if (z.loPct === 0) return `< ${hi} W`
+  if (!Number.isFinite(z.hiPct)) return `${lo}+ W`
+  return `${lo}–${hi} W`
+}
 
 /** Per-zone seconds from the parsed FIT file. Absent on rides parsed before this existed, or with no power stream / no ride-time FTP. */
 const zoneBuckets = computed<number[] | null>(() => {
@@ -76,6 +86,22 @@ const zoneBuckets = computed<number[] | null>(() => {
 
 /** Power tab only exists when there's a usable zone breakdown. */
 const hasPower = computed(() => !!zoneBuckets.value && zoneBuckets.value.some((s) => s > 0))
+
+/**
+ * Current FTP (most recent logged `ftp_watts`, or the 230 fallback), used
+ * only to render each zone's watt band. Fetched lazily the first time a
+ * power-capable overlay opens rather than on dashboard load.
+ */
+const { data: ftpData, execute: loadFtp } = useFetch<{ currentFtp: number }>('/api/ftp/current', {
+  immediate: false,
+  server: false,
+})
+const currentFtp = computed(() => ftpData.value?.currentFtp ?? null)
+watch(
+  () => hasPower.value && !!props.workout,
+  (need) => { if (need && ftpData.value == null) loadFtp() },
+  { immediate: true },
+)
 
 /** < 60 min → M:SS; ≥ 60 min → Hh Mm. Matches the design's `fmt`. */
 function zoneTime(seconds: number): string {
@@ -105,6 +131,7 @@ const zoneRows = computed(() => {
       ...z,
       seconds,
       time: zoneTime(seconds),
+      watts: zoneWattRange(z, currentFtp.value),
       pct: Math.round((seconds / total) * 100),
       bar: Math.round((seconds / largest) * 100),
     }
@@ -335,7 +362,7 @@ function lapIsWork(w: number | null): boolean {
               <span class="font-semibold text-stone-400 text-[11px]">{{ z.label }}</span>
               <span class="min-w-0">
                 <span class="block truncate font-medium text-stone-600 text-xs @[420px]:text-[12.5px] leading-tight">{{ z.name }}</span>
-                <span class="block tabular text-stone-400 text-[9.5px] @[420px]:text-[10px] leading-tight">{{ z.range }} FTP</span>
+                <span class="block tabular text-stone-400 text-[9.5px] @[420px]:text-[10px] leading-tight">{{ z.watts }}</span>
               </span>
               <span class="h-[5px] @[420px]:h-1.5 rounded-[3px] bg-[#f2f0ee] relative overflow-hidden">
                 <span class="absolute inset-y-0 left-0 rounded-[3px]" :style="{ background: z.color, width: z.bar + '%' }" />
