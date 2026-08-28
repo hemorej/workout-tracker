@@ -134,6 +134,8 @@ export default defineEventHandler(async (event) => {
       maxHr: metrics.maxHr,
       avgCadence: metrics.avgCadence,
       maxCadence: metrics.maxCadence,
+      zoneBuckets: metrics.zoneBuckets,
+      zoneFtp: ftpWatts,
     },
     laps: metrics.laps.length >= 2 ? metrics.laps : null,
   }

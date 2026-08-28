@@ -33,6 +33,10 @@ export interface WorkoutFitData {
   maxHr: number | null
   avgCadence: number | null
   maxCadence: number | null
+  /** Seconds per power zone (index 0 = Z1 … 5 = Z6); null on FIT files parsed before this existed. */
+  zoneBuckets: number[] | null
+  /** FTP (watts) the zoneBuckets split was computed against; null on older blobs. */
+  zoneFtp: number | null
 }
 
 /** One lap/split from a parsed FIT file — mirrors WorkoutLap in server/db/schema.ts */
