@@ -60,12 +60,12 @@ const hasLaps = computed(() => (props.workout?.laps?.length ?? 0) >= 2)
  * design_handoff_time_in_zone/README.md.
  */
 const ZONE_RAMP = [
-  { label: 'Z1', name: 'Recovery', pctRange: '<55%', loPct: 0, hiPct: 0.55, midpoint: 0.45, color: '#d6d3d1' },
-  { label: 'Z2', name: 'Endurance', pctRange: '55–75%', loPct: 0.55, hiPct: 0.75, midpoint: 0.65, color: '#fed7aa' },
-  { label: 'Z3', name: 'Tempo', pctRange: '75–90%', loPct: 0.75, hiPct: 0.90, midpoint: 0.825, color: '#fdba74' },
-  { label: 'Z4', name: 'Threshold', pctRange: '90–105%', loPct: 0.90, hiPct: 1.05, midpoint: 0.975, color: '#fb923c' },
-  { label: 'Z5', name: 'VO2 max', pctRange: '105–120%', loPct: 1.05, hiPct: 1.20, midpoint: 1.125, color: '#f97316' },
-  { label: 'Z6', name: 'Anaerobic', pctRange: '120%+', loPct: 1.20, hiPct: Infinity, midpoint: 1.30, color: '#ea580c' },
+  { label: 'Z1', name: 'Recovery', pctRange: '<55%', loPct: 0, hiPct: 0.55, color: '#d6d3d1' },
+  { label: 'Z2', name: 'Endurance', pctRange: '55–75%', loPct: 0.55, hiPct: 0.75, color: '#fed7aa' },
+  { label: 'Z3', name: 'Tempo', pctRange: '75–90%', loPct: 0.75, hiPct: 0.90, color: '#fdba74' },
+  { label: 'Z4', name: 'Threshold', pctRange: '90–105%', loPct: 0.90, hiPct: 1.05, color: '#fb923c' },
+  { label: 'Z5', name: 'VO2 max', pctRange: '105–120%', loPct: 1.05, hiPct: 1.20, color: '#f97316' },
+  { label: 'Z6', name: 'Anaerobic', pctRange: '120%+', loPct: 1.20, hiPct: Infinity, color: '#ea580c' },
 ] as const
 
 /** Watt band for a zone at the given FTP, e.g. "127–173 W". Falls back to the %FTP text while FTP is still loading. */
@@ -134,35 +134,12 @@ const zoneRows = computed(() => {
     const seconds = buckets[i] ?? 0
     return {
       ...z,
-      seconds,
       time: zoneTime(seconds),
       watts: zoneWattRange(z, zoneFtp.value),
       pct: Math.round((seconds / total) * 100),
       bar: Math.round((seconds / largest) * 100),
     }
   })
-})
-
-/**
- * The zone that carried the session. Not a raw seconds count — that would
- * let a long easy recovery outweigh the hard work it was resting between —
- * but weighted by training load: seconds × intensity², intensity being the
- * zone's midpoint %FTP, the same quadratic shape as the NP/TSS model. So
- * e.g. 25 min of threshold intervals beats 35 min of scattered recovery.
- * Ties resolve to the lower zone (strict `>`, scanning Z1→Z6).
- */
-const dominantZone = computed(() => {
-  const rows = zoneRows.value
-  let best = rows[0]!
-  let bestLoad = -1
-  for (const z of rows) {
-    const load = z.seconds * z.midpoint * z.midpoint
-    if (load > bestLoad) {
-      bestLoad = load
-      best = z
-    }
-  }
-  return best
 })
 
 const page = ref<'summary' | 'power' | 'laps'>('summary')
@@ -343,16 +320,8 @@ function lapIsWork(w: number | null): boolean {
 
         <!-- Power page -->
         <template v-else-if="activePage === 'power'">
-          <!-- Headline — the zone that carried the session (training-load weighted), and time spent in it -->
-          <div class="border border-stone-200 rounded-xl px-3.5 py-3">
-            <p class="tabular font-semibold text-stone-900 leading-none text-[22px] @[420px]:text-[26px]">
-              {{ dominantZone.label }} {{ dominantZone.name }}<span class="font-medium text-stone-400 text-xs @[420px]:text-sm"> · {{ dominantZone.time }}</span>
-            </p>
-            <p class="font-semibold text-stone-400 uppercase tracking-[.09em] mt-[5px] text-[9.5px] @[420px]:text-[10px]">Dominant zone</p>
-          </div>
-
           <!-- Time in zone -->
-          <div class="flex items-baseline justify-between mt-5 mb-1.5">
+          <div class="flex items-baseline justify-between mb-1.5">
             <span class="font-semibold text-stone-400 uppercase tracking-[.09em] text-[9.5px] @[420px]:text-[10px]">Time in zone</span>
             <span class="text-[11px] text-stone-300">{{ zoneTotalDisplay }} total</span>
           </div>
