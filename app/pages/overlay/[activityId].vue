@@ -822,14 +822,14 @@ function downloadOverlay() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f7f6f4] px-4 py-8 sm:px-6 sm:py-10">
-    <div v-if="isLoading" class="flex justify-center py-20">
+  <div class="flex h-screen flex-col bg-[#f7f6f4]">
+    <div v-if="isLoading" class="flex flex-1 items-center justify-center">
       <BikeSpinner :size="28" />
     </div>
 
     <UAlert
       v-else-if="loadError"
-      class="mx-auto mt-6 max-w-md"
+      class="m-6 max-w-md"
       color="error"
       variant="soft"
       :title="loadError"
@@ -837,7 +837,7 @@ function downloadOverlay() {
 
     <div
       v-else
-      class="mx-auto max-w-[1120px] overflow-hidden rounded-[18px] border border-[#e7e5e4] bg-white shadow-[0_18px_44px_rgba(28,25,23,0.09)]"
+      class="flex min-h-0 flex-1 flex-col overflow-hidden bg-white"
     >
       <!-- Header bar -->
       <div class="flex flex-wrap items-center gap-x-[14px] gap-y-2 border-b border-[#f0efed] px-[26px] py-[18px]">
@@ -872,9 +872,9 @@ function downloadOverlay() {
       </div>
 
       <!-- Body -->
-      <div class="grid grid-cols-1 lg:grid-cols-[1fr_372px]">
+      <div class="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[1fr_400px] lg:overflow-hidden">
         <!-- Preview stage -->
-        <div class="flex flex-col items-center gap-4 bg-[#eceae7] p-[34px]">
+        <div class="flex flex-col items-center gap-4 bg-[#eceae7] p-[34px] lg:min-h-0 lg:justify-center lg:overflow-y-auto">
           <div class="w-full max-w-[420px] overflow-hidden shadow-[0_16px_36px_rgba(28,25,23,0.2)]">
             <canvas
               v-show="photoImage"
@@ -913,8 +913,8 @@ function downloadOverlay() {
         </div>
 
         <!-- Control panel -->
-        <div class="flex flex-col border-t border-[#f0efed] lg:border-l lg:border-t-0">
-          <div class="grid gap-y-[22px] px-6 pb-2 pt-[22px]">
+        <div class="flex flex-col border-t border-[#f0efed] lg:min-h-0 lg:border-l lg:border-t-0">
+          <div class="grid gap-y-[22px] px-6 pb-2 pt-[22px] lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
             <!-- Photo -->
             <div>
               <p class="mb-[9px] text-[10px] font-semibold uppercase tracking-[0.11em] text-[#a8a29e]">
@@ -1110,8 +1110,7 @@ function downloadOverlay() {
             </div>
           </div>
 
-          <div class="flex-1" />
-          <div class="border-t border-[#f0efed] bg-white px-6 pb-[22px] pt-4">
+          <div class="sticky bottom-0 border-t border-[#f0efed] bg-white px-6 pb-[22px] pt-4 lg:static">
             <button
               type="button"
               :disabled="!photoImage"
