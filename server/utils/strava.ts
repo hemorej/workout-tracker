@@ -105,6 +105,23 @@ export interface StravaActivityOverlayData {
   avgSpeedMetersPerSecond: number | null
   /** Local start time, ISO-ish "YYYY-MM-DDTHH:mm:ssZ" per Strava's activity schema. */
   startDateLocal: string
+  /**
+   * Downsampled altitude samples (metres) for the elevation-profile overlay,
+   * empty if the activity has no altitude stream (e.g. manually entered, or a
+   * ride recorded without a barometric/GPS altitude track).
+   */
+  altitudeStream: number[]
+  /** Downsampled cumulative distance (metres) paired 1:1 with `altitudeStream`; empty when that is. */
+  distanceStream: number[]
+}
+
+/** Evenly thins a long stream down to at most `max` samples — plenty for a poster-sized line. */
+function downsampleStream(arr: number[], max = 400): number[] {
+  if (arr.length <= max) return arr
+  const step = arr.length / max
+  const out: number[] = []
+  for (let i = 0; i < max; i++) out.push(arr[Math.floor(i * step)]!)
+  return out
 }
 
 /**
@@ -120,6 +137,31 @@ export async function fetchStravaActivityOverlayData(activityId: number): Promis
     headers: { Authorization: `Bearer ${accessToken}` },
   })
 
+  // Altitude/distance streams power the elevation-profile overlay. They're a
+  // separate endpoint and not every activity has them (manual entries, some
+  // indoor rides) — a failure here just means the overlay ships without the
+  // Elevation option, so swallow it rather than failing the whole request.
+  let altitudeStream: number[] = []
+  let distanceStream: number[] = []
+  try {
+    const streams = await $fetch<Record<string, { data?: number[] }>>(
+      `https://www.strava.com/api/v3/activities/${activityId}/streams`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        query: { keys: 'altitude,distance', key_by_type: 'true' },
+      },
+    )
+    const alt = streams.altitude?.data ?? []
+    const dist = streams.distance?.data ?? []
+    if (alt.length > 1) {
+      altitudeStream = downsampleStream(alt)
+      distanceStream = dist.length === alt.length ? downsampleStream(dist) : []
+    }
+  }
+  catch {
+    // no streams for this activity — leave both empty
+  }
+
   const encoded = activity.map?.summary_polyline
   return {
     name: activity.name,
@@ -130,6 +172,8 @@ export async function fetchStravaActivityOverlayData(activityId: number): Promis
     elevationGainMeters: activity.total_elevation_gain ?? 0,
     avgSpeedMetersPerSecond: activity.average_speed ?? null,
     startDateLocal: activity.start_date_local,
+    altitudeStream,
+    distanceStream,
   }
 }
 

@@ -5,7 +5,7 @@
  * Displays the headline stats at the top of the dashboard, grouped into
  * two sections:
  *   - "This week": weekly TSS total, weekly training hours, weekly distance (km)
- *   - "Today": CTL (Fitness), TSB (Form)
+ *   - "Form": CTL (Fitness), TSB (Form)
  *
  * Also shows a colour-coded "form zone" label for TSB to give the user
  * an at-a-glance interpretation of where they stand.
@@ -61,7 +61,7 @@ const tsbDisplay = computed(() =>
 <template>
   <!--
     Metrics card: one white panel split into two label-headed groups —
-    "This week" (TSS / Hours / Km) and "Today" (CTL / TSB) — separated by
+    "This week" (TSS / Hours / Km) and "Form" (CTL / TSB) — separated by
     a 2fr/1.33fr-ish column ratio (3fr/2fr) so each side's stat columns line
     up evenly despite the 3-vs-2 stat count. A 2px bottom rule under each
     group label replaces the old full-height dividers between every stat.
@@ -98,7 +98,7 @@ const tsbDisplay = computed(() =>
         @click="emit('open-history')"
       >
         <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 pb-[10px] border-b-2 border-[#e7e5e0] mb-2.5">
-          Today
+          Form
         </p>
         <div class="grid grid-cols-2 gap-2 sm:gap-5">
           <div>
