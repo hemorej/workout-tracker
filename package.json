@@ -44,7 +44,7 @@
         "@iconify-json/lucide": "^1.2.124",
         "@nuxt/devtools": "^3.4.2",
         "@types/node": "^26.2.0",
-        "@types/pg": "^8.21.0",
+        "@types/pg": "^8.23.1",
         "drizzle-kit": "^0.31.10",
         "typescript": "^5.7.0",
         "vue-tsc": "^3.3.11"
