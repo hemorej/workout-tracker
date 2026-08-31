@@ -6,11 +6,15 @@
  * the route line and stat row over a user-uploaded photo.
  *
  * Returns:
- *   200 { name, distanceMeters, movingTimeSeconds, points, avgWatts, elevationGainMeters, avgSpeedMetersPerSecond, startDateLocal }
+ *   200 { name, distanceMeters, movingTimeSeconds, points, avgWatts, elevationGainMeters,
+ *         avgSpeedMetersPerSecond, startDateLocal, altitudeStream, distanceStream }
  *     `points` is an empty array if the activity has no route (e.g.
  *     manually entered, no GPS) — the overlay page still gets name/distance/
  *     duration and simply skips drawing a route line. `avgWatts` and
  *     `avgSpeedMetersPerSecond` are null if the activity has no such data.
+ *     `altitudeStream` / `distanceStream` are downsampled, paired arrays for
+ *     the elevation-profile overlay, empty if the activity has no altitude
+ *     stream.
  *   502 if the Strava API call fails (token refresh failure, network error, etc.)
  */
 
