@@ -103,6 +103,36 @@ const todayStr = computed(() => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 })
 
+/** Today's date split for the fixed date cell: weekday ("Mon") + rest (", Aug 31") */
+const todayWeekday = computed(() =>
+  new Date().toLocaleDateString('en-US', { weekday: 'short' }),
+)
+const todayDatePart = computed(() =>
+  new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+)
+
+/**
+ * The standalone date cell is `position: fixed` (stays put while the page
+ * scrolls). Its initial `top` is set once to line up with the headline
+ * metrics card's top edge — recomputed on resize / tab change but NOT on
+ * scroll, so it doesn't drift upward with the page.
+ */
+const headlineRef = ref<HTMLElement | null>(null)
+const dateCellTop = ref(0)
+const syncDateCellTop = () => {
+  if (headlineRef.value) {
+    dateCellTop.value = headlineRef.value.getBoundingClientRect().top + window.scrollY
+  }
+}
+onMounted(() => {
+  syncDateCellTop()
+  window.addEventListener('resize', syncDateCellTop)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncDateCellTop)
+})
+watch(() => activeTab.value, () => nextTick(syncDateCellTop))
+
 // Today's planned day entry (null if nothing planned or plan is a rest day)
 // Pass the full PlannedDay so WorkoutCard can use projected CTL/TSB values
 const todayPlan = computed(() => {
@@ -844,7 +874,23 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
       <!-- ── Training log tab ────────────────────────────────────── -->
       <template v-if="activeTab === 'log'">
 
+      <!-- Standalone "today's date" cell — styled like a MetricsSummary
+           headline cell but detached from that card and pinned to the left
+           edge of the viewport. Hidden below xl where there's no room. -->
+      <div
+        class="hidden xl:block fixed left-6 z-10 bg-white rounded-[14px] border border-[#f0eeec] px-6 py-5"
+        :style="{ top: dateCellTop + 'px' }"
+      >
+        <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 pb-[10px] border-b-2 border-[#e7e5e0] mb-2.5">
+          Today
+        </p>
+        <p class="text-xl sm:text-[30px] font-bold text-stone-900 tabular whitespace-nowrap">
+          <span class="text-primary">{{ todayWeekday }}</span> {{ todayDatePart }}
+        </p>
+      </div>
+
       <!-- Headline metrics strip -->
+      <div ref="headlineRef">
       <MetricsSummary
         :weekly-tss="workouts.weeklyStats.tssTotal"
         :weekly-hours="workouts.weeklyStats.hoursTotal"
@@ -856,6 +902,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
         :yesterday-t-s-b="workouts.yesterdayMetrics?.tsb"
         @open-history="openHistoryChart"
       />
+      </div>
 
       <!-- Section header + Add button, and the content directly below it —
            grouped so their shared spacing can be tightened on narrow/vertical
