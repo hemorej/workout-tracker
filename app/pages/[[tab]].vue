@@ -878,13 +878,13 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
            headline cell but detached from that card and pinned to the left
            edge of the viewport. Hidden below xl where there's no room. -->
       <div
-        class="hidden xl:block fixed left-6 z-10 bg-white rounded-[14px] border border-[#f0eeec] px-6 py-5"
+        class="hidden xl:block fixed left-6 z-10 pt-6"
         :style="{ top: dateCellTop + 'px' }"
       >
-        <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 pb-[10px] border-b-2 border-[#e7e5e0] mb-2.5">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.13em] text-stone-400 mb-2.5">
           Today
         </p>
-        <p class="text-xl sm:text-[30px] font-bold text-stone-900 tabular whitespace-nowrap">
+        <p class="text-[27px] font-bold text-stone-900 tabular whitespace-nowrap">
           <span class="text-primary">{{ todayWeekday }}</span> {{ todayDatePart }}
         </p>
       </div>
