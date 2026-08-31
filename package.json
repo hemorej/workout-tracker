@@ -34,7 +34,7 @@
         "pg": "8.23.0",
         "pinia": "^4.0.3",
         "tslog": "^5.1.0",
-        "vue": "^3.5.41",
+        "vue": "^3.5.42",
         "vue-router": "^5.2.0",
         "zod": "^4.4.3"
     },
@@ -42,11 +42,11 @@
         "@adonisjs/hash": "^10.1.1",
         "@iconify-json/heroicons": "^1.2.3",
         "@iconify-json/lucide": "^1.2.124",
-        "@nuxt/devtools": "^3.4.1",
-        "@types/node": "^26.2.0",
-        "@types/pg": "^8.21.0",
+        "@nuxt/devtools": "^3.4.2",
+        "@types/node": "^26.4.0",
+        "@types/pg": "^8.23.1",
         "drizzle-kit": "^0.31.10",
         "typescript": "^5.7.0",
-        "vue-tsc": "^3.3.10"
+        "vue-tsc": "^3.3.11"
     }
 }
