@@ -760,10 +760,18 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
          in-flight request before it lands in the builder ──────────────── -->
     <div
       v-if="isAutoBuilding"
-      class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[#fafaf9]/95 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Building your workout"
     >
-      <BikeSpinner :size="96" class="text-orange-600" />
-      <p class="text-sm font-medium text-stone-500">Building your workout…</p>
+      <!-- Backdrop — no click-to-dismiss: the overlay stays until the request lands -->
+      <div class="fixed inset-0 bg-black/25 backdrop-blur-sm" />
+
+      <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-xs aspect-square my-8 p-6 flex flex-col items-center justify-center gap-5">
+        <BikeSpinner :size="72" class="text-orange-600" />
+        <p class="text-sm font-medium text-stone-500">Building your workout…</p>
+      </div>
     </div>
 
     <!-- ── Header + tab nav — pinned together to the top on scroll ──── -->
