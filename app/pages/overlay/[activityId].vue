@@ -31,6 +31,8 @@ interface ActivityOverlayData {
   startDateLocal: string
   altitudeStream: number[]
   distanceStream: number[]
+  /** NP from the matching logged workout's FIT file; null when unavailable. */
+  normalizedPowerWatts: number | null
 }
 
 const OVERLAY_FONT_FAMILY = '"Hanken Grotesk", system-ui, sans-serif'
@@ -137,8 +139,8 @@ const metricDefs = computed<MetricDef[]>(() => {
     { key: 'elevation', label: 'Elevation', ledgerLabel: 'CLIMBED', available: true },
     { key: 'avgSpeed', label: 'Avg speed', ledgerLabel: 'AVG SPEED', available: d?.avgSpeedMetersPerSecond != null },
     { key: 'date', label: 'Date', ledgerLabel: 'DATE', available: true },
-    // Normalised power is FIT-derived, not on the Strava activity payload.
-    { key: 'np', label: 'Norm. power', ledgerLabel: 'NP', available: false },
+    // NP is FIT-derived — present only when a matching logged workout has FIT data.
+    { key: 'np', label: 'Norm. power', ledgerLabel: 'NP', available: d?.normalizedPowerWatts != null },
   ]
 })
 
@@ -214,6 +216,7 @@ function metricValue(key: string): string {
     case 'elevation': return `${Math.round(d.elevationGainMeters)} m`
     case 'avgSpeed': return d.avgSpeedMetersPerSecond != null ? `${(d.avgSpeedMetersPerSecond * 3.6).toFixed(1)} km/h` : ''
     case 'date': return fmtDate(d.startDateLocal)
+    case 'np': return d.normalizedPowerWatts != null ? `${d.normalizedPowerWatts} W` : ''
     default: return ''
   }
 }
