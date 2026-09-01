@@ -83,17 +83,10 @@ async function handleLogin() {
         <h1 class="text-[38px] font-extrabold tracking-[-0.03em] text-stone-900">
           Welcome back
         </h1>
-        <p class="mt-2.5 mb-10 text-[16px] font-normal text-stone-500">
-          Sign in to your training log.
-        </p>
+        <p class="mt-2.5 mb-10 text-[16px] font-normal text-stone-500"></p>
 
         <form method="post" @submit.prevent="handleLogin">
-          <label
-            for="email"
-            class="mb-1.5 block text-[12px] font-semibold uppercase tracking-[0.08em] text-stone-500"
-          >
-            Email address
-          </label>
+
           <input
             id="email"
             v-model="loginForm.email"
@@ -104,17 +97,11 @@ async function handleLogin() {
             class="mb-7 w-full rounded-none border-0 border-b-[1.5px] border-stone-300 bg-transparent px-0.5 py-2.5 text-[17px] font-normal text-stone-900 outline-none placeholder:text-stone-400 focus:border-orange-600 focus-visible:border-orange-600"
           >
 
-          <label
-            for="password"
-            class="mb-1.5 block text-[12px] font-semibold uppercase tracking-[0.08em] text-stone-500"
-          >
-            Password
-          </label>
           <input
             id="password"
             v-model="loginForm.password"
             type="password"
-            placeholder="••••••••"
+            placeholder="•••••••••••"
             autocomplete="current-password"
             required
             class="mb-9 w-full rounded-none border-0 border-b-[1.5px] border-stone-300 bg-transparent px-0.5 py-2.5 text-[17px] font-normal text-stone-900 outline-none placeholder:text-stone-400 focus:border-orange-600 focus-visible:border-orange-600"
@@ -126,7 +113,7 @@ async function handleLogin() {
             :disabled="loginLoading"
             block
             color="neutral"
-            class="justify-center rounded-full bg-stone-900 py-4 text-[16px] font-bold text-white hover:bg-orange-600"
+            class="justify-center rounded-full bg-orange-600 py-4 text-[16px] font-bold text-white hover:bg-orange-600"
           >
             Sign in
           </UButton>
