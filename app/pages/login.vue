@@ -1,9 +1,12 @@
 <script setup lang="ts">
 /**
- * Login page
+ * Login page — split-panel layout.
  *
- * Uses the auth store for the login API call, and Nuxt UI for form components.
- * After a successful login, navigateTo('/') is called automatically.
+ * Left: full-height orange brand panel (mark, headline, footer line).
+ * Right: the sign-in form as underline fields on a white canvas.
+ *
+ * Presentation only — the auth store call, loading ref, toast error path
+ * and post-login redirect are unchanged.
  */
 
 import { useAuthStore } from '~/stores/auth'
@@ -38,65 +41,108 @@ async function handleLogin() {
 </script>
 
 <template>
-  <!--
-    Login page: full-screen white canvas, content centred with generous
-    breathing room. No card chrome — the form floats directly on the page.
-  -->
-  <div class="min-h-screen flex flex-col items-center justify-center bg-white px-6">
+  <div class="flex min-h-screen flex-col bg-white md:flex-row">
 
-    <!-- Wordmark -->
-    <div class="mb-10 flex flex-col items-center text-center">
-      <div class="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-2xl bg-gradient-to-br from-orange-50 to-orange-100 text-orange-600 shadow-sm">
-        <BikeLogo :size="44" />
+    <!-- ── Brand panel ───────────────────────────────────────────────────
+      Flat orange field. Three blocks pinned top / middle / bottom by
+      `justify-between`. On mobile it collapses to a top band.
+    -->
+    <div
+      class="flex flex-col justify-between bg-orange-600 px-6 pt-9 pb-10 md:w-[46%] md:p-10 lg:px-14 lg:py-[52px]"
+    >
+      <!-- Mark + wordmark -->
+      <div class="flex items-center gap-3.5">
+        <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-white/[0.18]">
+          <BikeLogo :size="27" class="text-white [stroke-width:2.8]" />
+        </div>
+        <span class="text-[26px] font-extrabold tracking-[-0.02em] text-white">Sprocket</span>
       </div>
-      <h1 class="text-3xl font-extrabold tracking-tight text-stone-900">
-        Sprocket
-      </h1>
-      <p class="mt-2 text-base text-stone-400">
-        Track your training load &amp; form
-      </p>
+
+      <!-- Headline -->
+      <div class="max-w-[460px]">
+        <h2
+          class="mb-5 text-pretty text-[32px] font-extrabold leading-[1.06] tracking-[-0.035em] text-white md:text-[40px] lg:text-[52px]"
+        >
+          Plan, train and track workouts in one place.
+        </h2>
+        <p class="text-[18px] font-normal leading-[1.65] text-white/[0.82]">
+          No-nonsense training for self-coached cyclists.
+        </p>
+      </div>
+
+      <!-- Footer line (hidden on the mobile top band) -->
+      <div class="hidden text-[14px] font-medium text-white/[0.72] md:block">
+      </div>
     </div>
 
-    <!-- ── Login Form ─────────────────────────────────────────────────── -->
-    <form
-      method="post"
-      @submit.prevent="handleLogin"
-      class="w-full max-w-xs space-y-5"
+    <!-- ── Form panel ────────────────────────────────────────────────────── -->
+    <div
+      class="flex flex-1 items-center justify-center bg-white px-6 py-10 md:px-14 md:py-12 lg:px-24 lg:py-16"
     >
-      <UFormField label="Email" name="email">
-        <UInput
-          v-model="loginForm.email"
-          type="email"
-          placeholder="you@example.com"
-          autocomplete="email"
-          required
-          class="w-full"
-          size="xl"
-        />
-      </UFormField>
+      <div class="w-full md:max-w-[392px]">
+        <h1 class="text-[38px] font-extrabold tracking-[-0.03em] text-stone-900">
+          Welcome back
+        </h1>
+        <p class="mt-2.5 mb-10 text-[16px] font-normal text-stone-500">
+          Sign in to your training log.
+        </p>
 
-      <UFormField label="Password" name="password">
-        <UInput
-          v-model="loginForm.password"
-          type="password"
-          placeholder="••••••••"
-          autocomplete="current-password"
-          required
-          class="w-full"
-          size="xl"
-        />
-      </UFormField>
+        <form method="post" @submit.prevent="handleLogin">
+          <label
+            for="email"
+            class="mb-1.5 block text-[12px] font-semibold uppercase tracking-[0.08em] text-stone-500"
+          >
+            Email address
+          </label>
+          <input
+            id="email"
+            v-model="loginForm.email"
+            type="email"
+            placeholder="you@example.com"
+            autocomplete="email"
+            required
+            class="mb-7 w-full rounded-none border-0 border-b-[1.5px] border-stone-300 bg-transparent px-0.5 py-2.5 text-[17px] font-normal text-stone-900 outline-none placeholder:text-stone-400 focus:border-orange-600 focus-visible:border-orange-600"
+          >
 
-      <UButton
-        type="submit"
-        :loading="loginLoading"
-        block
-        size="lg"
-        class="mt-1 rounded-lg font-semibold"
-      >
-        Sign in
-      </UButton>
-    </form>
+          <label
+            for="password"
+            class="mb-1.5 block text-[12px] font-semibold uppercase tracking-[0.08em] text-stone-500"
+          >
+            Password
+          </label>
+          <input
+            id="password"
+            v-model="loginForm.password"
+            type="password"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            required
+            class="mb-9 w-full rounded-none border-0 border-b-[1.5px] border-stone-300 bg-transparent px-0.5 py-2.5 text-[17px] font-normal text-stone-900 outline-none placeholder:text-stone-400 focus:border-orange-600 focus-visible:border-orange-600"
+          >
+
+          <UButton
+            type="submit"
+            :loading="loginLoading"
+            :disabled="loginLoading"
+            block
+            color="neutral"
+            class="justify-center rounded-full bg-stone-900 py-4 text-[16px] font-bold text-white hover:bg-orange-600"
+          >
+            Sign in
+          </UButton>
+        </form>
+
+        <!--
+          Sign-up is disabled (no registration flow) — footer kept here,
+          hidden for now. Restore when a signup route exists:
+
+          <p class="mt-6 text-center text-[15px] font-normal text-stone-500">
+            New to Sprocket?
+            <NuxtLink to="/register" class="font-semibold text-orange-700 hover:text-orange-800">Create an account</NuxtLink>
+          </p>
+        -->
+      </div>
+    </div>
 
   </div>
 </template>
