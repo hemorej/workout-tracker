@@ -150,6 +150,10 @@ const pendingPrefill = ref<WorkoutPrefill | null>(null)
 // Set only by the "refresh ride data" flow — when non-null, the Add Workout
 // modal opens in edit mode (PATCH this workout) instead of create mode.
 const editingWorkoutId = ref<number | null>(null)
+// Distinguishes the two ways the Add Workout modal enters edit mode: after a
+// FIT re-parse ('refresh' — "Review refreshed ride data") vs. a plain manual
+// "Edit ride" ('manual' — "Edit ride"). Only affects header copy.
+const editModalMode = ref<'refresh' | 'manual'>('refresh')
 
 // ── User settings modal (weight + training plan) ─────────────────────────
 const showUserSettings = ref(false)
@@ -259,6 +263,7 @@ function openAddWorkout() {
 function closeAddWorkout() {
   showAddWorkout.value = false
   editingWorkoutId.value = null
+  editModalMode.value = 'refresh'
 }
 
 // ── "Mark as completed" — Strava activity picker ─────────────────────────
@@ -481,15 +486,22 @@ function skipUploadAndEnterManually() {
  * Skips the Strava activity-list step entirely — the workout's own date and
  * rideType already tell us what to fetch, no need to pick which activity.
  */
-async function onRefreshRideData(day: DayEntry) {
+async function onRefreshRideData(day: DayEntry, opts: { forceUpload?: boolean } = {}) {
   const workout = day.workout
   if (!workout) return
 
   pickerPurpose.value = 'refresh'
   refreshTargetWorkout.value = workout
 
-  if (workout.rideType === 'trainer') {
-    pendingUploadActivity.value = { name: workout.name, rideType: 'trainer', startDateLocal: day.date }
+  // forceUpload: the "Re-upload FIT file" action — always go to the manual
+  // upload prompt regardless of ride type. Trainer rides always take this
+  // path anyway (no Wahoo FIT file to fetch).
+  if (opts.forceUpload || workout.rideType === 'trainer') {
+    pendingUploadActivity.value = {
+      name: workout.name,
+      rideType: workout.rideType ?? 'outdoor',
+      startDateLocal: day.date,
+    }
     activityPickerMode.value = 'upload'
     uploadError.value = null
     showActivityPicker.value = true
@@ -530,10 +542,46 @@ function openEditModalFromRefresh(parsedPrefill: WorkoutPrefill) {
     ftpWatts: workout.ftpWatts,
   }
   editingWorkoutId.value = workout.id
+  editModalMode.value = 'refresh'
   showActivityPicker.value = false
   showAddWorkout.value = true
   pickerPurpose.value = 'create'
   refreshTargetWorkout.value = null
+}
+
+/**
+ * "Edit ride" — opens Add Workout in edit mode seeded straight from the
+ * existing workout, with NO FIT re-parse or network call. Lets the user fix
+ * the title, TSS, or any other field by hand. fitData/laps/stravaActivityId
+ * ride through the prefill untouched (PATCH ignores stravaActivityId).
+ */
+function onEditWorkout(day: DayEntry) {
+  const w = day.workout
+  if (!w) return
+
+  pendingPrefill.value = {
+    date: day.date,
+    name: w.name,
+    durationMinutes: w.durationMinutes,
+    distanceKm: w.distanceKm,
+    tss: w.tss,
+    rpe: w.rpe,
+    rideType: w.rideType,
+    notes: w.notes,
+    ftpWatts: w.ftpWatts,
+    powerBests: w.powerBests,
+    fitData: w.fitData,
+    laps: w.laps,
+    stravaActivityId: w.stravaActivityId,
+  }
+  editingWorkoutId.value = w.id
+  editModalMode.value = 'manual'
+  showAddWorkout.value = true
+}
+
+/** "Re-upload FIT file" — the manual-upload branch of the refresh flow for any ride type. */
+function onReuploadFit(day: DayEntry) {
+  return onRefreshRideData(day, { forceUpload: true })
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -1275,6 +1323,8 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           @auto-build="onAutoBuild"
           @open-fit-overlay="openFitOverlay(day)"
           @refresh-ride-data="onRefreshRideData(day)"
+          @edit="onEditWorkout(day)"
+          @reupload-fit="onReuploadFit(day)"
         />
       </div>
 
@@ -1338,9 +1388,11 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           <!-- Header -->
           <div class="flex items-start justify-between mb-6">
             <div>
-              <h2 class="text-lg font-semibold text-stone-900">{{ editingWorkoutId ? 'Review refreshed ride data' : 'Log a workout' }}</h2>
+              <h2 class="text-lg font-semibold text-stone-900">
+                {{ !editingWorkoutId ? 'Log a workout' : (editModalMode === 'manual' ? 'Edit ride' : 'Review refreshed ride data') }}
+              </h2>
               <p class="text-sm text-stone-400 mt-0.5">
-                {{ editingWorkoutId ? "Confirm the freshly parsed values before saving." : "Record your training session details." }}
+                {{ !editingWorkoutId ? 'Record your training session details.' : (editModalMode === 'manual' ? 'Update any field, then save.' : 'Confirm the freshly parsed values before saving.') }}
               </p>
             </div>
             <button

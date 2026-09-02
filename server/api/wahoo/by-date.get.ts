@@ -27,13 +27,11 @@
  *   502 if the Wahoo API call fails
  */
 
-import { sql } from 'drizzle-orm'
-import { wahooPowerBests } from '../../db/schema'
 import { useDB } from '../../db'
 import { findRideByDate, fetchAndParseActivity } from '../../utils/wahoo'
 import { getCurrentFtpWatts } from '../../utils/ftp'
+import { metricsToWorkoutFields, upsertWahooPowerBests } from '../../utils/fitWorkout'
 
-const EIGHT_WEEKS_MS = 8 * 7 * 24 * 60 * 60 * 1000
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export default defineEventHandler(async (event) => {
@@ -86,31 +84,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 502, statusMessage: 'Failed to fetch activity from Wahoo.' })
   }
 
-  const powerBests = Object.entries(metrics.bests).map(([duration, watts]) => ({ duration, watts: watts! }))
+  const fields = metricsToWorkoutFields(metrics, ftpWatts)
   const achievedAt = ride.startDateLocal.slice(0, 10)
 
-  if (powerBests.length > 0) {
-    await db
-      .insert(wahooPowerBests)
-      .values(powerBests.map((pb) => ({ activityId: match.id, duration: pb.duration, watts: pb.watts, achievedAt })))
-      .onConflictDoUpdate({
-        target: [wahooPowerBests.activityId, wahooPowerBests.duration],
-        set: { watts: sql`excluded.watts` },
-      })
-
-    const cutoff = new Date(Date.now() - EIGHT_WEEKS_MS).toISOString().slice(0, 10)
-    await db.execute(sql`
-      DELETE FROM wahoo_power_bests
-      WHERE id IN (
-        SELECT id FROM (
-          SELECT id, achieved_at,
-                 RANK() OVER (PARTITION BY duration ORDER BY watts DESC) AS rank
-          FROM wahoo_power_bests
-        ) ranked
-        WHERE rank > 3 AND achieved_at < ${cutoff}
-      )
-    `)
-  }
+  await upsertWahooPowerBests(db, match.id, fields.powerBests, achievedAt)
 
   getLogger('wahoo').info('wahoo.activity_parsed', {
     requestId: event.context.requestId,
@@ -119,24 +96,5 @@ export default defineEventHandler(async (event) => {
     ftpWatts,
   })
 
-  return {
-    ride,
-    tss: metrics.tss,
-    powerBests,
-    durationSeconds: metrics.durationSeconds,
-    distanceMeters: metrics.distanceMeters,
-    fitData: {
-      avgPower: metrics.avgPower,
-      maxPower: metrics.maxPower,
-      normalizedPower: metrics.normalizedPower,
-      intensityFactor: metrics.intensityFactor,
-      avgHr: metrics.avgHr,
-      maxHr: metrics.maxHr,
-      avgCadence: metrics.avgCadence,
-      maxCadence: metrics.maxCadence,
-      zoneBuckets: metrics.zoneBuckets,
-      zoneFtp: ftpWatts,
-    },
-    laps: metrics.laps.length >= 2 ? metrics.laps : null,
-  }
+  return { ride, ...fields }
 })

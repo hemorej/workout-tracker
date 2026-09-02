@@ -21,6 +21,7 @@
 
 import { parseFitFile } from '../../utils/fit'
 import { getCurrentFtpWatts } from '../../utils/ftp'
+import { metricsToWorkoutFields } from '../../utils/fitWorkout'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -46,31 +47,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 422, statusMessage: message })
   }
 
-  const powerBests = Object.entries(metrics.bests).map(([duration, watts]) => ({ duration, watts: watts! }))
-
   getLogger('wahoo').info('fit.upload_parsed', {
     requestId: event.context.requestId,
     tss: metrics.tss,
     ftpWatts,
   })
 
-  return {
-    tss: metrics.tss,
-    powerBests,
-    durationSeconds: metrics.durationSeconds,
-    distanceMeters: metrics.distanceMeters,
-    fitData: {
-      avgPower: metrics.avgPower,
-      maxPower: metrics.maxPower,
-      normalizedPower: metrics.normalizedPower,
-      intensityFactor: metrics.intensityFactor,
-      avgHr: metrics.avgHr,
-      maxHr: metrics.maxHr,
-      avgCadence: metrics.avgCadence,
-      maxCadence: metrics.maxCadence,
-      zoneBuckets: metrics.zoneBuckets,
-      zoneFtp: ftpWatts,
-    },
-    laps: metrics.laps.length >= 2 ? metrics.laps : null,
-  }
+  return metricsToWorkoutFields(metrics, ftpWatts)
 })

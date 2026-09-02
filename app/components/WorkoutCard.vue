@@ -36,6 +36,8 @@ const emit = defineEmits<{
   (e: 'auto-build'): void
   (e: 'open-fit-overlay'): void
   (e: 'refresh-ride-data'): void
+  (e: 'edit'): void
+  (e: 'reupload-fit'): void
 }>()
 
 // ── Date formatting ──────────────────────────────────────────────────────
@@ -131,6 +133,27 @@ const isOutdoorRide = computed(() => props.day.workout?.rideType === 'outdoor')
 function openOverlay() {
   navigateTo(`/overlay/${props.day.workout?.stravaActivityId}`)
 }
+
+/**
+ * Overflow menu for a logged workout row — keeps the row visually calm while
+ * making every secondary action touch-reachable. Delete stays a separate
+ * button (it has its own inline confirm). "Refresh from Wahoo" is available
+ * even once the ride already has parsed FIT data (re-run the Strava → Wahoo
+ * → parse flow); "Re-upload FIT file" routes through the manual upload path.
+ */
+const rowMenuItems = computed(() => [[
+  { label: 'Edit ride', icon: 'i-lucide-pencil', onSelect: () => emit('edit') },
+  {
+    label: props.isRefreshingRideData ? 'Refreshing…' : 'Refresh from Wahoo',
+    icon: 'i-lucide-refresh-cw',
+    disabled: props.isRefreshingRideData,
+    onSelect: () => emit('refresh-ride-data'),
+  },
+  { label: 'Re-upload FIT file', icon: 'i-lucide-upload', onSelect: () => emit('reupload-fit') },
+  ...(hasStravaActivity.value && isOutdoorRide.value
+    ? [{ label: 'Create photo overlay', icon: 'i-lucide-image', onSelect: () => openOverlay() }]
+    : []),
+]])
 
 // ── Mobile swipe-row summary (panel 1) ───────────────────────────────────
 const mobileTitle = computed(() => {
@@ -287,35 +310,27 @@ function confirmDelete() {
           <path d="M8 12l3 3 5-6" />
         </svg>
       </button>
-      <button
-        v-if="!day.isRestDay && !isPlannedDay && !hasFitData"
-        title="Refresh ride data"
-        aria-label="Refresh ride data"
-        :disabled="isRefreshingRideData"
-        class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-100"
-        @click="emit('refresh-ride-data')"
-      >
-        <BikeSpinner v-if="isRefreshingRideData" :size="12" />
-        <svg v-else class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-          <path d="M21 3v5h-5" />
-          <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-          <path d="M3 21v-5h5" />
-        </svg>
-      </button>
-      <button
-        v-if="!day.isRestDay && !isPlannedDay && hasStravaActivity && isOutdoorRide"
-        title="Create photo overlay"
-        aria-label="Create photo overlay"
-        class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
-        @click="openOverlay"
-      >
-        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-          <circle cx="8.5" cy="8.5" r="1.5" />
-          <path d="M21 15l-5-5L5 21" />
-        </svg>
-      </button>
+      <template v-if="!day.isRestDay && !isPlannedDay">
+        <BikeSpinner v-if="isRefreshingRideData" :size="12" class="shrink-0 mx-1" />
+        <UDropdownMenu
+          v-else
+          :items="rowMenuItems"
+          :content="{ align: 'end' }"
+          :ui="{ content: 'w-48' }"
+        >
+          <button
+            title="More actions"
+            aria-label="More actions"
+            class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
+          >
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="12" cy="5" r="2" />
+              <circle cx="12" cy="12" r="2" />
+              <circle cx="12" cy="19" r="2" />
+            </svg>
+          </button>
+        </UDropdownMenu>
+      </template>
       <template v-if="!day.isRestDay && !isPlannedDay">
         <button
           v-if="!showDeleteConfirm"
@@ -505,38 +520,29 @@ function confirmDelete() {
         </svg>
       </button>
 
-      <!-- Refresh ride data — only shown once a workout exists with no parsed FIT data yet -->
-      <button
-        v-if="!day.isRestDay && !isPlannedDay && !hasFitData"
-        title="Refresh ride data"
-        aria-label="Refresh ride data"
-        :disabled="isRefreshingRideData"
-        class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-100"
-        @click="emit('refresh-ride-data')"
-      >
-        <BikeSpinner v-if="isRefreshingRideData" :size="16" />
-        <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-          <path d="M21 3v5h-5" />
-          <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-          <path d="M3 21v-5h5" />
-        </svg>
-      </button>
-
-      <!-- Create photo overlay — shown once the workout has a linked Strava activity -->
-      <button
-        v-if="!day.isRestDay && !isPlannedDay && hasStravaActivity && isOutdoorRide"
-        title="Create photo overlay"
-        aria-label="Create photo overlay"
-        class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
-        @click="openOverlay"
-      >
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-          <circle cx="8.5" cy="8.5" r="1.5" />
-          <path d="M21 15l-5-5L5 21" />
-        </svg>
-      </button>
+      <!-- Overflow menu — Edit ride / Refresh from Wahoo / Re-upload FIT / photo overlay.
+           Available on every logged ride, including ones that already have parsed FIT data. -->
+      <template v-if="!day.isRestDay && !isPlannedDay">
+        <BikeSpinner v-if="isRefreshingRideData" :size="16" class="self-start shrink-0 -mt-1" />
+        <UDropdownMenu
+          v-else
+          :items="rowMenuItems"
+          :content="{ align: 'end' }"
+          :ui="{ content: 'w-48' }"
+        >
+          <button
+            title="More actions"
+            aria-label="More actions"
+            class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="12" cy="5" r="2" />
+              <circle cx="12" cy="12" r="2" />
+              <circle cx="12" cy="19" r="2" />
+            </svg>
+          </button>
+        </UDropdownMenu>
+      </template>
 
       <!-- Delete control — always rendered (dimmed, not hover-gated) so it's reachable on touch -->
       <template v-if="!day.isRestDay && !isPlannedDay">

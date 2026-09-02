@@ -34,6 +34,9 @@ export default defineNuxtConfig({
      *   WAHOO_CLIENT_ID         → runtimeConfig.wahooClientId
      *   WAHOO_CLIENT_SECRET     → runtimeConfig.wahooClientSecret
      *   WAHOO_REFRESH_TOKEN     → runtimeConfig.wahooRefreshToken
+     *   NUXT_WAHOO_WEBHOOK_TOKEN → runtimeConfig.wahooWebhookToken
+     *   NUXT_FIT_STORAGE_DIR    → runtimeConfig.fitStorageDir
+     *   NUXT_WEBHOOK_USER_EMAIL → runtimeConfig.webhookUserEmail
      *   ANTHROPIC_API_KEY       → runtimeConfig.anthropicApiKey
      */
     runtimeConfig: {
@@ -56,6 +59,21 @@ export default defineNuxtConfig({
         wahooClientId: process.env.WAHOO_CLIENT_ID,
         wahooClientSecret: process.env.WAHOO_CLIENT_SECRET,
         wahooRefreshToken: process.env.WAHOO_REFRESH_TOKEN,
+
+        // Shared secret authenticating the public Wahoo webhook endpoint
+        // (server/api/wahoo/webhook.post.ts). Must equal the `webhook_token`
+        // configured on the Wahoo webhook subscription.
+        wahooWebhookToken: process.env.NUXT_WAHOO_WEBHOOK_TOKEN,
+
+        // Directory where the webhook persists raw Wahoo FIT files. Relative
+        // paths resolve against the process cwd; defaults to a gitignored dev
+        // dir. In production set an absolute path OUTSIDE the Forge release
+        // dir so the files survive deploys and accumulate over time.
+        fitStorageDir: process.env.NUXT_FIT_STORAGE_DIR || '.data/fit-files',
+
+        // Optional — pins the webhook's target user by email. When unset the
+        // webhook resolves the sole `users` row (single-user app).
+        webhookUserEmail: process.env.NUXT_WEBHOOK_USER_EMAIL,
 
         /**
          * nuxt-auth-utils session configuration.
