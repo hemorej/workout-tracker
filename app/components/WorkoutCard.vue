@@ -8,14 +8,15 @@
  * Displays:
  *   - Date (formatted, with "Today" / "Yesterday" relative labels)
  *   - Workout name (or "Rest day" badge)
- *   - Duration + distance + TSS + optional RPE
+ *   - Duration + distance + compact TSS / RPE / power-bests pills
  *   - Optional notes (truncated, expandable)
- *   - A delete button for workout days
+ *   - A single overflow menu per logged row; delete lives inside it
  *
  * Emits:
  *   delete — when the user confirms deletion (parent calls the store)
  */
 
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { DayEntry } from '~/stores/workouts'
 import type { PlannedDay } from '~/stores/planning'
 
@@ -130,35 +131,54 @@ const hasStravaActivity = computed(() => !!props.day.workout?.stravaActivityId)
 /** Photo overlay builder only makes sense for outdoor rides — no route/map data for indoor/trainer rides */
 const isOutdoorRide = computed(() => props.day.workout?.rideType === 'outdoor')
 
+// ── Compact pill readings ────────────────────────────────────────────────
+// The pills show only an icon + number; the full reading lives in both
+// `title` and `aria-label` so the number alone is never the accessible name.
+const powerBestsLabel = computed(() => {
+  const n = props.day.workout?.powerBests?.length ?? 0
+  return `${n} power best${n === 1 ? '' : 's'} recorded`
+})
+const tssLabel = computed(() => {
+  const tss = isPlannedDay.value ? plannedPlan.value?.tss : props.day.workout?.tss
+  return isPlannedDay.value ? `${tss} TSS planned` : `${tss} TSS`
+})
+const rpeLabel = computed(() => `RPE ${props.day.workout?.rpe} of 10`)
+
 function openOverlay() {
   navigateTo(`/overlay/${props.day.workout?.stravaActivityId}`)
 }
 
 /**
  * Overflow menu for a logged workout row — keeps the row visually calm while
- * making every secondary action touch-reachable. Delete stays a separate
- * button (it has its own inline confirm). "Refresh from Wahoo" shows only for
- * outdoor rides (re-run the Strava → Wahoo → parse flow), even once the ride
- * already has parsed FIT data; "Re-upload FIT file" routes through the manual
- * upload path and works for indoor and outdoor rides alike.
+ * making every secondary action touch-reachable. "Refresh from Wahoo" shows
+ * only for outdoor rides (re-run the Strava → Wahoo → parse flow), even once
+ * the ride already has parsed FIT data; "Re-upload FIT file" routes through the
+ * manual upload path and works for indoor and outdoor rides alike. Delete is
+ * the final item, below a separator, styled destructive — selecting it opens
+ * the same inline Confirm / Cancel step as before (it never deletes on select).
  */
-const rowMenuItems = computed(() => [[
-  { label: 'Edit ride', icon: 'i-lucide-pencil', onSelect: () => emit('edit') },
-  // "Refresh from Wahoo" only applies to outdoor rides — the Wahoo API has no
-  // FIT file for indoor/trainer (Zwift) rides, so there's nothing to re-fetch.
-  ...(isOutdoorRide.value
-    ? [{
-        label: props.isRefreshingRideData ? 'Refreshing…' : 'Refresh from Wahoo',
-        icon: 'i-lucide-refresh-cw',
-        disabled: props.isRefreshingRideData,
-        onSelect: () => emit('refresh-ride-data'),
-      }]
-    : []),
-  { label: 'Re-upload FIT file', icon: 'i-lucide-upload', onSelect: () => emit('reupload-fit') },
-  ...(hasStravaActivity.value && isOutdoorRide.value
-    ? [{ label: 'Create photo overlay', icon: 'i-lucide-image', onSelect: () => openOverlay() }]
-    : []),
-]])
+const rowMenuItems = computed<DropdownMenuItem[][]>(() => [
+  [
+    { label: 'Edit ride', icon: 'i-lucide-pencil', onSelect: () => emit('edit') },
+    // "Refresh from Wahoo" only applies to outdoor rides — the Wahoo API has no
+    // FIT file for indoor/trainer (Zwift) rides, so there's nothing to re-fetch.
+    ...(isOutdoorRide.value
+      ? [{
+          label: props.isRefreshingRideData ? 'Refreshing…' : 'Refresh from Wahoo',
+          icon: 'i-lucide-refresh-cw',
+          disabled: props.isRefreshingRideData,
+          onSelect: () => emit('refresh-ride-data'),
+        }]
+      : []),
+    { label: 'Re-upload FIT file', icon: 'i-lucide-upload', onSelect: () => emit('reupload-fit') },
+    ...(hasStravaActivity.value && isOutdoorRide.value
+      ? [{ label: 'Create photo overlay', icon: 'i-lucide-image', onSelect: () => openOverlay() }]
+      : []),
+  ],
+  [
+    { label: 'Delete workout', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => requestDelete() },
+  ],
+])
 
 // ── Mobile swipe-row summary (panel 1) ───────────────────────────────────
 const mobileTitle = computed(() => {
@@ -228,7 +248,7 @@ function confirmDelete() {
       />
       <div
         v-else-if="isPlannedDay"
-        class="absolute left-0 top-2 bottom-2 w-[3px] bg-violet-400 rounded-full"
+        class="absolute left-0 top-2 bottom-2 w-[3px] bg-[#4B88A2] rounded-full"
       />
       <div class="min-w-0 flex-1">
         <button
@@ -263,10 +283,11 @@ function confirmDelete() {
     <div class="snap-start shrink-0 w-full flex items-center justify-between flex-wrap gap-0.5 px-4 py-2 bg-stone-50">
       <span
         v-if="hasPowerBests"
-        class="inline-flex items-center gap-0.5 shrink-0 text-[10px] text-amber-600 font-semibold bg-amber-50 rounded-full px-1 py-[1px]"
-        :title="`${day.workout?.powerBests?.length} power best${(day.workout?.powerBests?.length ?? 0) > 1 ? 's' : ''} recorded`"
+        class="inline-flex items-center gap-0.5 shrink-0 text-[11px] text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded-full px-1.5 py-[1px] tabular-nums"
+        :title="powerBestsLabel"
+        :aria-label="powerBestsLabel"
       >
-        <svg class="w-2 h-2" fill="currentColor" viewBox="0 0 20 20">
+        <svg class="w-[11px] h-[11px]" fill="currentColor" viewBox="0 0 20 20">
           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
         </svg>
         {{ day.workout?.powerBests?.length }}
@@ -283,40 +304,56 @@ function confirmDelete() {
       </span>
       <span
         v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
-        class="inline-block shrink-0 text-[10px] text-sky-600 font-semibold bg-sky-50 rounded-full px-1.5 py-[1px] whitespace-nowrap"
+        class="inline-flex items-center gap-0.5 shrink-0 text-[11px] text-[#475569] font-semibold bg-[#f1f5f9] border border-[#dbe2ea] rounded-full px-1.5 py-[1px] whitespace-nowrap tabular-nums"
+        :title="tssLabel"
+        :aria-label="tssLabel"
       >
-        {{ isPlannedDay ? plannedPlan?.tss : day.workout?.tss }} TSS
+        <svg class="w-[11px] h-[11px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+        </svg>
+        {{ isPlannedDay ? plannedPlan?.tss : day.workout?.tss }}
       </span>
       <span
         v-if="day.workout?.rpe"
-        class="inline-block text-[10px] text-stone-500 font-semibold bg-stone-100 rounded-full px-1.5 py-[1px] whitespace-nowrap"
+        class="inline-flex items-center gap-0.5 shrink-0 text-[11px] text-[#BE185D] font-semibold bg-[#FDF2F8] border border-[#FBCFE8] rounded-full px-1.5 py-[1px] whitespace-nowrap tabular-nums"
+        :title="rpeLabel"
+        :aria-label="rpeLabel"
       >
-        RPE {{ day.workout?.rpe }}/10
+        <svg class="w-[11px] h-[11px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+        </svg>
+        {{ day.workout?.rpe }}
       </span>
-      <!-- Non-interactive pill on mobile: the Workout Builder tab (and thus
-           both "from scratch" and "auto-build") is unavailable below `lg`,
-           so there's no choice to offer here — see the desktop pill below
-           for the real interaction. -->
-      <span
-        v-else-if="isPlannedDay"
-        class="inline-block text-[10px] text-violet-600 font-semibold bg-violet-100 border border-violet-200 rounded-full px-1.5 py-[1px] whitespace-nowrap"
-      >
-        Planned
-      </span>
+      <!-- Planned pill: on mobile the Workout Builder (Manual / Auto) is
+           unavailable, so the pill routes straight to "mark as completed" —
+           the same completed-workout picker the standalone tick used to open. -->
       <button
-        v-if="isPlannedDay"
-        title="Mark as completed"
-        aria-label="Mark as completed"
-        class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-violet-300 opacity-65 transition-all hover:opacity-100 hover:text-violet-600 hover:bg-violet-100"
+        v-else-if="isPlannedDay"
+        title="Open to log details"
+        aria-label="Open planned workout to log details"
+        class="inline-flex items-center gap-1 shrink-0 text-[11px] text-[#3B6E84] font-semibold bg-[#F1F7FA] border border-[#B8D5E0] rounded-full px-2 py-[1px] whitespace-nowrap transition-colors hover:bg-[#e6f0f5] hover:border-[#4B88A2]"
         @click="emit('mark-completed')"
       >
-        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M8 12l3 3 5-6" />
+        <svg class="w-[11px] h-[11px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="17" rx="2" />
+          <path d="M8 2v4" />
+          <path d="M16 2v4" />
+          <path d="M3 10h18" />
         </svg>
+        Planned
       </button>
       <template v-if="!day.isRestDay && !isPlannedDay">
-        <BikeSpinner v-if="isRefreshingRideData" :size="12" class="shrink-0 mx-1" />
+        <!-- Selecting "Delete workout" from the menu swaps in the two-step
+             confirm here, in place of the menu trigger. -->
+        <div v-if="showDeleteConfirm" class="flex items-center gap-1.5">
+          <button class="text-[10px] text-rose-500 hover:text-rose-600 font-semibold" @click="confirmDelete">
+            Confirm
+          </button>
+          <button class="text-[10px] text-stone-300 hover:text-stone-500" @click="showDeleteConfirm = false">
+            Cancel
+          </button>
+        </div>
+        <BikeSpinner v-else-if="isRefreshingRideData" :size="12" class="shrink-0 mx-1" />
         <UDropdownMenu
           v-else
           :items="rowMenuItems"
@@ -326,40 +363,15 @@ function confirmDelete() {
           <button
             title="More actions"
             aria-label="More actions"
-            class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
+            class="flex items-center justify-center shrink-0 w-9 h-9 -my-1 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
           >
-            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+            <svg class="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="12" cy="5" r="2" />
               <circle cx="12" cy="12" r="2" />
               <circle cx="12" cy="19" r="2" />
             </svg>
           </button>
         </UDropdownMenu>
-      </template>
-      <template v-if="!day.isRestDay && !isPlannedDay">
-        <button
-          v-if="!showDeleteConfirm"
-          title="Delete workout"
-          aria-label="Delete workout"
-          class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-rose-600 hover:bg-rose-50"
-          @click="requestDelete"
-        >
-          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 6h18" />
-            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-            <path d="M10 11v6" />
-            <path d="M14 11v6" />
-          </svg>
-        </button>
-        <div v-else class="flex items-center gap-1.5">
-          <button class="text-[10px] text-rose-500 hover:text-rose-600 font-semibold" @click="confirmDelete">
-            Confirm
-          </button>
-          <button class="text-[10px] text-stone-300 hover:text-stone-500" @click="showDeleteConfirm = false">
-            Cancel
-          </button>
-        </div>
       </template>
     </div>
   </div>
@@ -371,14 +383,15 @@ function confirmDelete() {
       ? 'grid-template-columns: 84px 1fr;'
       : 'grid-template-columns: 84px minmax(160px,1fr) 210px;'"
   >
-    <!-- Left accent line — orange for logged workouts, violet for planned -->
+    <!-- Left accent line — orange-600 for logged workouts (warm = ridden),
+         air force blue for planned (cool = not yet) -->
     <div
       v-if="!day.isRestDay"
       class="absolute left-0 top-4 bottom-4 w-[3px] bg-orange-600 rounded-full"
     />
     <div
       v-else-if="isPlannedDay"
-      class="absolute left-0 top-4 bottom-4 w-[3px] bg-violet-400 rounded-full"
+      class="absolute left-0 top-4 bottom-4 w-[3px] bg-[#4B88A2] rounded-full"
     />
 
     <!-- Column 1: date — fixed width, right-aligned -->
@@ -455,126 +468,129 @@ function confirmDelete() {
       </div>
     </div>
 
-    <!-- Column 3: PR badge, TSS pill, RPE-or-Planned pill, and action icon — all on
-         one row, evenly spaced and right-aligned as a single group so every row's
-         icon (and, absent a PR badge, every pill) lines up horizontally -->
+    <!-- Column 3: compact power-bests / TSS / RPE pills, the Planned action pill,
+         and the single overflow menu — one right-aligned flex group so every
+         row's trigger (and, absent a power-bests pill, every pill) lines up.
+         Selecting "Delete workout" from the menu swaps this whole group for the
+         inline Confirm / Cancel pair. -->
     <div class="pt-0.5 flex items-start justify-end gap-2">
-      <span
-        v-if="hasPowerBests"
-        class="inline-flex items-center gap-0.5 shrink-0 text-xs text-amber-600 font-semibold bg-amber-50 rounded-full px-2 py-0.5"
-        :title="`${day.workout?.powerBests?.length} power best${(day.workout?.powerBests?.length ?? 0) > 1 ? 's' : ''} recorded`"
-      >
-        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-        </svg>
-        {{ day.workout?.powerBests?.length }}
-      </span>
-      <span
-        v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
-        class="inline-block shrink-0 text-xs text-sky-600 font-semibold bg-sky-50 rounded-full px-2.5 py-0.5 whitespace-nowrap"
-      >
-        {{ isPlannedDay ? plannedPlan?.tss : day.workout?.tss }} TSS
-      </span>
-      <span
-        v-if="day.workout?.rpe"
-        class="inline-block text-xs text-stone-500 font-semibold bg-stone-100 rounded-full px-2.5 py-0.5 whitespace-nowrap"
-      >
-        RPE {{ day.workout?.rpe }}/10
-      </span>
-      <template v-else-if="isPlannedDay">
+      <!-- Two-step delete confirm — replaces the pills in place, never deletes on select -->
+      <div v-if="!day.isRestDay && !isPlannedDay && showDeleteConfirm" class="flex items-center self-center gap-2">
+        <button class="text-xs text-rose-500 hover:text-rose-600 font-semibold" @click="confirmDelete">
+          Confirm
+        </button>
+        <button class="text-xs text-stone-300 hover:text-stone-500" @click="showDeleteConfirm = false">
+          Cancel
+        </button>
+      </div>
+
+      <template v-else>
         <span
-          v-if="isPlannedOutdoor"
-          class="inline-block text-xs text-violet-600 font-semibold bg-violet-100 border border-violet-200 rounded-full px-2.5 py-0.5 whitespace-nowrap"
+          v-if="hasPowerBests"
+          class="inline-flex items-center gap-1 shrink-0 text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 tabular-nums"
+          :title="powerBestsLabel"
+          :aria-label="powerBestsLabel"
         >
-          Planned
-        </span>
-        <BikeSpinner v-else-if="isAutoBuilding" :size="20" />
-        <div v-else-if="showBuildChoice" class="flex items-center gap-2">
-          <button class="text-xs text-violet-600 hover:text-violet-700 font-semibold" @click="chooseFromScratch">
-            Manual
-          </button>
-          <button class="text-xs text-violet-600 hover:text-violet-700 font-semibold" @click="chooseAutoBuild">
-            Auto
-          </button>
-          <button class="text-xs text-stone-300 hover:text-stone-500" @click="showBuildChoice = false">
-            Cancel
-          </button>
-        </div>
-        <button
-          v-else
-          title="Go to workout builder"
-          class="inline-block text-xs text-violet-600 font-semibold bg-violet-100 border border-violet-200 rounded-full px-2.5 py-0.5 whitespace-nowrap cursor-pointer transition-colors hover:bg-violet-200"
-          @click="showBuildChoice = true"
-        >
-          Planned
-        </button>
-      </template>
-
-      <!-- Mark as completed — primary action for a planned-but-not-logged day.
-           Rendered at low opacity by default (not hover-gated) so it's reachable on touch. -->
-      <button
-        v-if="isPlannedDay"
-        title="Mark as completed"
-        aria-label="Mark as completed"
-        class="flex items-center justify-center self-start shrink-0 w-9 h-9 -mt-2 rounded-full border-none bg-transparent text-violet-300 opacity-65 transition-all hover:opacity-100 hover:text-violet-600 hover:bg-violet-100"
-        @click="emit('mark-completed')"
-      >
-        <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M8 12l3 3 5-6" />
-        </svg>
-      </button>
-
-      <!-- Overflow menu — Edit ride / Refresh from Wahoo / Re-upload FIT / photo overlay.
-           Available on every logged ride, including ones that already have parsed FIT data. -->
-      <template v-if="!day.isRestDay && !isPlannedDay">
-        <BikeSpinner v-if="isRefreshingRideData" :size="16" class="self-start shrink-0 -mt-1" />
-        <UDropdownMenu
-          v-else
-          :items="rowMenuItems"
-          :content="{ align: 'end' }"
-          :ui="{ content: 'w-48' }"
-        >
-          <button
-            title="More actions"
-            aria-label="More actions"
-            class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="12" cy="5" r="2" />
-              <circle cx="12" cy="12" r="2" />
-              <circle cx="12" cy="19" r="2" />
-            </svg>
-          </button>
-        </UDropdownMenu>
-      </template>
-
-      <!-- Delete control — always rendered (dimmed, not hover-gated) so it's reachable on touch -->
-      <template v-if="!day.isRestDay && !isPlannedDay">
-        <button
-          v-if="!showDeleteConfirm"
-          title="Delete workout"
-          aria-label="Delete workout"
-          class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-rose-600 hover:bg-rose-50"
-          @click="requestDelete"
-        >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 6h18" />
-            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-            <path d="M10 11v6" />
-            <path d="M14 11v6" />
+          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
           </svg>
-        </button>
-        <!-- Inline confirmation -->
-        <div v-else class="flex items-center self-center gap-2">
-          <button class="text-xs text-rose-500 hover:text-rose-600 font-semibold" @click="confirmDelete">
-            Confirm
+          {{ day.workout?.powerBests?.length }}
+        </span>
+        <span
+          v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
+          class="inline-flex items-center gap-1 shrink-0 text-xs text-[#475569] font-semibold bg-[#f1f5f9] border border-[#dbe2ea] rounded-full px-2 py-0.5 whitespace-nowrap tabular-nums"
+          :title="tssLabel"
+          :aria-label="tssLabel"
+        >
+          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+          </svg>
+          {{ isPlannedDay ? plannedPlan?.tss : day.workout?.tss }}
+        </span>
+        <span
+          v-if="day.workout?.rpe"
+          class="inline-flex items-center gap-1 shrink-0 text-xs text-[#BE185D] font-semibold bg-[#FDF2F8] border border-[#FBCFE8] rounded-full px-2 py-0.5 whitespace-nowrap tabular-nums"
+          :title="rpeLabel"
+          :aria-label="rpeLabel"
+        >
+          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+          </svg>
+          {{ day.workout?.rpe }}
+        </span>
+
+        <!-- Planned pill — the only action on a planned row. Buildable plans open
+             the Manual / Auto build choice; outdoor plans (no builder) route
+             straight to the completed-workout picker. -->
+        <template v-else-if="isPlannedDay">
+          <button
+            v-if="isPlannedOutdoor"
+            title="Open to log details"
+            aria-label="Open planned workout to log details"
+            class="inline-flex items-center gap-1.5 shrink-0 text-xs text-[#3B6E84] font-semibold bg-[#F1F7FA] border border-[#B8D5E0] rounded-full px-2.5 py-0.5 whitespace-nowrap cursor-pointer transition-colors hover:bg-[#e6f0f5] hover:border-[#4B88A2]"
+            @click="emit('mark-completed')"
+          >
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="17" rx="2" />
+              <path d="M8 2v4" />
+              <path d="M16 2v4" />
+              <path d="M3 10h18" />
+            </svg>
+            Planned
           </button>
-          <button class="text-xs text-stone-300 hover:text-stone-500" @click="showDeleteConfirm = false">
-            Cancel
+          <BikeSpinner v-else-if="isAutoBuilding" :size="20" />
+          <div v-else-if="showBuildChoice" class="flex items-center gap-2">
+            <button class="text-xs text-[#3B6E84] hover:text-[#4B88A2] font-semibold" @click="chooseFromScratch">
+              Manual
+            </button>
+            <button class="text-xs text-[#3B6E84] hover:text-[#4B88A2] font-semibold" @click="chooseAutoBuild">
+              Auto
+            </button>
+            <button class="text-xs text-stone-300 hover:text-stone-500" @click="showBuildChoice = false">
+              Cancel
+            </button>
+          </div>
+          <button
+            v-else
+            title="Open to log details"
+            aria-label="Open planned workout to log details"
+            class="inline-flex items-center gap-1.5 shrink-0 text-xs text-[#3B6E84] font-semibold bg-[#F1F7FA] border border-[#B8D5E0] rounded-full px-2.5 py-0.5 whitespace-nowrap cursor-pointer transition-colors hover:bg-[#e6f0f5] hover:border-[#4B88A2]"
+            @click="showBuildChoice = true"
+          >
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="17" rx="2" />
+              <path d="M8 2v4" />
+              <path d="M16 2v4" />
+              <path d="M3 10h18" />
+            </svg>
+            Planned
           </button>
-        </div>
+        </template>
+
+        <!-- Overflow menu — Edit ride / Refresh from Wahoo / Re-upload FIT /
+             photo overlay, then a separator and the destructive Delete workout.
+             Available on every logged ride, including ones with parsed FIT data. -->
+        <template v-if="!day.isRestDay && !isPlannedDay">
+          <BikeSpinner v-if="isRefreshingRideData" :size="16" class="self-start shrink-0 -mt-1" />
+          <UDropdownMenu
+            v-else
+            :items="rowMenuItems"
+            :content="{ align: 'end' }"
+            :ui="{ content: 'w-48' }"
+          >
+            <button
+              title="More actions"
+              aria-label="More actions"
+              class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-stone-300 opacity-55 transition-all hover:opacity-100 hover:text-orange-600 hover:bg-orange-50"
+            >
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="5" r="2" />
+                <circle cx="12" cy="12" r="2" />
+                <circle cx="12" cy="19" r="2" />
+              </svg>
+            </button>
+          </UDropdownMenu>
+        </template>
       </template>
     </div>
 
