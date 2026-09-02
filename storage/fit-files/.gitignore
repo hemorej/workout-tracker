@@ -1,0 +1,5 @@
+# Raw webhook-delivered FIT files land here in dev (NUXT_FIT_STORAGE_DIR).
+# In prod this dir is a Forge linked directory pointing at shared storage.
+# Keep the directory in git so the deploy can link it; never track its contents.
+*
+!.gitignore
