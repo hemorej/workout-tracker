@@ -40,19 +40,28 @@ const log = getLogger('wahoo')
 export default defineEventHandler(async (event) => {
   const requestId = event.context.requestId
   const config = useRuntimeConfig()
-  const body = await readBody<WahooWebhookBody>(event)
-
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  const headerToken = getHeader(event, 'authorization')?.replace(/^Bearer\s+/i, '')
   const expected = config.wahooWebhookToken
+
+  // ── Auth — the first thing we do ─────────────────────────────────────────
+  // Reject anything that doesn't carry the shared secret before touching the
+  // DB, the filesystem, or any outbound fetch. Wahoo puts the secret in the
+  // JSON body (`webhook_token`); we also accept it as a Bearer `Authorization`
+  // header. A malformed/absent body is treated as "no token" ⇒ 401. There is
+  // no server middleware in this repo and this handler deliberately never
+  // calls `requireUserSession` (precedent: server/api/auth/login.post.ts).
+  const headerToken = getHeader(event, 'authorization')?.replace(/^Bearer\s+/i, '')
+  const body = await readBody<WahooWebhookBody>(event).catch(() => null)
   if (!secretMatches(body?.webhook_token, expected) && !secretMatches(headerToken, expected)) {
     log.warn('wahoo.webhook_unauthorized', { requestId })
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized.' })
   }
 
   // ── Filter: is there anything to do? ─────────────────────────────────────
-  const workout = body?.workout ?? null
-  const fileUrl = body?.workout_summary?.file?.url ?? null
+  // Per the Wahoo spec the workout and the FIT file are both nested inside
+  // `workout_summary` (not at the top level).
+  const summary = body?.workout_summary ?? null
+  const workout = summary?.workout ?? null
+  const fileUrl = summary?.file?.url ?? null
   if (!workout?.id || !fileUrl || workout.plan_id != null) {
     log.info('wahoo.webhook_ignored', {
       requestId,

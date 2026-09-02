@@ -283,7 +283,7 @@ function confirmDelete() {
     <div class="snap-start shrink-0 w-full flex items-center justify-between flex-wrap gap-0.5 px-4 py-2 bg-stone-50">
       <span
         v-if="hasPowerBests"
-        class="inline-flex items-center gap-0.5 shrink-0 text-[11px] text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded-full px-1.5 py-[1px] tabular-nums"
+        class="inline-flex items-center gap-0.5 shrink-0 text-[11px] text-[#3F6212] font-semibold bg-[#F3F7EA] border border-[#D0DFB4] rounded-full px-1.5 py-[1px] tabular-nums"
         :title="powerBestsLabel"
         :aria-label="powerBestsLabel"
       >
@@ -304,7 +304,7 @@ function confirmDelete() {
       </span>
       <span
         v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
-        class="inline-flex items-center gap-0.5 shrink-0 text-[11px] text-[#475569] font-semibold bg-[#f1f5f9] border border-[#dbe2ea] rounded-full px-1.5 py-[1px] whitespace-nowrap tabular-nums"
+        class="inline-flex items-center gap-0.5 shrink-0 text-[11px] text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded-full px-1.5 py-[1px] whitespace-nowrap tabular-nums"
         :title="tssLabel"
         :aria-label="tssLabel"
       >
@@ -341,6 +341,20 @@ function confirmDelete() {
           <path d="M3 10h18" />
         </svg>
         Planned
+      </button>
+      <!-- Standalone "mark as completed" tick — opens the completed-workout
+           picker directly (the Planned pill above is the build hand-off). -->
+      <button
+        v-if="isPlannedDay"
+        title="Mark as completed"
+        aria-label="Mark as completed"
+        class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full border-none bg-transparent text-[#4B88A2] opacity-65 transition-all hover:opacity-100 hover:text-[#3B6E84] hover:bg-[#e6f0f5]"
+        @click="emit('mark-completed')"
+      >
+        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M8 12l3 3 5-6" />
+        </svg>
       </button>
       <template v-if="!day.isRestDay && !isPlannedDay">
         <!-- Selecting "Delete workout" from the menu swaps in the two-step
@@ -487,7 +501,7 @@ function confirmDelete() {
       <template v-else>
         <span
           v-if="hasPowerBests"
-          class="inline-flex items-center gap-1 shrink-0 text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 tabular-nums"
+          class="inline-flex items-center gap-1 shrink-0 text-xs text-[#3F6212] font-semibold bg-[#F3F7EA] border border-[#D0DFB4] rounded-full px-2 py-0.5 tabular-nums"
           :title="powerBestsLabel"
           :aria-label="powerBestsLabel"
         >
@@ -498,7 +512,7 @@ function confirmDelete() {
         </span>
         <span
           v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
-          class="inline-flex items-center gap-1 shrink-0 text-xs text-[#475569] font-semibold bg-[#f1f5f9] border border-[#dbe2ea] rounded-full px-2 py-0.5 whitespace-nowrap tabular-nums"
+          class="inline-flex items-center gap-1 shrink-0 text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap tabular-nums"
           :title="tssLabel"
           :aria-label="tssLabel"
         >
@@ -566,6 +580,22 @@ function confirmDelete() {
             Planned
           </button>
         </template>
+
+        <!-- Standalone "mark as completed" tick — opens the completed-workout
+             picker directly (the Planned pill is the build hand-off). Dimmed by
+             default, not hover-gated, so it's reachable on touch. -->
+        <button
+          v-if="isPlannedDay"
+          title="Mark as completed"
+          aria-label="Mark as completed"
+          class="flex items-center justify-center self-start shrink-0 w-9 h-9 -mt-2 rounded-full border-none bg-transparent text-[#4B88A2] opacity-65 transition-all hover:opacity-100 hover:text-[#3B6E84] hover:bg-[#e6f0f5]"
+          @click="emit('mark-completed')"
+        >
+          <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M8 12l3 3 5-6" />
+          </svg>
+        </button>
 
         <!-- Overflow menu — Edit ride / Refresh from Wahoo / Re-upload FIT /
              photo overlay, then a separator and the destructive Delete workout.
