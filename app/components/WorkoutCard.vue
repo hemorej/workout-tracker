@@ -137,18 +137,23 @@ function openOverlay() {
 /**
  * Overflow menu for a logged workout row — keeps the row visually calm while
  * making every secondary action touch-reachable. Delete stays a separate
- * button (it has its own inline confirm). "Refresh from Wahoo" is available
- * even once the ride already has parsed FIT data (re-run the Strava → Wahoo
- * → parse flow); "Re-upload FIT file" routes through the manual upload path.
+ * button (it has its own inline confirm). "Refresh from Wahoo" shows only for
+ * outdoor rides (re-run the Strava → Wahoo → parse flow), even once the ride
+ * already has parsed FIT data; "Re-upload FIT file" routes through the manual
+ * upload path and works for indoor and outdoor rides alike.
  */
 const rowMenuItems = computed(() => [[
   { label: 'Edit ride', icon: 'i-lucide-pencil', onSelect: () => emit('edit') },
-  {
-    label: props.isRefreshingRideData ? 'Refreshing…' : 'Refresh from Wahoo',
-    icon: 'i-lucide-refresh-cw',
-    disabled: props.isRefreshingRideData,
-    onSelect: () => emit('refresh-ride-data'),
-  },
+  // "Refresh from Wahoo" only applies to outdoor rides — the Wahoo API has no
+  // FIT file for indoor/trainer (Zwift) rides, so there's nothing to re-fetch.
+  ...(isOutdoorRide.value
+    ? [{
+        label: props.isRefreshingRideData ? 'Refreshing…' : 'Refresh from Wahoo',
+        icon: 'i-lucide-refresh-cw',
+        disabled: props.isRefreshingRideData,
+        onSelect: () => emit('refresh-ride-data'),
+      }]
+    : []),
   { label: 'Re-upload FIT file', icon: 'i-lucide-upload', onSelect: () => emit('reupload-fit') },
   ...(hasStravaActivity.value && isOutdoorRide.value
     ? [{ label: 'Create photo overlay', icon: 'i-lucide-image', onSelect: () => openOverlay() }]
