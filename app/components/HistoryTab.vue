@@ -15,7 +15,7 @@
  */
 
 type GroupBy = 'week' | 'month' | 'year'
-type ActiveView = GroupBy | 'bests'
+type ActiveView = GroupBy | 'bests' | 'segments'
 
 const groupBy = ref<GroupBy>('month')
 const activeView = ref<ActiveView>('month')
@@ -25,12 +25,15 @@ const tabs = [
   { id: 'month', label: 'Month' },
   { id: 'year', label: 'Year' },
   { id: 'bests', label: '⚡️PBs' },
+  { id: 'segments', label: '🏔️ Segments' },
 ] as const
+
+const NON_PERIOD_VIEWS = ['bests', 'segments'] as const
 
 /** Switch sub-tab; keep `groupBy` in sync for the three period views. */
 function selectTab(id: ActiveView) {
   activeView.value = id
-  if (id !== 'bests') groupBy.value = id
+  if (!(NON_PERIOD_VIEWS as readonly string[]).includes(id)) groupBy.value = id as GroupBy
 }
 
 const { data, pending } = useFetch('/api/history', {
@@ -138,10 +141,13 @@ const freshCount = computed(() => bands.value.flatMap((b) => b.rows).filter((r) 
       </span>
     </div>
 
-    <!-- Loading -->
-    <div v-if="pending" class="flex justify-center py-16">
+    <!-- Loading (period + PBs views only — the Segments panel loads its own) -->
+    <div v-if="pending && activeView !== 'segments'" class="flex justify-center py-16">
       <BikeSpinner :size="24" class="text-stone-300" />
     </div>
+
+    <!-- ── Segments ──────────────────────────────────────────────────── -->
+    <HistorySegmentsPanel v-else-if="activeView === 'segments'" />
 
     <!-- ── Period rows (week / month / year) ──────────────────────────── -->
     <template v-else-if="activeView !== 'bests'">

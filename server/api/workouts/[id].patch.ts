@@ -24,6 +24,7 @@ import { eq, and, ne } from 'drizzle-orm'
 import { workouts, powerBests, POWER_BEST_DURATIONS, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
 import { useDB } from '../../db'
 import { invalidateMetrics } from '../../utils/metricsCache'
+import { syncActivitySegmentEfforts } from '../../utils/stravaSegments'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -238,6 +239,13 @@ export default defineEventHandler(async (event) => {
   }
 
   invalidateMetrics(user.id)
+
+  // Same tracked-segments hook as the create path — a "Refresh ride data"
+  // edit is often when the Strava activity's segment efforts have finished
+  // matching. Fire-and-forget; the nightly reconcile is the backstop.
+  if (updatedWorkout.rideType === 'outdoor' && updatedWorkout.stravaActivityId) {
+    void syncActivitySegmentEfforts(db, user.id, updatedWorkout.stravaActivityId, event.context.requestId)
+  }
 
   getLogger('workouts').info('workouts.updated', { requestId: event.context.requestId, workoutId: id })
 

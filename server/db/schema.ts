@@ -16,6 +16,7 @@ import {
   integer,
   bigint,
   real,
+  boolean,
   date,
   timestamp,
   jsonb,
@@ -389,6 +390,143 @@ export const wahooTokens = pgTable('wahoo_tokens', {
 })
 
 // ---------------------------------------------------------------------------
+// tracked_segments
+//
+// Strava segments the user has starred, mirrored locally. The Strava API has
+// no event/webhook for starring and no "list every segment I've ridden"
+// endpoint, so the starred list is the tracked set: it's pulled on demand by
+// POST /api/segments/sync (the "Sync segments" button) and refreshed by the
+// nightly POST /api/segments/reconcile. A row is kept when the segment is
+// un-starred (`starred = false`) rather than deleted, so re-starring is
+// instant and the effort history survives. See CLAUDE.md's Strava segments
+// section.
+// ---------------------------------------------------------------------------
+
+export const trackedSegments = pgTable(
+  'tracked_segments',
+  {
+    /** Strava's own segment id (stable, global) — used as the PK directly. */
+    id: bigint('id', { mode: 'number' }).primaryKey(),
+
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+
+    name: text('name').notNull(),
+
+    /** Segment length in metres. */
+    distanceMeters: real('distance_meters').notNull(),
+
+    /** Average grade as a percentage, e.g. 4.2. Null if Strava omitted it. */
+    averageGrade: real('average_grade'),
+
+    /** Strava climb category 0–5 (5 = HC); null / 0 for a non-categorised climb. */
+    climbCategory: integer('climb_category'),
+
+    /** Total elevation gain over the segment, metres. A property of the
+     *  segment (identical for every effort) — shown once in the UI's expander
+     *  header, not per effort. */
+    totalElevationGain: real('total_elevation_gain'),
+
+    city: text('city'),
+    state: text('state'),
+    country: text('country'),
+
+    /**
+     * Still present in the athlete's starred list as of the last sync.
+     * Un-starred segments keep their row (and efforts) with this set false.
+     */
+    starred: boolean('starred').notNull().default(true),
+
+    /**
+     * `athlete_segment_stats.effort_count` from the segment-detail response —
+     * the reconcile job compares this against the stored effort count to
+     * decide whether an effort was missed (Strava matches segments to a new
+     * activity asynchronously, so the per-activity sync can run too early).
+     */
+    stravaEffortCount: integer('strava_effort_count'),
+
+    /** `athlete_segment_stats.pr_elapsed_time` / `pr_date` — the single PR
+     *  Strava reports for this athlete, cheap to keep in sync. */
+    prElapsedTime: integer('pr_elapsed_time'),
+    prDate: date('pr_date'),
+
+    /** Last time all_efforts was pulled for this segment (null = never). */
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('tracked_segments_user_id_idx').on(table.userId),
+    check('tracked_segments_distance_positive', sql`${table.distanceMeters} > 0`),
+  ],
+)
+
+// ---------------------------------------------------------------------------
+// segment_efforts
+//
+// The authenticated athlete's individual efforts on tracked segments. Keyed
+// on Strava's own effort id so every sync path (manual, per-activity,
+// reconcile) is a plain upsert. Not joined to `workouts` — there's no shared
+// id between the two, and an effort can exist for an activity that was never
+// logged as a workout.
+// ---------------------------------------------------------------------------
+
+export const segmentEfforts = pgTable(
+  'segment_efforts',
+  {
+    /** Strava's own segment-effort id. */
+    id: bigint('id', { mode: 'number' }).primaryKey(),
+
+    segmentId: bigint('segment_id', { mode: 'number' })
+      .references(() => trackedSegments.id, { onDelete: 'cascade' })
+      .notNull(),
+
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+
+    /** The Strava activity this effort belongs to. */
+    stravaActivityId: bigint('strava_activity_id', { mode: 'number' }).notNull(),
+
+    /** Elapsed time in seconds — what efforts are ranked on. */
+    elapsedTime: integer('elapsed_time').notNull(),
+
+    /** Moving time in seconds (null on older efforts). */
+    movingTime: integer('moving_time'),
+
+    /** Effort distance in metres (≈ segment length) — used to derive speed. */
+    distanceMeters: real('distance_meters'),
+
+    startDate: timestamp('start_date', { withTimezone: true }).notNull(),
+
+    /** Average power for the effort, watts. Null if the ride had no power. */
+    averageWatts: real('average_watts'),
+
+    /** true ⇒ from a power meter; false ⇒ Strava's estimate; null ⇒ no power. */
+    deviceWatts: boolean('device_watts'),
+
+    averageHeartrate: real('average_heartrate'),
+    maxHeartrate: real('max_heartrate'),
+    averageCadence: real('average_cadence'),
+
+    /**
+     * Strava's own PR ranking for this effort within the athlete's history:
+     * 1 / 2 / 3, or null. Distinct from the 1–5 list position the UI renders
+     * (which is just the sort order of the stored efforts).
+     */
+    prRank: integer('pr_rank'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    /** Backs the "5 fastest efforts for this segment" query. */
+    index('segment_efforts_segment_id_elapsed_time_idx').on(table.segmentId, table.elapsedTime),
+    index('segment_efforts_user_id_idx').on(table.userId),
+  ],
+)
+
+// ---------------------------------------------------------------------------
 // Relations (used by Drizzle's relational query API)
 // ---------------------------------------------------------------------------
 
@@ -419,6 +557,21 @@ export const plannedWorkoutsRelations = relations(plannedWorkouts, ({ one }) => 
   }),
 }))
 
+export const trackedSegmentsRelations = relations(trackedSegments, ({ one, many }) => ({
+  user: one(users, {
+    fields: [trackedSegments.userId],
+    references: [users.id],
+  }),
+  efforts: many(segmentEfforts),
+}))
+
+export const segmentEffortsRelations = relations(segmentEfforts, ({ one }) => ({
+  segment: one(trackedSegments, {
+    fields: [segmentEfforts.segmentId],
+    references: [trackedSegments.id],
+  }),
+}))
+
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types
 // ---------------------------------------------------------------------------
@@ -430,6 +583,8 @@ export type PlannedWorkout = typeof plannedWorkouts.$inferSelect
 export type PowerBest = typeof powerBests.$inferSelect
 export type WahooPowerBest = typeof wahooPowerBests.$inferSelect
 export type WahooToken = typeof wahooTokens.$inferSelect
+export type TrackedSegment = typeof trackedSegments.$inferSelect
+export type SegmentEffort = typeof segmentEfforts.$inferSelect
 
 /** Insert types (id and createdAt are optional / auto-generated) */
 export type NewUser = typeof users.$inferInsert
@@ -438,3 +593,5 @@ export type NewPlannedWorkout = typeof plannedWorkouts.$inferInsert
 export type NewPowerBest = typeof powerBests.$inferInsert
 export type NewWahooPowerBest = typeof wahooPowerBests.$inferInsert
 export type NewWahooToken = typeof wahooTokens.$inferInsert
+export type NewTrackedSegment = typeof trackedSegments.$inferInsert
+export type NewSegmentEffort = typeof segmentEfforts.$inferInsert

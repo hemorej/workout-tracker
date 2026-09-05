@@ -38,6 +38,7 @@ export default defineNuxtConfig({
      *   NUXT_FIT_STORAGE_DIR    → runtimeConfig.fitStorageDir
      *   NUXT_WEBHOOK_USER_EMAIL → runtimeConfig.webhookUserEmail
      *   ANTHROPIC_API_KEY       → runtimeConfig.anthropicApiKey
+     *   NUXT_SEGMENTS_SYNC_TOKEN → runtimeConfig.segmentsSyncToken
      */
     runtimeConfig: {
         databaseUrl: process.env.DATABASE_URL,
@@ -47,12 +48,17 @@ export default defineNuxtConfig({
         anthropicApiKey: process.env.ANTHROPIC_API_KEY,
 
         // Strava API access — single-user, refresh token acquired via a one-time
-        // manual OAuth exchange (see CLAUDE.md). No in-app OAuth flow.
-        // Kept in place but currently unused by the app (superseded by Wahoo
-        // below) — pending removal once Wahoo has been tested end to end.
+        // manual OAuth exchange (see CLAUDE.md). No in-app OAuth flow. Drives
+        // the completed-workout picker's activity list and the tracked-segments
+        // feature (History → Segments).
         stravaClientId: process.env.STRAVA_CLIENT_ID,
         stravaClientSecret: process.env.STRAVA_CLIENT_SECRET,
         stravaRefreshToken: process.env.STRAVA_REFRESH_TOKEN,
+
+        // Shared secret authenticating POST /api/segments/reconcile, the
+        // nightly tracked-segments safety net (hit by a Forge scheduled job).
+        // Generate with: openssl rand -hex 32
+        segmentsSyncToken: process.env.NUXT_SEGMENTS_SYNC_TOKEN,
 
         // Wahoo Cloud API access — single-user, refresh token acquired via a
         // one-time manual OAuth exchange (see CLAUDE.md). No in-app OAuth flow.
