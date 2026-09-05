@@ -175,8 +175,9 @@ function power(e: SegmentEffort): string {
     <div v-else class="bg-white rounded-xl border border-stone-100 overflow-hidden divide-y divide-[#f7f5f3]">
       <div v-for="(seg, i) in segments" :key="seg.id" :class="i % 2 === 0 ? 'bg-stone-50' : 'bg-white'">
         <!-- Summary row -->
+        <div class="flex items-center hover:bg-stone-100 transition-colors">
         <button
-          class="flex w-full items-center gap-4 px-5 py-2.5 text-left hover:bg-stone-100 transition-colors"
+          class="flex min-w-0 flex-1 items-center gap-4 py-2.5 pl-5 text-left"
           @click="toggle(seg.id)"
         >
           <UIcon
@@ -220,6 +221,19 @@ function power(e: SegmentEffort): string {
             </p>
           </div>
         </button>
+
+        <!-- Open the segment on Strava (my results) -->
+        <a
+          :href="`https://www.strava.com/segments/${seg.id}?filter=my_results`"
+          target="_blank"
+          rel="noopener noreferrer"
+          :title="`Open ${seg.name} on Strava`"
+          class="shrink-0 self-stretch flex items-center px-4 text-stone-300 hover:text-orange-600 transition-colors"
+          @click.stop
+        >
+          <UIcon name="i-heroicons-arrow-top-right-on-square" class="h-4 w-4" />
+        </a>
+        </div>
 
         <!-- Expanded: top-5 efforts -->
         <div v-if="open.has(seg.id)" class="px-5 pb-3.5 pt-1">
