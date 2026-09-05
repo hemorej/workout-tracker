@@ -21,11 +21,11 @@ const groupBy = ref<GroupBy>('month')
 const activeView = ref<ActiveView>('month')
 
 const tabs = [
-  { id: 'week', label: 'Week' },
-  { id: 'month', label: 'Month' },
-  { id: 'year', label: 'Year' },
-  { id: 'bests', label: '⚡️PBs' },
-  { id: 'segments', label: '🏔️ Segments' },
+  { id: 'week', label: 'Week', icon: 'i-heroicons-view-columns' },
+  { id: 'month', label: 'Month', icon: 'i-heroicons-calendar-days' },
+  { id: 'year', label: 'Year', icon: 'i-heroicons-chart-bar' },
+  { id: 'bests', label: 'PBs', icon: 'i-heroicons-bolt' },
+  { id: 'segments', label: 'Segments', icon: null }, // mountain — inline SVG (MountainIcon.vue)
 ] as const
 
 const NON_PERIOD_VIEWS = ['bests', 'segments'] as const
@@ -118,18 +118,20 @@ const freshCount = computed(() => bands.value.flatMap((b) => b.rows).filter((r) 
   <div class="max-w-2xl mx-auto space-y-6">
 
     <!-- Group selector + current FTP chip -->
-    <div class="flex items-center justify-between gap-3 flex-wrap">
-      <div class="inline-flex gap-1 rounded-xl bg-stone-100 p-1">
+    <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="grid w-full grid-cols-5 gap-0.5 rounded-xl bg-stone-100 p-1 sm:inline-flex sm:w-auto sm:gap-1">
         <button
           v-for="opt in tabs"
           :key="opt.id"
-          class="rounded-lg px-4 py-1.5 text-sm transition-colors"
+          class="flex flex-col items-center gap-0.5 rounded-lg px-0 py-1.5 transition-colors sm:flex-row sm:gap-1.5 sm:px-4"
           :class="activeView === opt.id
             ? 'bg-white font-semibold text-stone-900 shadow-sm'
             : 'font-medium text-stone-500 hover:text-stone-700'"
           @click="selectTab(opt.id)"
         >
-          {{ opt.label }}
+          <MountainIcon v-if="opt.id === 'segments'" class="h-[17px] w-[17px] shrink-0" />
+          <UIcon v-else :name="opt.icon" class="h-[17px] w-[17px] shrink-0" />
+          <span class="text-[11px] sm:text-sm">{{ opt.label }}</span>
         </button>
       </div>
 
@@ -164,39 +166,51 @@ const freshCount = computed(() => bands.value.flatMap((b) => b.rows).filter((r) 
         <div
           v-for="(period, i) in data.periods"
           :key="period.key"
-          class="flex items-center gap-4 px-6 py-2 hover:bg-stone-100 transition-colors"
+          class="grid grid-cols-[1fr_auto] items-baseline gap-x-2.5 gap-y-0.5 px-3.5 py-2.5 transition-colors hover:bg-stone-100 sm:flex sm:items-center sm:gap-4 sm:px-6 sm:py-2"
           :class="i % 2 === 0 ? 'bg-stone-50' : 'bg-white'"
         >
-          <!-- Period label -->
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-semibold text-stone-700 truncate">{{ period.label }}</p>
-            <p class="text-xs text-stone-300">
+          <!-- Period label (col 1 / row 1) — desktop keeps the workout count beneath it -->
+          <div class="min-w-0 sm:flex-1">
+            <p class="truncate text-[13.5px] font-semibold text-stone-700 sm:text-sm">{{ period.label }}</p>
+            <p class="hidden text-xs text-stone-500 sm:block">
               {{ period.workoutCount }} workout{{ period.workoutCount !== 1 ? 's' : '' }}
             </p>
           </div>
 
-          <!-- Stats -->
-          <div class="flex items-center gap-3 shrink-0">
-            <span class="text-sm tabular-nums text-stone-600 font-medium w-20 text-right">
+          <!-- Headline TSS (col 2 / row 1) — phone only -->
+          <p class="text-right text-[13.5px] font-semibold tabular-nums text-stone-900 sm:hidden">
+            {{ period.tssTotal }} TSS
+          </p>
+
+          <!-- Meta line (col 1 / row 2) — phone only, one nowrap string -->
+          <p class="whitespace-nowrap text-[11.5px] tabular-nums text-stone-500 sm:hidden">
+            {{ period.workoutCount }} workout{{ period.workoutCount !== 1 ? 's' : '' }}
+            · {{ formatHours(period.hoursTotal) }}
+            · {{ period.kmTotal }} km
+          </p>
+
+          <!-- Stats — desktop only, restores the fixed-width columns -->
+          <div class="hidden shrink-0 items-center gap-3 sm:flex">
+            <span class="w-20 text-right text-sm font-medium tabular-nums text-stone-600">
               {{ period.tssTotal }} TSS
             </span>
-            <span class="text-sm tabular-nums text-stone-400 w-16 text-right">
+            <span class="w-16 text-right text-sm tabular-nums text-stone-500">
               {{ formatHours(period.hoursTotal) }}
             </span>
-            <span class="text-sm tabular-nums text-stone-400 w-20 text-right">
+            <span class="w-20 text-right text-sm tabular-nums text-stone-500">
               {{ period.kmTotal }} km
             </span>
           </div>
 
-          <!-- Indicators — fixed width so stats column stays aligned across all rows -->
-          <div class="flex items-center gap-1.5 shrink-0 justify-end w-32">
+          <!-- Indicators — col 2 / row 2 on phone; fixed-width slot on desktop -->
+          <div class="flex items-center gap-1.5 justify-self-end sm:w-32 sm:shrink-0 sm:justify-end">
             <!-- FTP update -->
             <span
               v-if="period.hasFtp"
-              class="inline-flex items-center gap-1 text-xs text-violet-600 font-semibold bg-violet-50 rounded-full px-2 py-0.5"
+              class="inline-flex items-center gap-1 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-violet-600 sm:px-2 sm:text-xs"
               :title="`FTP updated to ${period.ftpWatts}W`"
             >
-              <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <svg class="h-[9px] w-[9px] shrink-0 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
               {{ period.ftpWatts }}W
@@ -204,10 +218,10 @@ const freshCount = computed(() => bands.value.flatMap((b) => b.rows).filter((r) 
             <!-- Power bests -->
             <span
               v-if="period.hasPowerBests"
-              class="inline-flex items-center gap-1 text-xs text-amber-600 font-semibold bg-amber-50 rounded-full px-2 py-0.5"
+              class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-amber-600 sm:px-2 sm:text-xs"
               title="Power bests recorded"
             >
-              <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <svg class="h-[9px] w-[9px] shrink-0 sm:h-3 sm:w-3" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
               </svg>
               PR

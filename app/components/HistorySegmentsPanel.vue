@@ -129,10 +129,25 @@ function locationLine(s: TrackedSegment): string {
   return [s.city, s.state].filter(Boolean).join(', ')
 }
 
+/** Phone: fold distance + grade into the location line — the sm: stats block is hidden. */
+function locationMeta(s: TrackedSegment): string {
+  return [
+    locationLine(s) || null,
+    formatDistance(s.distanceMeters),
+    s.averageGrade != null ? `${s.averageGrade.toFixed(1)}%` : null,
+  ].filter(Boolean).join(' · ')
+}
+
 function power(e: SegmentEffort): string {
   if (e.averageWatts == null) return '—'
   // device_watts === false ⇒ Strava's estimate, not a real meter.
   return `${e.deviceWatts === false ? '~' : ''}${Math.round(e.averageWatts)} W`
+}
+
+/** Watts with no unit — the phone column header carries it. `~` still marks a Strava estimate. */
+function powerValue(e: SegmentEffort): string {
+  if (e.averageWatts == null) return '—'
+  return `${e.deviceWatts === false ? '~' : ''}${Math.round(e.averageWatts)}`
 }
 </script>
 
@@ -150,7 +165,11 @@ function power(e: SegmentEffort): string {
       >
         <BikeSpinner v-if="syncing" :size="13" class="text-white" />
         <UIcon v-else name="i-heroicons-arrow-path" class="h-3.5 w-3.5" />
-        {{ syncing ? 'Syncing…' : 'Sync segments' }}
+        <template v-if="syncing">Syncing…</template>
+        <template v-else>
+          <span class="sm:hidden">Sync</span>
+          <span class="hidden sm:inline">Sync segments</span>
+        </template>
       </button>
     </div>
 
@@ -195,8 +214,9 @@ function power(e: SegmentEffort): string {
                 {{ climbLabel(seg.climbCategory) }}
               </span>
             </div>
-            <p class="text-xs text-stone-400 truncate">
-              {{ locationLine(seg) || '—' }}
+            <p class="truncate text-[11.5px] text-stone-500 sm:text-xs">
+              <span class="sm:hidden">{{ locationMeta(seg) }}</span>
+              <span class="hidden sm:inline">{{ locationLine(seg) || '—' }}</span>
             </p>
           </div>
 
@@ -216,7 +236,7 @@ function power(e: SegmentEffort): string {
             <p class="text-sm font-semibold text-stone-900 tabular-nums">
               {{ seg.prElapsedTime != null ? formatElapsed(seg.prElapsedTime) : (seg.efforts[0] ? formatElapsed(seg.efforts[0].elapsedTime) : '—') }}
             </p>
-            <p class="text-[11px] text-stone-300">
+            <p class="text-[11px] text-stone-400">
               {{ seg.effortCount }} effort{{ seg.effortCount === 1 ? '' : 's' }}
             </p>
           </div>
@@ -242,14 +262,20 @@ function power(e: SegmentEffort): string {
           </div>
 
           <template v-else>
-            <!-- column header -->
+            <!-- column header — units live here on phone so the value cells can't wrap -->
             <div
-              class="grid grid-cols-[28px_54px_1fr_1fr_60px] sm:grid-cols-[28px_60px_72px_64px_64px_1fr] gap-2 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-300"
+              class="grid grid-cols-[26px_50px_1fr_1fr_66px] sm:grid-cols-[28px_60px_72px_64px_64px_1fr] gap-2 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400"
             >
               <span></span>
               <span>Time</span>
-              <span class="text-right">Speed</span>
-              <span class="text-right">Power</span>
+              <span class="text-right">
+                <span class="sm:hidden">km/h</span>
+                <span class="hidden sm:inline">Speed</span>
+              </span>
+              <span class="text-right">
+                <span class="sm:hidden">Watts</span>
+                <span class="hidden sm:inline">Power</span>
+              </span>
               <span class="hidden sm:inline text-right">HR</span>
               <span class="text-right">Date</span>
             </div>
@@ -257,20 +283,24 @@ function power(e: SegmentEffort): string {
             <div
               v-for="e in seg.efforts"
               :key="e.rank"
-              class="grid grid-cols-[28px_54px_1fr_1fr_60px] sm:grid-cols-[28px_60px_72px_64px_64px_1fr] items-baseline gap-2 rounded-lg px-2 py-1.5 odd:bg-stone-50/70 tabular-nums"
+              class="grid grid-cols-[26px_50px_1fr_1fr_66px] sm:grid-cols-[28px_60px_72px_64px_64px_1fr] items-baseline gap-2 rounded-lg px-2 py-1.5 odd:bg-stone-50/70 tabular-nums"
             >
               <span class="block text-center text-sm" :class="e.rank > 3 ? 'text-xs font-semibold text-stone-400' : ''">
                 {{ medal(e.rank) }}
               </span>
               <span class="text-[13px] font-semibold text-stone-900">{{ formatElapsed(e.elapsedTime) }}</span>
-              <span class="text-right text-[12.5px] text-stone-500">
-                {{ e.speedKmh != null ? `${e.speedKmh.toFixed(1)} km/h` : '—' }}
+              <span class="text-right text-[12.5px] text-stone-600">
+                <span class="sm:hidden">{{ e.speedKmh != null ? e.speedKmh.toFixed(1) : '—' }}</span>
+                <span class="hidden sm:inline">{{ e.speedKmh != null ? `${e.speedKmh.toFixed(1)} km/h` : '—' }}</span>
               </span>
-              <span class="text-right text-[12.5px] text-stone-500">{{ power(e) }}</span>
+              <span class="text-right text-[12.5px] text-stone-600">
+                <span class="sm:hidden">{{ powerValue(e) }}</span>
+                <span class="hidden sm:inline">{{ power(e) }}</span>
+              </span>
               <span class="hidden sm:inline text-right text-[12.5px] text-stone-500">
                 {{ e.averageHeartrate != null ? `${Math.round(e.averageHeartrate)}` : '—' }}
               </span>
-              <span class="text-right text-[12px] text-stone-400">{{ formatEffortDate(e.startDate) }}</span>
+              <span class="text-right text-[11.5px] text-stone-400">{{ formatEffortDate(e.startDate) }}</span>
             </div>
           </template>
         </div>
@@ -278,7 +308,10 @@ function power(e: SegmentEffort): string {
     </div>
 
     <p class="text-center text-[11.5px] text-stone-300">
-      Efforts sync automatically with each outdoor ride · use Sync after starring a new segment on Strava
+      <span class="sm:hidden">Efforts sync with each outdoor ride</span>
+      <span class="hidden sm:inline">
+        Efforts sync automatically with each outdoor ride · use Sync after starring a new segment on Strava
+      </span>
     </p>
   </div>
 </template>
