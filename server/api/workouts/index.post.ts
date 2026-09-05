@@ -31,6 +31,7 @@ import { eq, and } from 'drizzle-orm'
 import { workouts, powerBests, POWER_BEST_DURATIONS, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
 import { useDB } from '../../db'
 import { invalidateMetrics } from '../../utils/metricsCache'
+import { syncActivitySegmentEfforts } from '../../utils/stravaSegments'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -252,6 +253,14 @@ export default defineEventHandler(async (event) => {
 
   // Invalidate the metrics cache so the next GET recomputes with the new workout
   invalidateMetrics(user.id)
+
+  // Outdoor rides created from a Strava activity: pull that activity's segment
+  // efforts for any tracked segment (see CLAUDE.md's Strava segments section).
+  // Fire-and-forget — Strava matches segments asynchronously so this can be
+  // early, and the nightly reconcile is the backstop.
+  if (newWorkout.rideType === 'outdoor' && newWorkout.stravaActivityId) {
+    void syncActivitySegmentEfforts(db, user.id, newWorkout.stravaActivityId, event.context.requestId)
+  }
 
   getLogger('workouts').info('workouts.created', { requestId: event.context.requestId, workoutId: newWorkout.id })
 
