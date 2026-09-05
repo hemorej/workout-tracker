@@ -174,15 +174,15 @@ function power(e: SegmentEffort): string {
     <!-- Segment list -->
     <div v-else class="bg-white rounded-xl border border-stone-100 overflow-hidden divide-y divide-[#f7f5f3]">
       <div v-for="(seg, i) in segments" :key="seg.id" :class="i % 2 === 0 ? 'bg-stone-50' : 'bg-white'">
-        <!-- Summary row -->
-        <div class="flex items-center hover:bg-stone-100 transition-colors">
+        <!-- Summary row — everything aligns to the first text line (name / best time) -->
+        <div class="flex items-start hover:bg-stone-100 transition-colors">
         <button
-          class="flex min-w-0 flex-1 items-center gap-4 py-2.5 pl-5 text-left"
+          class="flex min-w-0 flex-1 items-start gap-4 py-2.5 pl-5 text-left"
           @click="toggle(seg.id)"
         >
           <UIcon
             :name="open.has(seg.id) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
-            class="h-4 w-4 shrink-0 text-stone-300"
+            class="mt-0.5 h-4 w-4 shrink-0 text-stone-300"
           />
 
           <div class="flex-1 min-w-0">
@@ -228,7 +228,7 @@ function power(e: SegmentEffort): string {
           target="_blank"
           rel="noopener noreferrer"
           :title="`Open ${seg.name} on Strava`"
-          class="shrink-0 self-stretch flex items-center px-4 text-stone-300 hover:text-orange-600 transition-colors"
+          class="shrink-0 flex items-start px-4 pt-3 text-stone-300 hover:text-orange-600 transition-colors"
           @click.stop
         >
           <UIcon name="i-heroicons-arrow-top-right-on-square" class="h-4 w-4" />
@@ -259,7 +259,7 @@ function power(e: SegmentEffort): string {
               :key="e.rank"
               class="grid grid-cols-[28px_54px_1fr_1fr_60px] sm:grid-cols-[28px_60px_72px_64px_64px_1fr] items-baseline gap-2 rounded-lg px-2 py-1.5 odd:bg-stone-50/70 tabular-nums"
             >
-              <span class="text-sm" :class="e.rank > 3 ? 'text-xs font-semibold text-stone-400' : ''">
+              <span class="block text-center text-sm" :class="e.rank > 3 ? 'text-xs font-semibold text-stone-400' : ''">
                 {{ medal(e.rank) }}
               </span>
               <span class="text-[13px] font-semibold text-stone-900">{{ formatElapsed(e.elapsedTime) }}</span>
