@@ -34,8 +34,8 @@ importers:
         specifier: 0.45.2
         version: 0.45.2(@types/pg@8.23.1)(pg@8.23.0)
       fit-file-parser:
-        specifier: ^4.1.0
-        version: 4.1.0
+        specifier: ^5.0.2
+        version: 5.0.2
       nuxt:
         specifier: ^4.5.2
         version: 4.5.2(c0aea877bd61fc59779c0860961b7644)
@@ -2757,8 +2757,8 @@ packages:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
     engines: {node: '>=8'}
 
-  fit-file-parser@4.1.0:
-    resolution: {integrity: sha512-nU0TCczwlg4d9XoDXBwxEZ+GpYUuOoewZRM57HTjJtNmOP62hxlINQsOf+UJE8/O86ZjwikUmXrOGbiH1fcYAA==}
+  fit-file-parser@5.0.2:
+    resolution: {integrity: sha512-X30bjaoIV4huPxt2Z16zBhaOurn2xKNEGOyEsxHrQOvHZ+pLZUa0TBRJSsLFQtZzDOOc/xM+mIhdfPw1tds80w==}
 
   flattie@1.1.1:
     resolution: {integrity: sha512-9UbaD6XdAL97+k/n+N7JwX46K/M6Zc6KcFYskrYL8wbBV/Uyk0CTAMY0VT+qiK5PM7AIc9aTWYtq65U7T+aCNQ==}
@@ -7735,7 +7735,7 @@ snapshots:
     dependencies:
       to-regex-range: 5.0.1
 
-  fit-file-parser@4.1.0:
+  fit-file-parser@5.0.2:
     dependencies:
       buffer: 6.0.3
 

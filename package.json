@@ -28,7 +28,7 @@
         "@nuxt/ui": "^4.10.0",
         "@pinia/nuxt": "^1.0.2",
         "drizzle-orm": "0.45.2",
-        "fit-file-parser": "^4.1.0",
+        "fit-file-parser": "^5.0.2",
         "nuxt": "^4.5.2",
         "nuxt-auth-utils": "^0.5.30",
         "pg": "8.23.0",
