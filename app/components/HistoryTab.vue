@@ -149,7 +149,7 @@ const freshCount = computed(() => bands.value.flatMap((b) => b.rows).filter((r) 
     </div>
 
     <!-- ── Segments ──────────────────────────────────────────────────── -->
-    <HistorySegmentsPanel v-else-if="activeView === 'segments'" />
+    <LazyHistorySegmentsPanel v-else-if="activeView === 'segments'" />
 
     <!-- ── Period rows (week / month / year) ──────────────────────────── -->
     <template v-else-if="activeView !== 'bests'">

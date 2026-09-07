@@ -23,6 +23,33 @@ export default defineNuxtConfig({
     ],
 
     /**
+     * `@nuxt/icon` (pulled in by `@nuxt/ui`). Default behaviour bundles the
+     * *entire* installed Iconify collections (`@iconify-json/heroicons` +
+     * `@iconify-json/lucide`, ~1.2 MB of JSON) into the Nitro server output
+     * so the runtime `/api/_nuxt_icon` endpoint can serve any icon on demand.
+     *
+     * This app only ever renders ~20 distinct icons, all statically named in
+     * templates (no dynamic `i-lucide-${x}` construction anywhere). So:
+     *   - `serverBundle: false` — drop the full collections from the server
+     *     build entirely.
+     *   - `clientBundle.scan` — walk the app source, find every `i-{prefix}-*`
+     *     reference, and inline just those SVGs into the client bundle. Nuxt UI
+     *     adds its own internal icons (spinners, chevrons, close buttons) via
+     *     the `icon:clientBundleIcons` hook, so those are covered automatically.
+     *
+     * Net: no icon round-trip on first render, and the server bundle shrinks
+     * by ~1.2 MB. If a dynamically-built icon name is ever added, list it
+     * explicitly under `clientBundle.icons`.
+     */
+    icon: {
+        serverBundle: false,
+        clientBundle: {
+            scan: true,
+            sizeLimitKb: 256,
+        },
+    },
+
+    /**
      * Runtime config values exposed server-side only (no `public` key = server only).
      * These are overridden by environment variables at runtime:
      *   DATABASE_URL            → runtimeConfig.databaseUrl

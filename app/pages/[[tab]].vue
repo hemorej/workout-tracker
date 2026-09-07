@@ -911,13 +911,17 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
     >
 
       <!-- ── Planning tab ────────────────────────────────────────── -->
-      <PlanningTab v-if="activeTab === 'planning'" />
+      <!-- `Lazy` prefix + `v-if`: each non-default tab's chunk is only
+           fetched the first time that tab is opened, keeping the initial
+           dashboard (the `log` tab) payload small. WorkoutBuilderTab in
+           particular is ~1.3k lines. -->
+      <LazyPlanningTab v-if="activeTab === 'planning'" />
 
       <!-- ── Workout builder tab ──────────────────────────────────── -->
-      <WorkoutBuilderTab v-if="activeTab === 'builder'" />
+      <LazyWorkoutBuilderTab v-if="activeTab === 'builder'" />
 
       <!-- ── History tab ────────────────────────────────────────── -->
-      <HistoryTab v-if="activeTab === 'history'" />
+      <LazyHistoryTab v-if="activeTab === 'history'" />
 
       <!-- ── Training log tab ────────────────────────────────────── -->
       <template v-if="activeTab === 'log'">
@@ -1405,7 +1409,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           </div>
 
           <!-- Form -->
-          <AddWorkoutModal
+          <LazyAddWorkoutModal
             ref="addWorkoutForm"
             :prefill="pendingPrefill"
             :edit-workout-id="editingWorkoutId"
@@ -1617,13 +1621,20 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
             </button>
           </div>
 
-          <UserSettingsModal @saved="closeUserSettings" @close="closeUserSettings" />
+          <LazyUserSettingsModal @saved="closeUserSettings" @close="closeUserSettings" />
         </div>
       </div>
     </Teleport>
 
     <!-- ── Ride stats overlay ─────────────────────────────────────────── -->
-    <WorkoutFitOverlay :workout="fitOverlayWorkout" @close="closeFitOverlay" />
+    <!-- `v-if` guard added so the `Lazy` chunk only loads when a workout row
+         with FIT data is actually opened (the component otherwise mounts
+         eagerly and just renders nothing until `workout` is non-null). -->
+    <LazyWorkoutFitOverlay
+      v-if="fitOverlayWorkout"
+      :workout="fitOverlayWorkout"
+      @close="closeFitOverlay"
+    />
 
   </div>
 </template>

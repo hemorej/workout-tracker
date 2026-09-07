@@ -5,21 +5,19 @@
  * current FTP, and current weight, and returns a structured workout
  * (matching WorkoutBuilderTab.vue's Block union) plus a fuelling guide.
  *
- * Streamed request, but collected server-side into a single structured
- * response via stream.finalMessage() — the stream is only used so the SDK
- * request timeout bounds time-to-first-token instead of the whole
- * generation (a slow structured response was tripping the 45s timeout and
- * getting logged upstream as a 499 "client disconnected"). Every failure
- * path (missing plan, upstream timeout, exhausted retries, refusal, schema
- * mismatch) collapses to a single error response; nothing partial is ever
- * returned.
+ * Streamed request, collected server-side into a single structured response
+ * (see server/utils/anthropic.ts). The stream is only used so the timeout
+ * bounds time-to-first-token instead of the whole generation (a slow
+ * structured response was tripping the 45s timeout and getting logged
+ * upstream as a 499 "client disconnected"). Every failure path (missing
+ * plan, upstream timeout, exhausted retries, refusal, schema mismatch)
+ * collapses to a single error response; nothing partial is ever returned.
  */
 
 import { eq, and } from 'drizzle-orm'
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { users, plannedWorkouts } from '../../db/schema'
 import { useDB } from '../../db'
-import { CoachWorkoutSchema } from '../../utils/anthropic'
+import { generateCoachWorkout, type AnthropicSystemBlock } from '../../utils/anthropic'
 
 const FALLBACK_WEIGHT_KG = 68
 
@@ -64,50 +62,36 @@ export default defineEventHandler(async (event) => {
       ].filter(Boolean).join('\n')
     : null
 
+  const systemBlocks: AnthropicSystemBlock[] = [
+    { type: 'text', text: row.trainingPlan, cache_control: { type: 'ephemeral' } },
+    {
+      type: 'text',
+      text: `You are a cycling coach. The rider's current FTP is ${ftpWatts}W and weight is ${weightKg}kg. `
+        + (todaysSessionText
+          ? `${todaysSessionText}\n\nBuild this exact session as structured blocks — the name and zone/type above `
+            + 'take precedence over the general plan document if they ever seem to disagree. Match the interval '
+            + 'structure implied by the name (e.g. "3x12min" means three 12-minute work intervals) and the target '
+            + 'TSS/duration as closely as possible. '
+          : 'Using the training plan above, propose today\'s workout as structured blocks. ')
+        + 'Also produce a fuelling guide (use the rider\'s weight for nutrition/hydration calculations). '
+        + 'Format the fuelling guide as three short paragraphs — pre-ride, during-ride, post-ride — each on its '
+        + 'own line, separated by blank lines.',
+    },
+  ]
+
   try {
-    const client = getAnthropicClient()
-    // Streamed rather than a plain messages.parse() call: with streaming the
-    // SDK's REQUEST_TIMEOUT_MS only bounds time-to-first-token, not the whole
-    // generation, so a long structured response no longer trips the timeout and
-    // aborts the connection (which Anthropic logs as a 499 "client disconnected").
-    // finalMessage() still assembles + Zod-parses the complete response, so the
-    // contract here is unchanged: a full parsed_output object or a thrown error,
-    // nothing partial.
-    const stream = client.messages.stream({
-      model: 'claude-sonnet-5',
-      max_tokens: 9000,
-      system: [
-        { type: 'text', text: row.trainingPlan, cache_control: { type: 'ephemeral' } },
-        {
-          type: 'text',
-          text: `You are a cycling coach. The rider's current FTP is ${ftpWatts}W and weight is ${weightKg}kg. `
-            + (todaysSessionText
-              ? `${todaysSessionText}\n\nBuild this exact session as structured blocks — the name and zone/type above `
-                + 'take precedence over the general plan document if they ever seem to disagree. Match the interval '
-                + 'structure implied by the name (e.g. "3x12min" means three 12-minute work intervals) and the target '
-                + 'TSS/duration as closely as possible. '
-              : 'Using the training plan above, propose today\'s workout as structured blocks. ')
-            + 'Also produce a fuelling guide (use the rider\'s weight for nutrition/hydration calculations). '
-            + 'Format the fuelling guide as three short paragraphs — pre-ride, during-ride, post-ride — each on its '
-            + 'own line, separated by blank lines.',
-        },
-      ],
-      messages: [{ role: 'user', content: 'Generate today\'s workout.' }],
-      output_config: { format: zodOutputFormat(CoachWorkoutSchema) },
-    })
-
-    const response = await stream.finalMessage()
-
-    if (!response.parsed_output) {
-      throw createError({ statusCode: 502, statusMessage: 'Coach response did not match the expected format' })
-    }
+    // generateCoachWorkout streams the request (so the timeout only bounds
+    // time-to-first-token), retries transient failures, and Zod-parses the
+    // result — so the contract here is a fully-validated workout or a thrown
+    // error, nothing partial.
+    const workout = await generateCoachWorkout(systemBlocks, 'Generate today\'s workout.')
 
     getLogger('coach').info('coach.plan_generated', {
       requestId: event.context.requestId,
-      blockCount: response.parsed_output.blocks.length,
+      blockCount: workout.blocks.length,
     })
 
-    return response.parsed_output
+    return workout
   }
   catch (err: unknown) {
     // Re-throw the "response didn't match schema" createError from above
@@ -116,14 +100,12 @@ export default defineEventHandler(async (event) => {
 
     // Covers a time-to-first-token timeout, a mid-stream disconnect,
     // retries-exhausted 5xx/429, and a safety refusal — every path lands
-    // here as a clean 502. The frontend
-    // never sees a half-built workout: it either gets the full object or
-    // an error, and nothing is written to the DB either way.
-    const e = err as Record<string, any>
+    // here as a clean 502. The frontend never sees a half-built workout: it
+    // either gets the full object or an error, and nothing is written to the
+    // DB either way.
     getLogger('coach').error('coach.generation_failed', {
       requestId: event.context.requestId,
-      status: e?.status,
-      message: e?.message,
+      message: (err as Error)?.message,
     })
     throw createError({ statusCode: 502, statusMessage: 'Failed to generate workout' })
   }
