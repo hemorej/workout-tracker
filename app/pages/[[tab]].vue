@@ -35,6 +35,7 @@ interface StravaRideSummary {
   id: number
   name: string
   startDateLocal: string
+  startDate: string
   movingTimeSeconds: number
   distanceMeters: number
   rideType: 'trainer' | 'outdoor'
@@ -355,8 +356,14 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}m`
 }
 
-function formatRideDate(startDateLocal: string): string {
-  return new Date(startDateLocal).toLocaleString('en-US', {
+/**
+ * Formats a Strava ride's start time in the viewer's local timezone. Takes the
+ * true UTC instant (`startDate`) — not `startDateLocal`, whose trailing "Z" is
+ * bogus (it's already athlete-local wall-clock) and which renders as UTC on a
+ * UTC host.
+ */
+function formatRideDate(startDate: string): string {
+  return new Date(startDate).toLocaleString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -1485,7 +1492,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
                 <div class="min-w-0">
                   <p class="text-sm font-medium text-stone-800 truncate">{{ activity.name }}</p>
                   <p class="text-xs text-stone-400 mt-0.5">
-                    {{ formatRideDate(activity.startDateLocal) }}
+                    {{ formatRideDate(activity.startDate) }}
                     &nbsp;·&nbsp;
                     {{ formatDuration(Math.round(activity.movingTimeSeconds / 60)) }}
                     <span v-if="activity.rideType === 'trainer'">&nbsp;·&nbsp;Indoor</span>

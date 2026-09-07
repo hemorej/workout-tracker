@@ -68,6 +68,13 @@ export interface StravaRideSummary {
   name: string
   /** Local start time, ISO-ish "YYYY-MM-DDTHH:mm:ssZ" per Strava's summary_activity schema */
   startDateLocal: string
+  /**
+   * True UTC start instant ("YYYY-MM-DDTHH:mm:ssZ", genuinely UTC unlike
+   * `startDateLocal`). Use this for time-of-day display so it can be rendered
+   * in the viewer's timezone; `startDateLocal` is only reliable for deriving
+   * the ride's calendar day.
+   */
+  startDate: string
   movingTimeSeconds: number
   distanceMeters: number
   /** Mirrors workouts.ride_type: 'trainer' for Strava's VirtualRide, 'outdoor' for Ride. */
@@ -79,6 +86,7 @@ interface StravaActivity {
   name: string
   type: string
   start_date_local: string
+  start_date: string
   moving_time: number
   distance: number
 }
@@ -194,6 +202,7 @@ export async function fetchRecentStravaRides(limit = 3): Promise<StravaRideSumma
       id: a.id,
       name: a.name,
       startDateLocal: a.start_date_local,
+      startDate: a.start_date,
       movingTimeSeconds: a.moving_time,
       distanceMeters: a.distance,
       rideType: (a.type === 'VirtualRide' ? 'trainer' : 'outdoor') as 'trainer' | 'outdoor',
