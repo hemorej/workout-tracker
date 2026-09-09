@@ -356,10 +356,10 @@ async function handleSubmit() {
               />
               <button
                 type="button"
-                class="text-xs text-stone-300 hover:text-rose-400 transition-colors px-1"
+                class="inline-flex items-center text-stone-300 hover:text-rose-400 transition-colors px-1"
                 @click="removePowerBestRow(i)"
               >
-                ✕
+                <UIcon name="i-heroicons-x-mark" class="h-4 w-4" />
               </button>
             </div>
           </div>

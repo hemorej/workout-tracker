@@ -159,24 +159,24 @@ function openOverlay() {
  */
 const rowMenuItems = computed<DropdownMenuItem[][]>(() => [
   [
-    { label: 'Edit ride', icon: 'i-lucide-pencil', onSelect: () => emit('edit') },
+    { label: 'Edit ride', icon: 'i-heroicons-pencil-square', onSelect: () => emit('edit') },
     // "Refresh from Wahoo" only applies to outdoor rides — the Wahoo API has no
     // FIT file for indoor/trainer (Zwift) rides, so there's nothing to re-fetch.
     ...(isOutdoorRide.value
       ? [{
           label: props.isRefreshingRideData ? 'Refreshing…' : 'Refresh from Wahoo',
-          icon: 'i-lucide-refresh-cw',
+          icon: 'i-heroicons-arrow-path',
           disabled: props.isRefreshingRideData,
           onSelect: () => emit('refresh-ride-data'),
         }]
       : []),
-    { label: 'Re-upload FIT file', icon: 'i-lucide-upload', onSelect: () => emit('reupload-fit') },
+    { label: 'Re-upload FIT file', icon: 'i-heroicons-arrow-up-tray', onSelect: () => emit('reupload-fit') },
     ...(hasStravaActivity.value && isOutdoorRide.value
-      ? [{ label: 'Create photo overlay', icon: 'i-lucide-image', onSelect: () => openOverlay() }]
+      ? [{ label: 'Create photo overlay', icon: 'i-heroicons-photo', onSelect: () => openOverlay() }]
       : []),
   ],
   [
-    { label: 'Delete workout', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => requestDelete() },
+    { label: 'Delete workout', icon: 'i-heroicons-trash', color: 'error', onSelect: () => requestDelete() },
   ],
 ])
 

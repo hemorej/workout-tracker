@@ -734,35 +734,35 @@ function download() {
             <div class="flex justify-end gap-2 mb-3.5">
               <button
                 title="Move before previous"
-                class="cursor-pointer text-white"
-                style="width: 30px; height: 30px; border-radius: 50%; background: #44403c; border: none; font-size: 14px;"
+                class="inline-flex items-center justify-center cursor-pointer text-white"
+                style="width: 30px; height: 30px; border-radius: 50%; background: #44403c; border: none;"
                 @click="moveBlock(selectedBlock.id, -1)"
               >
-                ←
+                <UIcon name="i-heroicons-arrow-left" class="h-4 w-4" />
               </button>
               <button
                 title="Move after next"
-                class="cursor-pointer text-white"
-                style="width: 30px; height: 30px; border-radius: 50%; background: #44403c; border: none; font-size: 14px;"
+                class="inline-flex items-center justify-center cursor-pointer text-white"
+                style="width: 30px; height: 30px; border-radius: 50%; background: #44403c; border: none;"
                 @click="moveBlock(selectedBlock.id, 1)"
               >
-                →
+                <UIcon name="i-heroicons-arrow-right" class="h-4 w-4" />
               </button>
               <button
                 title="Duplicate"
-                class="cursor-pointer text-white"
-                style="width: 30px; height: 30px; border-radius: 50%; background: #44403c; border: none; font-size: 14px;"
+                class="inline-flex items-center justify-center cursor-pointer text-white"
+                style="width: 30px; height: 30px; border-radius: 50%; background: #44403c; border: none;"
                 @click="duplicateBlock(selectedBlock.id)"
               >
-                ⧉
+                <UIcon name="i-heroicons-square-2-stack" class="h-4 w-4" />
               </button>
               <button
                 title="Delete"
-                class="cursor-pointer text-white"
-                style="width: 30px; height: 30px; border-radius: 50%; background: #7f1d1d; border: none; font-size: 14px;"
+                class="inline-flex items-center justify-center cursor-pointer text-white"
+                style="width: 30px; height: 30px; border-radius: 50%; background: #7f1d1d; border: none;"
                 @click="deleteBlock(selectedBlock.id)"
               >
-                🗑
+                <UIcon name="i-heroicons-trash" class="h-4 w-4" />
               </button>
             </div>
 
