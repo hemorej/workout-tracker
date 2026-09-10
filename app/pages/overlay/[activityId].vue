@@ -37,7 +37,8 @@ interface ActivityOverlayData {
 
 const OVERLAY_FONT_FAMILY = '"Hanken Grotesk", system-ui, sans-serif'
 const DEFAULT_LINE_COLOR = '#ea580c'
-/** Swatch palette for the route/elevation line. */
+const DEFAULT_TEXT_COLOR = '#ffffff'
+/** Swatch palette shared by the line colour and text colour controls. */
 const LINE_PALETTE = ['#ea580c', '#eeb902', '#ffffff', '#1c1917', '#2d7dd2']
 /**
  * The design reference width. Every poster type size and offset below is
@@ -63,6 +64,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const treated = ref(true) // false = "as shot"
 const overlayGraphic = ref<'route' | 'elevation'>('route')
 const lineColor = ref(DEFAULT_LINE_COLOR)
+const textColor = ref(DEFAULT_TEXT_COLOR)
 const lineWeight = ref(3.4) // px at POSTER_REF_WIDTH, range 1.5–6.0
 const title = ref('') // seeded from the activity name
 const place = ref('')
@@ -502,15 +504,6 @@ async function renderOverlay() {
   ctx.clearRect(0, 0, w, h)
   ctx.drawImage(bgCanvas, 0, 0)
 
-  // ── Scrim: what makes the type legible over an untreated photo. ──
-  const scrim = ctx.createLinearGradient(0, 0, 0, h)
-  scrim.addColorStop(0, 'rgba(0,0,0,0.5)')
-  scrim.addColorStop(0.34, 'rgba(0,0,0,0.12)')
-  scrim.addColorStop(0.62, 'rgba(0,0,0,0.34)')
-  scrim.addColorStop(1, 'rgba(0,0,0,0.82)')
-  ctx.fillStyle = scrim
-  ctx.fillRect(0, 0, w, h)
-
   const accent = lineColor.value
 
   ctx.save()
@@ -524,7 +517,7 @@ async function renderOverlay() {
   }
   ctx.restore()
 
-  drawType(ctx, w, h, k, accent)
+  drawType(ctx, w, h, k)
 }
 
 function drawRoute(ctx: CanvasRenderingContext2D, w: number, h: number, k: number, accent: string) {
@@ -606,7 +599,7 @@ function drawElevation(ctx: CanvasRenderingContext2D, w: number, h: number, k: n
   routeBounds = { x: x0, y: bandTop, w, h: bandH }
 }
 
-function drawType(ctx: CanvasRenderingContext2D, w: number, h: number, k: number, accent: string) {
+function drawType(ctx: CanvasRenderingContext2D, w: number, h: number, k: number) {
   const d = activityData.value
   if (!d) {
     textBounds = null
@@ -644,7 +637,7 @@ function drawType(ctx: CanvasRenderingContext2D, w: number, h: number, k: number
 
   if (topLine) {
     setFont(600, 10 * k, 0.24)
-    ctx.fillStyle = 'rgba(255,255,255,0.78)'
+    ctx.fillStyle = textColor.value
     ctx.fillText(topLine, tx, ty)
     clusterMaxW = Math.max(clusterMaxW, ctx.measureText(topLine).width)
     ty += 10 * k
@@ -652,7 +645,7 @@ function drawType(ctx: CanvasRenderingContext2D, w: number, h: number, k: number
 
   ty += 9 * k
   setFont(800, 30 * k, -0.015)
-  ctx.fillStyle = '#fff'
+  ctx.fillStyle = textColor.value
   const titleLines = wrapText(ctx, title.value || capitalizeFirst(d.name), 0.78 * w)
   const titleLineHeight = 30 * k * 1.02
   for (const ln of titleLines) {
@@ -680,12 +673,12 @@ function drawType(ctx: CanvasRenderingContext2D, w: number, h: number, k: number
   setFont(800, 62 * k, -0.03)
   ctx.textBaseline = 'alphabetic'
   ctx.textAlign = 'left'
-  ctx.fillStyle = '#fff'
+  ctx.fillStyle = textColor.value
   ctx.fillText(fmtDistanceKm(d.distanceMeters), padL, distBaseline)
 
   setFont(600, 10 * k, 0.22)
   ctx.textBaseline = 'top'
-  ctx.fillStyle = accent
+  ctx.fillStyle = textColor.value
   ctx.fillText('KILOMETRES', padL, unitTop)
   resetLetterSpacing()
 
@@ -724,11 +717,11 @@ function drawType(ctx: CanvasRenderingContext2D, w: number, h: number, k: number
 
       setFont(700, valueSize)
       ctx.textBaseline = 'top'
-      ctx.fillStyle = '#fff'
+      ctx.fillStyle = textColor.value
       ctx.fillText(c.value, rightX, cellTop)
 
       setFont(500, labelSize, 0.18)
-      ctx.fillStyle = 'rgba(255,255,255,0.55)'
+      ctx.fillStyle = textColor.value
       ctx.fillText(c.label, rightX, cellTop + valueSize + gapVL)
     })
     resetLetterSpacing()
@@ -744,7 +737,7 @@ watch([photoImage, treated], async () => {
 
 watch(
   [
-    overlayGraphic, lineColor, lineWeight, title, place, shownMetrics, activityData,
+    overlayGraphic, lineColor, textColor, lineWeight, title, place, shownMetrics, activityData,
     textOffsetX, textOffsetY, routeOffsetX, routeOffsetY,
   ],
   () => {
@@ -1026,19 +1019,45 @@ function downloadOverlay() {
                 No elevation data for this ride.
               </p>
 
-              <div class="mt-[14px] flex gap-2">
-                <button
-                  v-for="c in LINE_PALETTE"
-                  :key="c"
-                  type="button"
-                  class="size-[26px] rounded-full"
-                  :style="{
-                    background: c,
-                    border: c.toLowerCase() === '#ffffff' ? '1px solid #e7e5e4' : 'none',
-                    boxShadow: lineColor === c ? `0 0 0 2px #fff, 0 0 0 4px ${c}` : 'none',
-                  }"
-                  @click="lineColor = c"
-                />
+              <div class="mt-[14px] flex flex-wrap gap-x-6 gap-y-3">
+                <div>
+                  <div class="mb-[7px] text-[11.5px] font-medium text-[#57534f]">
+                    Line colour
+                  </div>
+                  <div class="flex gap-1.5">
+                    <button
+                      v-for="c in LINE_PALETTE"
+                      :key="`line-${c}`"
+                      type="button"
+                      class="size-[24px] rounded-full"
+                      :style="{
+                        background: c,
+                        border: c.toLowerCase() === '#ffffff' ? '1px solid #e7e5e4' : 'none',
+                        boxShadow: lineColor === c ? `0 0 0 2px #fff, 0 0 0 4px ${c}` : 'none',
+                      }"
+                      @click="lineColor = c"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div class="mb-[7px] text-[11.5px] font-medium text-[#57534f]">
+                    Text colour
+                  </div>
+                  <div class="flex gap-1.5">
+                    <button
+                      v-for="c in LINE_PALETTE"
+                      :key="`text-${c}`"
+                      type="button"
+                      class="size-[24px] rounded-full"
+                      :style="{
+                        background: c,
+                        border: c.toLowerCase() === '#ffffff' ? '1px solid #e7e5e4' : 'none',
+                        boxShadow: textColor === c ? `0 0 0 2px #fff, 0 0 0 4px ${c}` : 'none',
+                      }"
+                      @click="textColor = c"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div class="mb-[9px] mt-4 flex items-baseline justify-between">
