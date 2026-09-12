@@ -85,7 +85,7 @@ const tsbDisplay = computed(() =>
         <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 pb-[10px] border-b-2 border-[#e7e5e0] mb-2.5">
           Today
         </p>
-        <p aria-hidden="true" class="invisible text-[11px] font-medium uppercase tracking-[0.08em] mb-1.5">.</p>
+        <p aria-hidden="true" class="invisible text-[11px] font-medium uppercase tracking-[0.08em] mb-2.5">.</p>
         <p class="text-xl sm:text-[25px] font-bold text-stone-900 tabular whitespace-nowrap">
           <span class="text-primary">{{ todayWeekday }}</span> {{ todayDatePart }}
         </p>
