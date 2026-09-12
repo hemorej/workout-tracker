@@ -80,6 +80,16 @@ function decodeHtmlEntities(s: string): string {
   return s.replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
 }
 
+/**
+ * Case- and diacritic-insensitive key for joining a climb name across the two
+ * sources: zwiftinsider.com spells some names with accents (e.g. "Bealach na
+ * Bà") that whatsonzwift.com spells without them ("Bealach na Ba") — a plain
+ * `.toLowerCase()` match silently drops that climb.
+ */
+function normalizeClimbName(name: string): string {
+  return name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
 interface TodaysClimbName {
   portal: string
   name: string
@@ -139,7 +149,7 @@ function parseClimbStatsByName(html: string): Map<string, ClimbStats> {
     const slugMatch = cardHtml.match(/climb-portal\/([a-z0-9-]+)/)
     if (!distMatch || !elevMatch || !gradeMatch || !slugMatch) continue
 
-    statsByName.set(name.toLowerCase(), {
+    statsByName.set(normalizeClimbName(name), {
       distanceKm: Number.parseFloat(distMatch[1]!),
       elevationM: Number.parseInt(elevMatch[1]!.replace(/,/g, ''), 10),
       gradientPercent: Number.parseFloat(gradeMatch[1]!),
@@ -183,7 +193,7 @@ export async function fetchClimbPortalSchedule(todayStr: string): Promise<ClimbP
 
   const entries: ClimbPortalEntry[] = []
   for (const climb of todaysClimbs) {
-    const stats = statsByName.get(climb.name.toLowerCase())
+    const stats = statsByName.get(normalizeClimbName(climb.name))
     if (!stats) {
       getLogger('zwift').warn('zwift.climb_stats_not_found', { name: climb.name })
       continue
