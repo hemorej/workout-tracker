@@ -3,8 +3,19 @@ import { usePlanningStore } from '~/stores/planning'
 import type { PlanEntry } from '~/stores/planning'
 
 const planning = usePlanningStore()
+const emit = defineEmits<{ openTodaysEvents: [] }>()
 
 onMounted(() => planning.fetchPlans())
+
+// Today's date as YYYY-MM-DD (local time), used to find the current week.
+const todayStr = computed(() => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})
+
+function isCurrentWeek(week: { days: { date: string }[] }) {
+  return week.days.some(d => d.date === todayStr.value)
+}
 
 // ── Zone config ──────────────────────────────────────────────────────────────
 
@@ -341,8 +352,19 @@ async function clearNote() {
             class="sticky flex items-baseline justify-between gap-3 px-3 py-1.5 sm:block sm:px-3 sm:py-2.5 sm:text-right"
             style="top: var(--app-sticky-h, 0px)"
           >
-            <div class="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-stone-400 leading-tight">
-              Week of {{ weekLabel(week.monday) }}
+            <div>
+              <div class="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-stone-400 leading-tight">
+                Week of {{ weekLabel(week.monday) }}
+              </div>
+              <button
+                v-if="isCurrentWeek(week)"
+                type="button"
+                class="sm:hidden -ml-[7px] mt-1 inline-flex items-center gap-1.5 rounded-[7px] px-[7px] py-[3px] text-[11.5px] font-semibold text-primary hover:bg-orange-50 transition-colors cursor-pointer"
+                @click="emit('openTodaysEvents')"
+              >
+                <MountainIcon class="w-[13px] h-[13px]" />
+                Today's Zwift events
+              </button>
             </div>
             <div class="flex items-baseline gap-2 sm:block">
               <div class="sm:mt-1.5 text-sm font-semibold tabular text-stone-700 leading-tight">
@@ -380,7 +402,17 @@ async function clearNote() {
           <div class="hidden sm:flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 pt-2 pb-1 border-b border-stone-100">
             <span class="w-12 sm:w-16 shrink-0" />
             <span class="w-9 shrink-0" />
-            <span class="flex-1 min-w-0" />
+            <span class="flex-1 min-w-0">
+              <button
+                v-if="isCurrentWeek(week)"
+                type="button"
+                class="-ml-[7px] inline-flex items-center gap-1.5 rounded-[7px] px-[7px] py-[3px] text-[11.5px] font-semibold text-primary hover:bg-orange-50 transition-colors cursor-pointer"
+                @click="emit('openTodaysEvents')"
+              >
+                <MountainIcon class="w-[13px] h-[13px]" />
+                Today's Zwift events
+              </button>
+            </span>
             <span class="w-5 shrink-0" />
             <span class="w-5 shrink-0" />
             <span class="w-14 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-300">TSS</span>

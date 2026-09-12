@@ -82,6 +82,8 @@ const routeTab = computed<TabId>(() => {
 const activeTab = ref<TabId>(routeTab.value)
 watch(routeTab, (tab) => { activeTab.value = tab })
 
+const showTodaysEvents = ref(false)
+
 useHead({
   title: computed(() => tabs.find(t => t.id === activeTab.value)?.title ?? 'Training Log'),
 })
@@ -111,28 +113,6 @@ const todayWeekday = computed(() =>
 const todayDatePart = computed(() =>
   new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
 )
-
-/**
- * The standalone date cell is `position: fixed` (stays put while the page
- * scrolls). Its initial `top` is set once to line up with the headline
- * metrics card's top edge — recomputed on resize / tab change but NOT on
- * scroll, so it doesn't drift upward with the page.
- */
-const headlineRef = ref<HTMLElement | null>(null)
-const dateCellTop = ref(0)
-const syncDateCellTop = () => {
-  if (headlineRef.value) {
-    dateCellTop.value = headlineRef.value.getBoundingClientRect().top + window.scrollY
-  }
-}
-onMounted(() => {
-  syncDateCellTop()
-  window.addEventListener('resize', syncDateCellTop)
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', syncDateCellTop)
-})
-watch(() => activeTab.value, () => nextTick(syncDateCellTop))
 
 // Today's planned day entry (null if nothing planned or plan is a rest day)
 // Pass the full PlannedDay so WorkoutCard can use projected CTL/TSB values
@@ -922,7 +902,9 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
            fetched the first time that tab is opened, keeping the initial
            dashboard (the `log` tab) payload small. WorkoutBuilderTab in
            particular is ~1.3k lines. -->
-      <LazyPlanningTab v-if="activeTab === 'planning'" />
+      <template v-if="activeTab === 'planning'">
+      <LazyPlanningTab @open-todays-events="showTodaysEvents = true" />
+      </template>
 
       <!-- ── Workout builder tab ──────────────────────────────────── -->
       <LazyWorkoutBuilderTab v-if="activeTab === 'builder'" />
@@ -933,24 +915,10 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
       <!-- ── Training log tab ────────────────────────────────────── -->
       <template v-if="activeTab === 'log'">
 
-      <!-- Standalone "today's date" cell — styled like a MetricsSummary
-           headline cell but detached from that card and pinned to the left
-           edge of the viewport. Hidden below xl where there's no room. -->
-      <div
-        class="hidden xl:block fixed left-6 z-10 pt-6"
-        :style="{ top: dateCellTop + 'px' }"
-      >
-        <p class="text-[11px] font-semibold uppercase tracking-[0.13em] text-stone-400 mb-2.5">
-          Today
-        </p>
-        <p class="text-[27px] font-bold text-stone-900 tabular whitespace-nowrap">
-          <span class="text-primary">{{ todayWeekday }}</span> {{ todayDatePart }}
-        </p>
-      </div>
-
       <!-- Headline metrics strip -->
-      <div ref="headlineRef">
       <MetricsSummary
+        :today-weekday="todayWeekday"
+        :today-date-part="todayDatePart"
         :weekly-tss="workouts.weeklyStats.tssTotal"
         :weekly-hours="workouts.weeklyStats.hoursTotal"
         :weekly-km="workouts.weeklyStats.kmTotal"
@@ -961,7 +929,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
         :yesterday-t-s-b="workouts.yesterdayMetrics?.tsb"
         @open-history="openHistoryChart"
       />
-      </div>
+
 
       <!-- Section header + Add button, and the content directly below it —
            grouped so their shared spacing can be tightened on narrow/vertical
@@ -1642,6 +1610,9 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
       :workout="fitOverlayWorkout"
       @close="closeFitOverlay"
     />
+
+    <!-- ── Today's Zwift events dialog (Planning tab) ─────────────────── -->
+    <TodaysEventsDialog :open="showTodaysEvents" @close="showTodaysEvents = false" />
 
   </div>
 </template>
