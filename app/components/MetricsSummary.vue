@@ -15,6 +15,8 @@
  */
 
 interface Props {
+  todayWeekday: string
+  todayDatePart: string
   weeklyTss: number
   weeklyHours: number
   weeklyKm: number
@@ -67,7 +69,26 @@ const tsbDisplay = computed(() =>
     group label replaces the old full-height dividers between every stat.
   -->
   <div class="bg-white rounded-[14px] border border-[#f0eeec] px-4 py-5 sm:px-7 sm:py-6">
-    <div class="grid grid-cols-[3fr_2fr] gap-3 sm:gap-7">
+
+    <!-- Today (mobile only) -->
+    <div class="sm:hidden flex items-baseline justify-between pb-[9px] border-b-2 border-[#e7e5e0] mb-3">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500">Today</p>
+      <p class="text-xl font-bold text-stone-900 tabular">
+        <span class="text-primary">{{ todayWeekday }}</span> {{ todayDatePart }}
+      </p>
+    </div>
+
+    <div class="grid grid-cols-[3fr_2fr] sm:grid-cols-[auto_3fr_2fr] gap-3 sm:gap-7">
+
+      <!-- Today (sm and up) -->
+      <div class="hidden sm:block">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 pb-[10px] border-b-2 border-[#e7e5e0] mb-2.5">
+          Today
+        </p>
+        <p class="text-xl sm:text-[25px] font-bold text-stone-900 tabular whitespace-nowrap">
+          <span class="text-primary">{{ todayWeekday }}</span> {{ todayDatePart }}
+        </p>
+      </div>
 
       <!-- This week -->
       <div>
