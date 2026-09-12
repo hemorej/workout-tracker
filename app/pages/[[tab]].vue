@@ -82,6 +82,8 @@ const routeTab = computed<TabId>(() => {
 const activeTab = ref<TabId>(routeTab.value)
 watch(routeTab, (tab) => { activeTab.value = tab })
 
+const showTodaysEvents = ref(false)
+
 useHead({
   title: computed(() => tabs.find(t => t.id === activeTab.value)?.title ?? 'Training Log'),
 })
@@ -133,6 +135,23 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', syncDateCellTop)
 })
 watch(() => activeTab.value, () => nextTick(syncDateCellTop))
+
+/** Same fixed-cell-synced-to-content-top trick as the log tab's date cell, but for the Planning tab's "Today's events" link. */
+const planningHeadlineRef = ref<HTMLElement | null>(null)
+const planningCellTop = ref(0)
+const syncPlanningCellTop = () => {
+  if (planningHeadlineRef.value) {
+    planningCellTop.value = planningHeadlineRef.value.getBoundingClientRect().top + window.scrollY
+  }
+}
+onMounted(() => {
+  syncPlanningCellTop()
+  window.addEventListener('resize', syncPlanningCellTop)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncPlanningCellTop)
+})
+watch(() => activeTab.value, () => nextTick(syncPlanningCellTop))
 
 // Today's planned day entry (null if nothing planned or plan is a rest day)
 // Pass the full PlannedDay so WorkoutCard can use projected CTL/TSB values
@@ -922,7 +941,33 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
            fetched the first time that tab is opened, keeping the initial
            dashboard (the `log` tab) payload small. WorkoutBuilderTab in
            particular is ~1.3k lines. -->
-      <LazyPlanningTab v-if="activeTab === 'planning'" />
+      <template v-if="activeTab === 'planning'">
+
+      <!-- Standalone "Today's events" link — styled and positioned exactly
+           like the log tab's "Today" date cell (same label style, same
+           fixed-to-content-top trick), but as a clickable button opening
+           the climb-portal/race dialog instead of showing a date. Hidden
+           below xl where there's no room. -->
+      <div
+        class="hidden xl:block fixed left-6 z-10 pt-6"
+        :style="{ top: planningCellTop + 'px' }"
+      >
+        <p class="text-[11px] font-semibold uppercase tracking-[0.13em] text-stone-400 mb-2.5">
+          Today
+        </p>
+        <button
+          type="button"
+          class="block text-left text-[27px] font-bold text-stone-900 tabular whitespace-nowrap hover:opacity-80 transition-opacity"
+          @click="showTodaysEvents = true"
+        >
+          <span class="text-primary">Zwift</span> events
+        </button>
+      </div>
+
+      <div ref="planningHeadlineRef">
+      <LazyPlanningTab />
+      </div>
+      </template>
 
       <!-- ── Workout builder tab ──────────────────────────────────── -->
       <LazyWorkoutBuilderTab v-if="activeTab === 'builder'" />
@@ -1642,6 +1687,9 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
       :workout="fitOverlayWorkout"
       @close="closeFitOverlay"
     />
+
+    <!-- ── Today's Zwift events dialog (Planning tab) ─────────────────── -->
+    <TodaysEventsDialog :open="showTodaysEvents" @close="showTodaysEvents = false" />
 
   </div>
 </template>
