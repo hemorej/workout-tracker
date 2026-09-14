@@ -324,15 +324,12 @@ function confirmDelete() {
         </svg>
         {{ day.workout?.rpe }}
       </span>
-      <!-- Planned pill: on mobile the Workout Builder (Manual / Auto) is
-           unavailable, so the pill routes straight to "mark as completed" —
-           the same completed-workout picker the standalone tick used to open. -->
+      <!-- Planned pill: on mobile the Workout Builder (Manual / Auto) is unavailable -->
       <button
         v-else-if="isPlannedDay"
         title="Open to log details"
         aria-label="Open planned workout to log details"
         class="inline-flex items-center gap-1 shrink-0 text-[11px] text-[#3B6E84] font-semibold bg-[#F1F7FA] border border-[#B8D5E0] rounded-full px-2 py-[1px] whitespace-nowrap transition-colors hover:bg-[#e6f0f5] hover:border-[#4B88A2]"
-        @click="emit('mark-completed')"
       >
         <svg class="w-[11px] h-[11px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="4" width="18" height="17" rx="2" />
