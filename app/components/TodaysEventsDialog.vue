@@ -179,7 +179,8 @@ watch(() => props.open, (isOpen) => {
                       {{ race.name }}
                     </p>
                     <p class="tabular text-[11.5px] text-stone-400 mt-px">
-                      <template v-if="race.distanceKm">{{ race.distanceKm.toFixed(1) }} km</template>
+                      <template v-if="race.laps && race.distanceKm">{{ race.laps }} laps &middot; {{ race.distanceKm.toFixed(1) }} km</template>
+                      <template v-else-if="race.distanceKm">{{ race.distanceKm.toFixed(1) }} km</template>
                       <template v-else-if="race.laps">{{ race.laps }} laps</template>
                     </p>
                   </div>

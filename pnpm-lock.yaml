@@ -57,6 +57,9 @@ importers:
       zod:
         specifier: ^4.6.2
         version: 4.6.2
+      zwift-data:
+        specifier: ^1.50.0
+        version: 1.50.0
     devDependencies:
       '@adonisjs/hash':
         specifier: ^10.1.1
@@ -4967,6 +4970,9 @@ packages:
   zod@4.6.2:
     resolution: {integrity: sha512-lh5RCAGFa1Cm2hjtNwLQhSs/AsqdWnTQaBER9fEwN/88pSh7KOtJavtBx/0VlkN/uFd61SwYmljLMDAsHlvzBQ==}
 
+  zwift-data@1.50.0:
+    resolution: {integrity: sha512-0f1akqQQo3h8e1JkVUSfsHr03OfH/D8OkT161oy0n/grSsn4EQn7W6PV27ydxT4Gd2h26hgUJr9V0TI85sqmJg==}
+
 snapshots:
 
   '@adonisjs/hash@10.1.1':
@@ -5482,7 +5488,7 @@ snapshots:
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
       '@jridgewell/trace-mapping': 0.3.31
 
   '@jridgewell/remapping@2.3.5':
@@ -8384,7 +8390,7 @@ snapshots:
 
   magic-string@0.30.21:
     dependencies:
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
 
   magic-string@1.1.0:
     dependencies:
@@ -10272,3 +10278,5 @@ snapshots:
       readable-stream: 4.7.0
 
   zod@4.6.2: {}
+
+  zwift-data@1.50.0: {}

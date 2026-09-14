@@ -45,6 +45,7 @@
  * climb for a few minutes after midnight.
  */
 
+import { routes as zwiftDataRoutes } from 'zwift-data'
 import { getCachedZwiftData, setCachedZwiftData } from './zwiftEventsCache'
 
 // ---------------------------------------------------------------------------
@@ -223,9 +224,30 @@ interface ZwiftUpcomingEvent {
   eventStart: string
   laps: number
   distanceInMeters: number
+  routeId: number
 }
 
 const CRIT_NAME_PATTERN = /crit/i
+
+/**
+ * Zwift's own `/events/upcoming` feed always reports `distanceInMeters: 0`
+ * for lap-based races (confirmed live: 0 exceptions across a full day's
+ * events) — it only fills in a real distance for point-to-point/fixed-
+ * distance events. For laps we compute it ourselves from the `zwift-data`
+ * npm package's route table (id, per-lap `distance`, one-time
+ * `leadInDistance`, all in km — MIT-licensed, community-maintained,
+ * https://www.npmjs.com/package/zwift-data), keyed by the event's own
+ * `routeId`: `laps * route.distance + (route.leadInDistance ?? 0)`.
+ * Verified against Zwift's own published stage sheets (e.g. "Croissant",
+ * 2 laps: 2×9.273 + 3.241 = 21.79 km vs. Zwift's listed 21.78 km).
+ */
+const routesById = new Map(zwiftDataRoutes.filter(r => r.id != null).map(r => [r.id!, r]))
+
+function estimateLapDistanceKm(routeId: number, laps: number): number | null {
+  const route = routesById.get(routeId)
+  if (!route) return null
+  return laps * route.distance + (route.leadInDistance ?? 0)
+}
 
 /**
  * Fetches upcoming Time Trial and crit-flavored Race events.
@@ -262,7 +284,9 @@ export async function fetchTodaysRaceEvents(): Promise<RaceEventEntry[]> {
       type: (e.eventType === 'TIME_TRIAL' ? 'TT' : 'CRIT') as 'TT' | 'CRIT',
       eventStart: e.eventStart,
       laps: e.laps,
-      distanceKm: e.distanceInMeters > 0 ? e.distanceInMeters / 1000 : null,
+      distanceKm: e.distanceInMeters > 0
+        ? e.distanceInMeters / 1000
+        : (e.laps > 0 ? estimateLapDistanceKm(e.routeId, e.laps) : null),
     }))
     .sort((a, b) => a.eventStart.localeCompare(b.eventStart))
 
