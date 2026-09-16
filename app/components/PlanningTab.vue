@@ -139,6 +139,18 @@ function getDraft(date: string): PlanEntry {
   return drafts[date]!
 }
 
+/** Sets a day's draft TSS from the raw input string, treating an emptied
+ * field as null (rest day, shown as a dash) rather than Vue's `.number`
+ * modifier fallback of an empty string, which broke weekly TSS/hour sums. */
+function setTss(date: string, value: string) {
+  getDraft(date).tss = value === '' ? null : Number(value)
+}
+
+/** Same fix as setTss, for the duration field. */
+function setDurationMinutes(date: string, value: string) {
+  getDraft(date).durationMinutes = value === '' ? null : Number(value)
+}
+
 function isDirty(date: string) {
   const original = planning.plans.find(d => d.date === date)?.plan
   const draft = drafts[date]
@@ -518,19 +530,18 @@ async function clearNote() {
                 class="hidden sm:flex w-14 shrink-0 items-baseline justify-end gap-px px-1 py-0.5 -mx-1"
               >
                 <input
-                  v-model.number="getDraft(day.date).tss"
+                  :value="getDraft(day.date).tss ?? ''"
                   type="number"
                   inputmode="numeric"
                   min="0"
                   max="999"
                   placeholder="—"
                   class="min-w-0 flex-1 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded tabular no-spinner transition-colors"
+                  @input="setTss(day.date, ($event.target as HTMLInputElement).value)"
                   @blur="save(day.date)"
                   @change="save(day.date)"
                   @keydown.enter="($event.target as HTMLInputElement).blur()"
                 >
-                <span class="text-[11px] tabular text-stone-400 mx-0.5 invisible">⁄</span>
-                <span class="text-[11px] tabular text-stone-400 invisible">00</span>
               </span>
             </div>
 
@@ -550,13 +561,14 @@ async function clearNote() {
               </span>
               <input
                 v-else
-                v-model.number="getDraft(day.date).durationMinutes"
+                :value="getDraft(day.date).durationMinutes ?? ''"
                 type="number"
                 inputmode="numeric"
                 min="0"
                 max="999"
                 placeholder="—"
                 class="hidden sm:block w-12 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular no-spinner transition-colors"
+                @input="setDurationMinutes(day.date, ($event.target as HTMLInputElement).value)"
                 @blur="save(day.date)"
                 @change="save(day.date)"
                 @keydown.enter="($event.target as HTMLInputElement).blur()"
