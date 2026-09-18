@@ -605,7 +605,8 @@ function drawType(ctx: CanvasRenderingContext2D, w: number, k: number) {
   const innerRight = w - 28 * k
   const innerWidth = w - 56 * k
 
-  // ── Row 1: title (serif) + place/date, baseline-aligned ──
+  // ── Row 1: title + place/date, baseline-aligned ──
+  // setFont(SANS_FONT_FAMILY, 800, 31 * k)
   setFont(SERIF_FONT_FAMILY, 400, 42 * k)
   const titleLines = wrapText(ctx, title.value || capitalizeFirst(d.name), innerWidth * 0.7).slice(0, 2)
   const titleLineHeight = 40 * k
