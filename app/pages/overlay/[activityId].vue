@@ -844,10 +844,10 @@ function downloadOverlay() {
         </div>
 
         <!-- Control panel -->
-        <div class="flex flex-col border-t border-[#f0efed] lg:min-h-0 lg:border-l lg:border-t-0">
+        <div class="flex min-w-0 flex-col border-t border-[#f0efed] lg:min-h-0 lg:border-l lg:border-t-0">
           <div class="grid gap-y-[22px] px-6 pb-2 pt-[22px] lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
             <!-- Photo -->
-            <div>
+            <div class="min-w-0">
               <p class="mb-[9px] text-[10px] font-semibold uppercase tracking-[0.11em] text-[#a8a29e]">
                 Photo
               </p>
