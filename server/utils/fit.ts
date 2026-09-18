@@ -44,6 +44,20 @@ interface FitEvent {
   timestamp?: Date
 }
 
+/**
+ * Raw shape of a FIT `session` message (mesg_num 18). normalized_power,
+ * training_stress_score and intensity_factor are all optional per the FIT
+ * profile — populated only if the recording device computed them (which
+ * itself requires an FTP/threshold configured on the device), so a native
+ * head-unit file (e.g. Wahoo ELEMNT) usually has them, while many
+ * Zwift/manual-upload files don't.
+ */
+interface FitSession {
+  normalized_power?: number
+  training_stress_score?: number
+  intensity_factor?: number
+}
+
 /** Raw shape of a FIT `lap` message, per the Garmin profile (mesg_num 19). */
 interface FitLap {
   total_elapsed_time?: number
@@ -202,8 +216,9 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     speedUnit: 'km/h',
   })
 
-  const data = await parser.parseAsync(content as unknown as ArrayBuffer) as { records?: FitRecord[], events?: FitEvent[], laps?: FitLap[] }
+  const data = await parser.parseAsync(content as unknown as ArrayBuffer) as { records?: FitRecord[], events?: FitEvent[], laps?: FitLap[], sessions?: FitSession[] }
   const records: FitRecord[] = data.records ?? []
+  const session = data.sessions?.[0]
 
   if (records.length === 0) {
     throw new Error('No record data found in FIT file.')
@@ -245,16 +260,21 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
   const cadences = records.map((r) => r.cadence).filter((v): v is number => v !== undefined)
 
   // Average power display convention (matches Wahoo/Garmin head units):
-  // exclude zero-power (freewheeling/coasting) seconds. NP and TSS keep the
-  // full watts array including zeros — that's the whole point of the 4th-power
-  // rolling average, and it already tracks the device's own NP closely.
+  // exclude zero-power (freewheeling/coasting) seconds.
   const nonZeroWatts = watts.filter((w) => w > 0)
   const avgPower = mean(nonZeroWatts.length > 0 ? nonZeroWatts : watts)
   const maxPower = Math.max(...watts)
-  const np = normalizedPower(watts)
-  const intensityFactor = np / ftp
+
+  // Prefer the recording device's own NP/TSS/IF (session message) when
+  // present — it's computed from the device's native sample rate, which
+  // tracks noticeably closer to what the head unit displayed than a recompute
+  // from the FIT file's 1Hz records can. Recompute per-field (our own 4th-power
+  // rolling average over the full watts array, zeros included — that's the
+  // whole point of the formula) only where the device didn't provide it.
+  const np = session?.normalized_power || normalizedPower(watts)
+  const intensityFactor = session?.intensity_factor || np / ftp
   // TSS = (duration_sec * NP * IF) / (FTP * 3600) * 100
-  const tss = (totalSeconds * np * intensityFactor) / (ftp * 3600) * 100
+  const tss = session?.training_stress_score || (totalSeconds * np * intensityFactor) / (ftp * 3600) * 100
 
   return {
     durationSeconds: totalSeconds,
