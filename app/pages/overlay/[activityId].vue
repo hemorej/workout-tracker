@@ -136,13 +136,13 @@ const metricDefs = computed<MetricDef[]>(() => {
   const d = activityData.value
   return [
     { key: 'distance', label: 'Distance', ledgerLabel: '', available: true },
-    { key: 'time', label: 'Time', ledgerLabel: 'MOVING', available: true },
+    { key: 'time', label: 'Time', ledgerLabel: 'DURATION', available: true },
     { key: 'avgPower', label: 'Avg power', ledgerLabel: 'AVG POWER', available: d?.avgWatts != null },
-    { key: 'elevation', label: 'Elevation', ledgerLabel: 'CLIMBED', available: true },
+    { key: 'elevation', label: 'Elevation', ledgerLabel: 'ELEVATION', available: true },
     { key: 'avgSpeed', label: 'Avg speed', ledgerLabel: 'AVG SPEED', available: d?.avgSpeedMetersPerSecond != null },
     { key: 'date', label: 'Date', ledgerLabel: 'DATE', available: true },
     // NP is FIT-derived — present only when a matching logged workout has FIT data.
-    { key: 'np', label: 'Norm. power', ledgerLabel: 'NP', available: d?.normalizedPowerWatts != null },
+    { key: 'np', label: 'Norm. power', ledgerLabel: 'NRM POWER', available: d?.normalizedPowerWatts != null },
   ]
 })
 
