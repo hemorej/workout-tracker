@@ -149,14 +149,18 @@ export default defineNuxtConfig({
 
     /**
      * `@nuxt/fonts` (auto-installed by `@nuxt/ui`) would otherwise try to
-     * resolve 'Hanken Grotesk' from Google Fonts at build time. It's vendored
-     * instead via `@fontsource-variable/hanken-grotesk` + a manual `@font-face`
-     * in main.css, so tell the module to leave that family alone — it still
-     * handles fallback-metric generation etc. for anything else that needs it.
+     * resolve these from Google Fonts at build time. All three are vendored
+     * instead via `@fontsource(-variable)/*` + a manual `@font-face` in
+     * main.css, so tell the module to leave them alone — it still handles
+     * fallback-metric generation etc. for anything else that needs it.
+     * Archivo + Instrument Serif are used only by the photo overlay poster
+     * (app/pages/overlay/[activityId].vue), drawn to <canvas>.
      */
     fonts: {
         families: [
             { name: 'Hanken Grotesk', provider: 'none' },
+            { name: 'Archivo', provider: 'none' },
+            { name: 'Instrument Serif', provider: 'none' },
         ],
     },
 

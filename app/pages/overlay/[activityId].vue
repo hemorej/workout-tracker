@@ -2,11 +2,11 @@
 /**
  * Photo overlay page
  *
- * Generates a downloadable PNG: a user-uploaded photo with a Strava ride's
- * route line (or elevation profile) and a stat "ledger" composited on top —
- * a full-bleed photo, a bottom-weighted scrim for legibility, place/date +
- * title top-left, distance as an oversized headline bottom-left, and a
- * four-cell stat ledger bottom-right.
+ * Generates a downloadable PNG: a poster built from a user-uploaded photo and
+ * a Strava ride's route line, laid out as a fixed 2:3 sheet — the photo is a
+ * bounded plate across the top, and every character (title, date, distance
+ * headline, stat grid) sits on a solid ink panel below it. Contrast is fixed
+ * by construction: no scrim, shadow, halo or blend mode.
  *
  * Everything is rendered client-side via <canvas> — the server only supplies
  * the decoded route, stats and altitude stream (GET /api/strava/activity/:id).
@@ -35,17 +35,24 @@ interface ActivityOverlayData {
   normalizedPowerWatts: number | null
 }
 
-const OVERLAY_FONT_FAMILY = '"Hanken Grotesk", system-ui, sans-serif'
+const SERIF_FONT_FAMILY = '"Instrument Serif", Georgia, serif'
+const SANS_FONT_FAMILY = '"Archivo", system-ui, sans-serif'
 const DEFAULT_LINE_COLOR = '#ea580c'
 const DEFAULT_TEXT_COLOR = '#ffffff'
 /** Swatch palette shared by the line colour and text colour controls. */
 const LINE_PALETTE = ['#ea580c', '#eeb902', '#ffffff', '#1c1917', '#5398BE']
+/** Fixed ink panel behind the type — the poster is always the "ink" sheet. */
+const PANEL_COLOR = '#14110f'
+const MUTED_TEXT_COLOR = '#a39a8e'
+/** Route line weight, at POSTER_REF_WIDTH — was user-adjustable, now fixed. */
+const LINE_WEIGHT = 3.4
 /**
  * The design reference width. Every poster type size and offset below is
  * quoted at this width; multiply by `canvasWidth / POSTER_REF_WIDTH` when
- * drawing so the composition scales to any export resolution.
+ * drawing so the composition scales to any export resolution. The sheet
+ * itself is a fixed 432:647 (2:3) ratio; the photo plate is 432×428.
  */
-const POSTER_REF_WIDTH = 420
+const POSTER_REF_WIDTH = 432
 
 const route = useRoute()
 const activityId = route.params.activityId as string
@@ -62,10 +69,8 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 // ── Controls ─────────────────────────────────────────────────────────────
 const treated = ref(true) // false = "as shot"
-const overlayGraphic = ref<'route' | 'elevation'>('route')
 const lineColor = ref(DEFAULT_LINE_COLOR)
 const textColor = ref(DEFAULT_TEXT_COLOR)
-const lineWeight = ref(3.4) // px at POSTER_REF_WIDTH, range 1.5–6.0
 const title = ref('') // seeded from the activity name
 const place = ref('')
 // Distance is permanent (it's the headline); the rest are opt-in.
@@ -75,20 +80,17 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const exportW = ref(0)
 const exportH = ref(0)
 
-// ── Draggable overlay positions ──────────────────────────────────────────
+// ── Draggable route position ─────────────────────────────────────────────
 //
-// The graphic (route/elevation) and the top-left text block can each be
-// dragged. Offsets are in canvas pixel space, relative to each element's
-// default layout position.
-const textOffsetX = ref(0)
-const textOffsetY = ref(0)
+// The route line is the only element drawn over the photo, and the only one
+// that can be dragged. Offset is in canvas pixel space, relative to its
+// default layout position, clamped so it can't be dragged out of the plate.
 const routeOffsetX = ref(0)
 const routeOffsetY = ref(0)
-const dragging = ref<'text' | 'route' | null>(null)
+const dragging = ref<'route' | null>(null)
 
 interface Box { x: number, y: number, w: number, h: number }
 // Updated on every renderOverlay() call, read by the pointerdown hit test.
-let textBounds: Box | null = null
 let routeBounds: Box | null = null
 let dragStartPoint = { x: 0, y: 0 }
 let dragStartOffset = { x: 0, y: 0 }
@@ -115,13 +117,6 @@ watch(activityData, (d) => {
   if (d && !title.value) title.value = capitalizeFirst(d.name)
 }, { immediate: true })
 
-const hasElevationProfile = computed(() => (activityData.value?.altitudeStream?.length ?? 0) > 2)
-
-// If elevation isn't available, don't leave the switch stuck on it.
-watch(hasElevationProfile, (ok) => {
-  if (!ok && overlayGraphic.value === 'elevation') overlayGraphic.value = 'route'
-})
-
 // ── Metrics model ────────────────────────────────────────────────────────
 
 interface MetricDef {
@@ -139,7 +134,7 @@ const metricDefs = computed<MetricDef[]>(() => {
     { key: 'time', label: 'Time', ledgerLabel: 'DURATION', available: true },
     { key: 'avgPower', label: 'Avg power', ledgerLabel: 'AVG POWER', available: d?.avgWatts != null },
     { key: 'elevation', label: 'Elevation', ledgerLabel: 'ELEVATION', available: true },
-    { key: 'avgSpeed', label: 'Avg speed', ledgerLabel: 'AVG SPEED', available: d?.avgSpeedMetersPerSecond != null },
+    { key: 'avgSpeed', label: 'Avg speed', ledgerLabel: 'KM/H AVG', available: d?.avgSpeedMetersPerSecond != null },
     { key: 'date', label: 'Date', ledgerLabel: 'DATE', available: true },
     // NP is FIT-derived — present only when a matching logged workout has FIT data.
     { key: 'np', label: 'Norm. power', ledgerLabel: 'NRM POWER', available: d?.normalizedPowerWatts != null },
@@ -216,7 +211,7 @@ function metricValue(key: string): string {
     case 'time': return fmtTime(d.movingTimeSeconds)
     case 'avgPower': return d.avgWatts != null ? `${Math.round(d.avgWatts)} W` : ''
     case 'elevation': return `${Math.round(d.elevationGainMeters)} m`
-    case 'avgSpeed': return d.avgSpeedMetersPerSecond != null ? `${(d.avgSpeedMetersPerSecond * 3.6).toFixed(1)} km/h` : ''
+    case 'avgSpeed': return d.avgSpeedMetersPerSecond != null ? (d.avgSpeedMetersPerSecond * 3.6).toFixed(1) : ''
     case 'date': return fmtDate(d.startDateLocal)
     case 'np': return d.normalizedPowerWatts != null ? `${d.normalizedPowerWatts} W` : ''
     default: return ''
@@ -224,8 +219,8 @@ function metricValue(key: string): string {
 }
 
 // Ledger cells = selected metrics minus distance (the headline) and date
-// (which rides in the top-left line with the place), in panel order, capped
-// at the 2×2 grid.
+// (which rides in the top-right of row 1 with the place), in panel order,
+// capped at the four-up stat grid, left-packed.
 const LEDGER_ORDER = ['time', 'avgPower', 'elevation', 'avgSpeed', 'np']
 const ledgerCells = computed(() =>
   LEDGER_ORDER
@@ -234,8 +229,6 @@ const ledgerCells = computed(() =>
     .slice(0, 4)
     .map((m) => ({ label: m.ledgerLabel, value: metricValue(m.key) })),
 )
-
-const weightPct = computed(() => ((lineWeight.value - 1.5) / (6 - 1.5)) * 100)
 
 // ── Photo upload ─────────────────────────────────────────────────────────
 
@@ -261,10 +254,8 @@ function onFileChange(e: Event) {
   img.onload = () => {
     photoImage.value = img
     photoMeta.value = { name: file.name, w: img.naturalWidth, h: img.naturalHeight }
-    // A new photo can have very different dimensions — start overlays back at
-    // their default layout position rather than carrying over a stale offset.
-    textOffsetX.value = 0
-    textOffsetY.value = 0
+    // A new photo can have very different dimensions — start the route back
+    // at its default layout position rather than carrying over a stale offset.
     routeOffsetX.value = 0
     routeOffsetY.value = 0
   }
@@ -272,8 +263,6 @@ function onFileChange(e: Event) {
 }
 
 function resetPositions() {
-  textOffsetX.value = 0
-  textOffsetY.value = 0
   routeOffsetX.value = 0
   routeOffsetY.value = 0
 }
@@ -431,35 +420,46 @@ async function buildBackground() {
   const img = photoImage.value
   if (!img) return
 
+  // Canvas width follows the photo's longest edge (capped), same as before;
+  // the sheet's height is then fixed by the 432:647 poster ratio rather than
+  // the photo's own aspect ratio — the photo plate is cover-cropped into it.
   const scale = Math.min(1, MAX_CANVAS_EDGE / Math.max(img.naturalWidth, img.naturalHeight))
   const w = Math.round(img.naturalWidth * scale)
-  const h = Math.round(img.naturalHeight * scale)
+  const plateW = w
+  const plateH = Math.round(w * (428 / POSTER_REF_WIDTH))
   exportW.value = w
-  exportH.value = h
+  exportH.value = Math.round(w * (647 / POSTER_REF_WIDTH))
 
   if (!bgCanvas) bgCanvas = document.createElement('canvas')
-  bgCanvas.width = w
-  bgCanvas.height = h
+  bgCanvas.width = plateW
+  bgCanvas.height = plateH
 
   const bctx = bgCanvas.getContext('2d')
   if (!bctx) return
 
-  bctx.clearRect(0, 0, w, h)
-  // Draw slightly overscaled so a blurred edge can't reveal a soft border
-  // (the design insets the photo layer by -14px at a 420px poster).
-  const o = Math.round(w * (14 / POSTER_REF_WIDTH))
-  bctx.drawImage(img, -o, -o, w + o * 2, h + o * 2)
+  bctx.clearRect(0, 0, plateW, plateH)
+
+  // Cover-fit the photo into the plate, then draw slightly overscaled so a
+  // blurred edge can't reveal a soft border (the design's -14px trick at a
+  // 432px reference poster width).
+  const o = Math.round(plateW * (14 / POSTER_REF_WIDTH))
+  const coverScale = Math.max(plateW / img.naturalWidth, plateH / img.naturalHeight)
+  const drawW = img.naturalWidth * coverScale
+  const drawH = img.naturalHeight * coverScale
+  const dx = (plateW - drawW) / 2 - o
+  const dy = (plateH - drawH) / 2 - o
+  bctx.drawImage(img, dx, dy, drawW + o * 2, drawH + o * 2)
 
   if (treated.value) {
     // Blur, then the high-contrast B&W + grain pass so the grain reads crisp
     // on top. Blur radius, contrast and grain size are unchanged.
-    const imageData = bctx.getImageData(0, 0, w, h)
-    boxBlurImageData(imageData, Math.max(2, Math.round(w * 0.006)))
+    const imageData = bctx.getImageData(0, 0, plateW, plateH)
+    boxBlurImageData(imageData, Math.max(2, Math.round(plateW * 0.006)))
     applyBwNoiseFilter(imageData)
     bctx.putImageData(imageData, 0, 0)
   }
   else {
-    const imageData = bctx.getImageData(0, 0, w, h)
+    const imageData = bctx.getImageData(0, 0, plateW, plateH)
     applyAsShotFilter(imageData)
     bctx.putImageData(imageData, 0, 0)
   }
@@ -489,53 +489,76 @@ async function renderOverlay() {
 
   // Canvas text uses whatever font is loaded at draw time — wait for the
   // weights the poster needs before the first render.
-  await document.fonts.load(`700 16px ${OVERLAY_FONT_FAMILY}`)
-  await document.fonts.load(`800 16px ${OVERLAY_FONT_FAMILY}`)
+  await Promise.all([
+    document.fonts.load(`400 16px ${SERIF_FONT_FAMILY}`),
+    document.fonts.load(`600 16px ${SANS_FONT_FAMILY}`),
+    document.fonts.load(`700 16px ${SANS_FONT_FAMILY}`),
+    document.fonts.load(`800 16px ${SANS_FONT_FAMILY}`),
+  ])
 
-  const w = bgCanvas.width
-  const h = bgCanvas.height
+  const w = exportW.value
+  const h = exportH.value
+  if (!w || !h) return
   canvas.width = w
   canvas.height = h
 
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const k = w / POSTER_REF_WIDTH
+  const plateH = bgCanvas.height
 
+  // 1. Fill the sheet with the panel colour, 2. composite the photo plate.
   ctx.clearRect(0, 0, w, h)
+  ctx.fillStyle = PANEL_COLOR
+  ctx.fillRect(0, 0, w, h)
   ctx.drawImage(bgCanvas, 0, 0)
 
   const accent = lineColor.value
 
+  // 3. Route, clipped to the plate — the only thing drawn over the photo.
   ctx.save()
+  ctx.beginPath()
+  ctx.rect(0, 0, w, plateH)
+  ctx.clip()
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
-  if (overlayGraphic.value === 'elevation' && hasElevationProfile.value) {
-    drawElevation(ctx, w, h, k, accent)
-  }
-  else {
-    drawRoute(ctx, w, h, k, accent)
-  }
+  drawRoute(ctx, w, plateH, k, accent)
   ctx.restore()
 
-  drawType(ctx, w, h, k)
+  // 4. Accent rule, flush on the bottom edge of the plate.
+  ctx.fillStyle = accent
+  ctx.fillRect(0, plateH - 5 * k, w, 5 * k)
+
+  // 5. Type, panel only.
+  drawType(ctx, w, k)
 }
 
-function drawRoute(ctx: CanvasRenderingContext2D, w: number, h: number, k: number, accent: string) {
+function drawRoute(ctx: CanvasRenderingContext2D, plateW: number, plateH: number, k: number, accent: string) {
   const points = activityData.value?.points ?? []
   if (points.length <= 1) {
     routeBounds = null
     return
   }
 
-  // Larger padding = smaller route; the route is then nudged up by 40px
-  // (at the reference width) so it sits above the bottom-heavy type.
-  const padding = Math.round(Math.min(w, h) * 0.2)
-  const dx = routeOffsetX.value
-  const dy = routeOffsetY.value - 40 * k
-  const projected = projectPoints(points, w, h, padding)
-    .map(([x, y]) => [x + dx, y + dy] as [number, number])
+  const padding = Math.round(Math.min(plateW, plateH) * 0.2)
+  const basePoints = projectPoints(points, plateW, plateH, padding)
+  const lw = LINE_WEIGHT * k
 
-  const lw = lineWeight.value * k
+  const xs0 = basePoints.map((p) => p[0])
+  const ys0 = basePoints.map((p) => p[1])
+  const minX0 = Math.min(...xs0) - lw
+  const maxX0 = Math.max(...xs0) + lw
+  const minY0 = Math.min(...ys0) - lw
+  const maxY0 = Math.max(...ys0) + lw
+
+  // Clamp the drag offset so the projected route can't leave the plate.
+  const clamp = (value: number, lo: number, hi: number) => (lo <= hi ? Math.min(Math.max(value, lo), hi) : 0)
+  const dx = clamp(routeOffsetX.value, -minX0, plateW - maxX0)
+  const dy = clamp(routeOffsetY.value, -minY0, plateH - maxY0)
+  if (dx !== routeOffsetX.value) routeOffsetX.value = dx
+  if (dy !== routeOffsetY.value) routeOffsetY.value = dy
+
+  const projected = basePoints.map(([x, y]) => [x + dx, y + dy] as [number, number])
 
   ctx.beginPath()
   projected.forEach(([x, y], i) => {
@@ -562,52 +585,12 @@ function drawRoute(ctx: CanvasRenderingContext2D, w: number, h: number, k: numbe
   }
 }
 
-function drawElevation(ctx: CanvasRenderingContext2D, w: number, h: number, k: number, accent: string) {
-  const alt = activityData.value?.altitudeStream ?? []
-  if (alt.length < 2) {
-    routeBounds = null
-    return
-  }
-  const dist = activityData.value?.distanceStream ?? []
-  const useDist = dist.length === alt.length
-    && (dist[dist.length - 1]! - dist[0]!) > 0
-
-  const bandTop = h * 0.56 + routeOffsetY.value
-  const bandH = 86 * k
-  const min = Math.min(...alt)
-  const max = Math.max(...alt)
-  const span = max - min || 1
-  const x0 = routeOffsetX.value
-
-  const xAt = (i: number) => x0 + (useDist
-    ? ((dist[i]! - dist[0]!) / (dist[dist.length - 1]! - dist[0]!)) * w
-    : (i / (alt.length - 1)) * w)
-  const yAt = (v: number) => bandTop + bandH - ((v - min) / span) * bandH
-
-  ctx.beginPath()
-  alt.forEach((v, i) => {
-    const x = xAt(i)
-    const y = yAt(v)
-    if (i === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  })
-  ctx.strokeStyle = accent
-  // 0.82× so it reads as the same optical weight as the route line.
-  ctx.lineWidth = lineWeight.value * 0.82 * k
-  ctx.stroke()
-
-  routeBounds = { x: x0, y: bandTop, w, h: bandH }
-}
-
-function drawType(ctx: CanvasRenderingContext2D, w: number, h: number, k: number) {
+function drawType(ctx: CanvasRenderingContext2D, w: number, k: number) {
   const d = activityData.value
-  if (!d) {
-    textBounds = null
-    return
-  }
+  if (!d) return
 
-  const setFont = (weight: number, size: number, letterSpacingEm = 0) => {
-    ctx.font = `${weight} ${size}px ${OVERLAY_FONT_FAMILY}`
+  const setFont = (family: string, weight: number, size: number, letterSpacingEm = 0) => {
+    ctx.font = `${weight} ${size}px ${family}`
     if ('letterSpacing' in ctx) {
       ;(ctx as unknown as { letterSpacing: string }).letterSpacing = `${(letterSpacingEm * size).toFixed(2)}px`
     }
@@ -618,113 +601,85 @@ function drawType(ctx: CanvasRenderingContext2D, w: number, h: number, k: number
 
   ctx.save()
 
-  const padL = 32 * k
-  const padR = 32 * k
+  const innerLeft = 28 * k
+  const innerRight = w - 28 * k
+  const innerWidth = w - 56 * k
 
-  // ── Top-left cluster: place · date, then title (draggable as one) ──
-  const tx = padL + textOffsetX.value
-  const clusterTop = 32 * k + textOffsetY.value
-  let ty = clusterTop
-  let clusterMaxW = 0
+  // ── Row 1: title (serif) + place/date, baseline-aligned ──
+  setFont(SERIF_FONT_FAMILY, 400, 42 * k)
+  const titleLines = wrapText(ctx, title.value || capitalizeFirst(d.name), innerWidth * 0.7).slice(0, 2)
+  const titleLineHeight = 40 * k
+  const baseTitleBaseline = 484 * k
   ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = textColor.value
+  titleLines.forEach((ln, i) => {
+    ctx.fillText(ln, innerLeft, baseTitleBaseline + i * titleLineHeight)
+  })
+  resetLetterSpacing()
+  // If the title wraps, every row below shifts down by the extra line(s).
+  const extra = (titleLines.length - 1) * titleLineHeight
+  const lastTitleBaseline = baseTitleBaseline + extra
 
   const parts: string[] = []
   if (place.value.trim()) parts.push(place.value.trim())
   if (shownMetrics.value.has('date')) parts.push(fmtDate(d.startDateLocal))
-  // The line is drawn uppercase with wide tracking (matches the design).
   const topLine = parts.join(' · ').toUpperCase()
-
   if (topLine) {
-    setFont(600, 10 * k, 0.24)
-    ctx.fillStyle = textColor.value
-    ctx.fillText(topLine, tx, ty)
-    clusterMaxW = Math.max(clusterMaxW, ctx.measureText(topLine).width)
-    ty += 10 * k
+    setFont(SANS_FONT_FAMILY, 700, 10 * k, 0.16)
+    ctx.textAlign = 'right'
+    ctx.fillStyle = MUTED_TEXT_COLOR
+    ctx.fillText(topLine, innerRight, lastTitleBaseline)
+    resetLetterSpacing()
   }
 
-  ty += 9 * k
-  setFont(800, 30 * k, -0.015)
-  ctx.fillStyle = textColor.value
-  const titleLines = wrapText(ctx, title.value || capitalizeFirst(d.name), 0.78 * w)
-  const titleLineHeight = 30 * k * 1.02
-  for (const ln of titleLines) {
-    ctx.fillText(ln, tx, ty)
-    clusterMaxW = Math.max(clusterMaxW, ctx.measureText(ln).width)
-    ty += titleLineHeight
-  }
-  resetLetterSpacing()
+  // ── Hairline ──
+  const hairlineY = 504 * k + extra
+  ctx.strokeStyle = 'rgba(242,237,227,0.24)'
+  ctx.lineWidth = Math.max(1, k)
+  ctx.beginPath()
+  ctx.moveTo(innerLeft, hairlineY)
+  ctx.lineTo(innerRight, hairlineY)
+  ctx.stroke()
 
-  const bp = 6 * k
-  textBounds = {
-    x: tx - bp,
-    y: clusterTop - bp,
-    w: clusterMaxW + bp * 2,
-    h: (ty - clusterTop) + bp * 2,
-  }
-
-  // ── Bottom row (pinned): distance headline left, ledger right ──
-  const rowBottom = h - 30 * k
-
-  const unitH = 10 * k
-  const unitTop = rowBottom - unitH
-  const distBaseline = unitTop - 9 * k
-
-  setFont(800, 62 * k, -0.03)
-  ctx.textBaseline = 'alphabetic'
+  // ── Row 2: distance headline ──
+  const distBaseline = 559 * k + extra
+  const unitBaseline = 555 * k + extra
   ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  setFont(SANS_FONT_FAMILY, 800, 52 * k, -0.04)
   ctx.fillStyle = textColor.value
-  ctx.fillText(fmtDistanceKm(d.distanceMeters), padL, distBaseline)
-
-  setFont(600, 10 * k, 0.22)
-  ctx.textBaseline = 'top'
-  ctx.fillStyle = textColor.value
-  ctx.fillText('KILOMETRES', padL, unitTop)
+  const distText = fmtDistanceKm(d.distanceMeters)
+  ctx.fillText(distText, innerLeft, distBaseline)
+  const distWidth = ctx.measureText(distText).width
   resetLetterSpacing()
 
+  setFont(SANS_FONT_FAMILY, 700, 10 * k, 0.14)
+  ctx.fillStyle = lineColor.value
+  ctx.fillText('KM', innerLeft + distWidth + 9 * k, unitBaseline)
+  resetLetterSpacing()
+
+  // ── Row 3: four-up stat grid, left-packed ──
   const cells = ledgerCells.value
   if (cells.length) {
-    const valueSize = 17 * k
-    const labelSize = 9 * k
-    const gapVL = 3 * k
-    const rowGap = 12 * k
-    const colGap = 26 * k
-    const cellH = valueSize + gapVL + labelSize
-    const rows = Math.ceil(cells.length / 2)
-    const gridTop = rowBottom - rows * cellH - (rows - 1) * rowGap
-
-    const colW = [0, 0]
+    const colGap = 10 * k
+    const colW = (innerWidth - 3 * colGap) / 4
+    const valueTop = 573 * k + extra
+    const labelTop = 595 * k + extra
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
     cells.forEach((c, i) => {
-      const col = i % 2
-      setFont(700, valueSize)
-      const vw = ctx.measureText(c.value).width
-      setFont(500, labelSize, 0.18)
-      const lw = ctx.measureText(c.label).width
-      colW[col] = Math.max(colW[col]!, vw, lw)
-    })
-    resetLetterSpacing()
+      const x = innerLeft + i * (colW + colGap)
 
-    const twoCol = cells.length > 1
-    const col1Right = w - padR
-    const col0Right = twoCol ? col1Right - colW[1]! - colGap : col1Right
-
-    ctx.textAlign = 'right'
-    cells.forEach((c, i) => {
-      const col = i % 2
-      const row = Math.floor(i / 2)
-      const rightX = col === 0 ? col0Right : col1Right
-      const cellTop = gridTop + row * (cellH + rowGap)
-
-      setFont(700, valueSize)
-      ctx.textBaseline = 'top'
+      setFont(SANS_FONT_FAMILY, 600, 19 * k)
       ctx.fillStyle = textColor.value
-      ctx.fillText(c.value, rightX, cellTop)
+      ctx.fillText(c.value, x, valueTop)
 
-      setFont(500, labelSize, 0.18)
-      ctx.fillStyle = textColor.value
-      ctx.fillText(c.label, rightX, cellTop + valueSize + gapVL)
+      setFont(SANS_FONT_FAMILY, 700, 9 * k, 0.12)
+      ctx.fillStyle = MUTED_TEXT_COLOR
+      ctx.fillText(c.label, x, labelTop)
+      resetLetterSpacing()
     })
-    resetLetterSpacing()
   }
 
   ctx.restore()
@@ -736,10 +691,7 @@ watch([photoImage, treated], async () => {
 })
 
 watch(
-  [
-    overlayGraphic, lineColor, textColor, lineWeight, title, place, shownMetrics, activityData,
-    textOffsetX, textOffsetY, routeOffsetX, routeOffsetY,
-  ],
+  [lineColor, textColor, title, place, shownMetrics, activityData, routeOffsetX, routeOffsetY],
   () => {
     nextTick(() => renderOverlay())
   },
@@ -761,18 +713,9 @@ function pointInBox(p: { x: number, y: number }, box: Box | null): boolean {
 
 function onOverlayPointerDown(e: PointerEvent) {
   const p = getCanvasPoint(e)
-  // Graphic sits in the centre, type hugs the edges — test the graphic first.
-  if (pointInBox(p, routeBounds)) {
-    dragging.value = 'route'
-    dragStartOffset = { x: routeOffsetX.value, y: routeOffsetY.value }
-  }
-  else if (pointInBox(p, textBounds)) {
-    dragging.value = 'text'
-    dragStartOffset = { x: textOffsetX.value, y: textOffsetY.value }
-  }
-  else {
-    return
-  }
+  if (!pointInBox(p, routeBounds)) return
+  dragging.value = 'route'
+  dragStartOffset = { x: routeOffsetX.value, y: routeOffsetY.value }
   dragStartPoint = p
   canvasRef.value?.setPointerCapture(e.pointerId)
 }
@@ -782,14 +725,8 @@ function onOverlayPointerMove(e: PointerEvent) {
   const p = getCanvasPoint(e)
   const dx = p.x - dragStartPoint.x
   const dy = p.y - dragStartPoint.y
-  if (dragging.value === 'text') {
-    textOffsetX.value = dragStartOffset.x + dx
-    textOffsetY.value = dragStartOffset.y + dy
-  }
-  else {
-    routeOffsetX.value = dragStartOffset.x + dx
-    routeOffsetY.value = dragStartOffset.y + dy
-  }
+  routeOffsetX.value = dragStartOffset.x + dx
+  routeOffsetY.value = dragStartOffset.y + dy
 }
 
 function onOverlayPointerUp() {
@@ -882,14 +819,14 @@ function downloadOverlay() {
             />
             <div
               v-if="!photoImage"
-              class="flex aspect-[4/5] items-center justify-center bg-[#161412] text-[13px] text-white/50"
+              class="flex aspect-[432/647] items-center justify-center bg-[#161412] text-[13px] text-white/50"
             >
               Upload a photo to preview the overlay.
             </div>
           </div>
 
           <div class="flex flex-wrap items-center justify-center gap-x-[14px] gap-y-1 text-[12px] text-[#8a827a]">
-            <span>Drag the route or the text block to reposition</span>
+            <span>Drag the route to reposition</span>
             <span class="text-[#c7c2bd]">·</span>
             <button
               type="button"
@@ -987,39 +924,12 @@ function downloadOverlay() {
               </p>
             </div>
 
-            <!-- Overlay -->
+            <!-- Colours -->
             <div>
               <p class="mb-[9px] text-[10px] font-semibold uppercase tracking-[0.11em] text-[#a8a29e]">
-                Overlay
+                Colours
               </p>
-              <div class="flex w-full rounded-[9px] bg-[#f5f5f4] p-[3px]">
-                <button
-                  type="button"
-                  class="flex-1 rounded-[6px] py-[6px] text-center text-[12px]"
-                  :class="overlayGraphic === 'route'
-                    ? 'bg-white font-semibold text-[#1c1917] shadow-[0_1px_2px_rgba(28,25,23,0.08)]'
-                    : 'font-medium text-[#78716c]'"
-                  @click="overlayGraphic = 'route'"
-                >
-                  Route
-                </button>
-                <button
-                  type="button"
-                  :disabled="!hasElevationProfile"
-                  class="flex-1 rounded-[6px] py-[6px] text-center text-[12px] disabled:cursor-not-allowed disabled:text-[#d6d3d1]"
-                  :class="overlayGraphic === 'elevation'
-                    ? 'bg-white font-semibold text-[#1c1917] shadow-[0_1px_2px_rgba(28,25,23,0.08)]'
-                    : (hasElevationProfile ? 'font-medium text-[#78716c]' : '')"
-                  @click="overlayGraphic = 'elevation'"
-                >
-                  Elevation
-                </button>
-              </div>
-              <p v-if="!hasElevationProfile" class="mt-2 text-[11px] text-[#c7c2bd]">
-                No elevation data for this ride.
-              </p>
-
-              <div class="mt-[14px] flex flex-wrap gap-x-6 gap-y-3">
+              <div class="flex flex-wrap gap-x-6 gap-y-3">
                 <div>
                   <div class="mb-[7px] text-[11.5px] font-medium text-[#57534f]">
                     Line colour
@@ -1059,22 +969,6 @@ function downloadOverlay() {
                   </div>
                 </div>
               </div>
-
-              <div class="mb-[9px] mt-4 flex items-baseline justify-between">
-                <span class="whitespace-nowrap text-[11.5px] font-medium text-[#57534f]">Line weight</span>
-                <span class="text-[11px] font-medium text-[#a8a29e] tabular-nums">{{ lineWeight.toFixed(1) }} px</span>
-              </div>
-              <input
-                v-model.number="lineWeight"
-                type="range"
-                min="1.5"
-                max="6"
-                step="0.1"
-                class="range-line w-full"
-                :style="{
-                  background: `linear-gradient(to right, #1c1917 0%, #1c1917 ${weightPct}%, #e7e5e4 ${weightPct}%, #e7e5e4 100%)`,
-                }"
-              >
             </div>
 
             <!-- Text -->
@@ -1145,33 +1039,3 @@ function downloadOverlay() {
   </div>
 </template>
 
-<style scoped>
-.range-line {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-}
-.range-line::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  border: 1px solid #d6d3d1;
-  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.18);
-  cursor: pointer;
-}
-.range-line::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  border: 1px solid #d6d3d1;
-  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.18);
-  cursor: pointer;
-}
-</style>
