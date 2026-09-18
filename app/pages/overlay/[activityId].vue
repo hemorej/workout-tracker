@@ -44,15 +44,19 @@ const LINE_PALETTE = ['#ea580c', '#eeb902', '#ffffff', '#1c1917', '#5398BE']
 /** Fixed ink panel behind the type — the poster is always the "ink" sheet. */
 const PANEL_COLOR = '#14110f'
 const MUTED_TEXT_COLOR = '#a39a8e'
-/** Route line weight, at POSTER_REF_WIDTH — was user-adjustable, now fixed. */
+/** Route line weight, at the sheet's reference width — was user-adjustable, now fixed. */
 const LINE_WEIGHT = 3.4
 /**
- * The design reference width. Every poster type size and offset below is
- * quoted at this width; multiply by `canvasWidth / POSTER_REF_WIDTH` when
- * drawing so the composition scales to any export resolution. The sheet
- * itself is a fixed 432:647 (2:3) ratio; the photo plate is 432×428.
+ * Two sheet geometries, chosen from the loaded photo's aspect ratio (see
+ * `sheet` below) — portrait 5B (432×647, plate 432×428) or landscape 6B
+ * (647×432, plate 647×258). Every poster type size and offset in
+ * `drawTypePortrait`/`drawTypeLandscape` is quoted at `ref`; multiply by
+ * `canvasWidth / sheet.ref` when drawing so the composition scales to any
+ * export resolution.
  */
-const POSTER_REF_WIDTH = 432
+interface Sheet { ref: number, w: number, h: number, plateH: number }
+const PORTRAIT_SHEET: Sheet = { ref: 432, w: 432, h: 647, plateH: 428 }
+const LANDSCAPE_SHEET: Sheet = { ref: 647, w: 647, h: 432, plateH: 258 }
 
 const route = useRoute()
 const activityId = route.params.activityId as string
@@ -79,6 +83,15 @@ const shownMetrics = ref<Set<string>>(new Set(['distance', 'time', 'avgPower', '
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const exportW = ref(0)
 const exportH = ref(0)
+
+// Derived from the loaded photo's natural size — not a user control. Square
+// photos (ratio exactly 1) take the landscape sheet. Falls back to portrait
+// before a photo is loaded (matches the pre-landscape preview placeholder).
+const sheet = computed<Sheet>(() => {
+  const img = photoImage.value
+  if (!img) return PORTRAIT_SHEET
+  return img.naturalWidth >= img.naturalHeight ? LANDSCAPE_SHEET : PORTRAIT_SHEET
+})
 
 // ── Draggable route position ─────────────────────────────────────────────
 //
@@ -414,21 +427,98 @@ function applyAsShotFilter(imageData: ImageData, contrast = 1.05, saturation = 1
 // draws the scrim + graphic + type on top — cheap enough to run on every
 // pointermove.
 
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let cur = ''
+  for (const word of words) {
+    const test = cur ? `${cur} ${word}` : word
+    if (cur && ctx.measureText(test).width > maxWidth) {
+      lines.push(cur)
+      cur = word
+    }
+    else {
+      cur = test
+    }
+  }
+  if (cur) lines.push(cur)
+  return lines.length ? lines : ['']
+}
+
+function setFont(ctx: CanvasRenderingContext2D, family: string, weight: number, size: number, letterSpacingEm = 0) {
+  ctx.font = `${weight} ${size}px ${family}`
+  if ('letterSpacing' in ctx) {
+    ;(ctx as unknown as { letterSpacing: string }).letterSpacing = `${(letterSpacingEm * size).toFixed(2)}px`
+  }
+}
+
+function resetLetterSpacing(ctx: CanvasRenderingContext2D) {
+  if ('letterSpacing' in ctx) (ctx as unknown as { letterSpacing: string }).letterSpacing = '0px'
+}
+
+// Row-1 line height for a wrapped landscape title, in design px at the
+// landscape sheet's reference width (647) — see computeLandscapeTitleLines.
+const LANDSCAPE_TITLE_LINE_HEIGHT = 33
+
+// Canvas text uses whatever font is loaded at draw time — both the
+// background build (which needs an accurate title-wrap measurement for the
+// landscape sheet) and the type render wait for the weights the poster
+// needs before drawing.
+async function ensureFontsLoaded() {
+  await Promise.all([
+    document.fonts.load(`400 16px ${SERIF_FONT_FAMILY}`),
+    document.fonts.load(`600 16px ${SANS_FONT_FAMILY}`),
+    document.fonts.load(`700 16px ${SANS_FONT_FAMILY}`),
+    document.fonts.load(`800 16px ${SANS_FONT_FAMILY}`),
+  ])
+}
+
+let scratchCanvas: HTMLCanvasElement | null = null
+function getScratchCtx(): CanvasRenderingContext2D {
+  if (!scratchCanvas) scratchCanvas = document.createElement('canvas')
+  return scratchCanvas.getContext('2d')!
+}
+
+/**
+ * How many lines the landscape (6B) title wraps to (max 2), measured at the
+ * sheet's reference width (647) so the result is resolution-independent.
+ * A 2-line title needs LANDSCAPE_TITLE_LINE_HEIGHT more vertical room than
+ * the sheet's nominal plate/panel split allows for, so the photo plate is
+ * shrunk by that amount to make room — see drawTypeLandscape.
+ */
+function computeLandscapeTitleLines(text: string): number {
+  const ctx = getScratchCtx()
+  setFont(ctx, SERIF_FONT_FAMILY, 400, 36)
+  const innerWidth = LANDSCAPE_SHEET.ref - 56
+  return wrapText(ctx, text, innerWidth * 0.6).slice(0, 2).length
+}
+
 let bgCanvas: HTMLCanvasElement | null = null
 
 async function buildBackground() {
   const img = photoImage.value
   if (!img) return
 
+  await ensureFontsLoaded()
+
   // Canvas width follows the photo's longest edge (capped), same as before;
-  // the sheet's height is then fixed by the 432:647 poster ratio rather than
-  // the photo's own aspect ratio — the photo plate is cover-cropped into it.
+  // the sheet's height is then fixed by the current sheet's ratio rather
+  // than the photo's own aspect ratio — the photo plate is cover-cropped
+  // into it.
+  const s = sheet.value
+  let plateHRef = s.plateH
+  if (s === LANDSCAPE_SHEET) {
+    const titleText = title.value || capitalizeFirst(activityData.value?.name ?? '')
+    const lines = computeLandscapeTitleLines(titleText)
+    plateHRef = s.plateH - (lines - 1) * LANDSCAPE_TITLE_LINE_HEIGHT
+  }
+
   const scale = Math.min(1, MAX_CANVAS_EDGE / Math.max(img.naturalWidth, img.naturalHeight))
   const w = Math.round(img.naturalWidth * scale)
   const plateW = w
-  const plateH = Math.round(w * (428 / POSTER_REF_WIDTH))
+  const plateH = Math.round(w * (plateHRef / s.ref))
   exportW.value = w
-  exportH.value = Math.round(w * (647 / POSTER_REF_WIDTH))
+  exportH.value = Math.round(w * (s.h / s.ref))
 
   if (!bgCanvas) bgCanvas = document.createElement('canvas')
   bgCanvas.width = plateW
@@ -440,9 +530,10 @@ async function buildBackground() {
   bctx.clearRect(0, 0, plateW, plateH)
 
   // Cover-fit the photo into the plate, then draw slightly overscaled so a
-  // blurred edge can't reveal a soft border (the design's -14px trick at a
-  // 432px reference poster width).
-  const o = Math.round(plateW * (14 / POSTER_REF_WIDTH))
+  // blurred edge can't reveal a soft border (the design's -14px trick at
+  // the sheet's reference width). Note this crops against the *actual*
+  // (possibly shrunk) plate height, not the sheet's nominal one.
+  const o = Math.round(plateW * (14 / s.ref))
   const coverScale = Math.max(plateW / img.naturalWidth, plateH / img.naturalHeight)
   const drawW = img.naturalWidth * coverScale
   const drawH = img.naturalHeight * coverScale
@@ -465,36 +556,11 @@ async function buildBackground() {
   }
 }
 
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const words = text.split(/\s+/).filter(Boolean)
-  const lines: string[] = []
-  let cur = ''
-  for (const word of words) {
-    const test = cur ? `${cur} ${word}` : word
-    if (cur && ctx.measureText(test).width > maxWidth) {
-      lines.push(cur)
-      cur = word
-    }
-    else {
-      cur = test
-    }
-  }
-  if (cur) lines.push(cur)
-  return lines.length ? lines : ['']
-}
-
 async function renderOverlay() {
   const canvas = canvasRef.value
   if (!canvas || !bgCanvas) return
 
-  // Canvas text uses whatever font is loaded at draw time — wait for the
-  // weights the poster needs before the first render.
-  await Promise.all([
-    document.fonts.load(`400 16px ${SERIF_FONT_FAMILY}`),
-    document.fonts.load(`600 16px ${SANS_FONT_FAMILY}`),
-    document.fonts.load(`700 16px ${SANS_FONT_FAMILY}`),
-    document.fonts.load(`800 16px ${SANS_FONT_FAMILY}`),
-  ])
+  await ensureFontsLoaded()
 
   const w = exportW.value
   const h = exportH.value
@@ -504,7 +570,8 @@ async function renderOverlay() {
 
   const ctx = canvas.getContext('2d')
   if (!ctx) return
-  const k = w / POSTER_REF_WIDTH
+  const s = sheet.value
+  const k = w / s.ref
   const plateH = bgCanvas.height
 
   // 1. Fill the sheet with the panel colour, 2. composite the photo plate.
@@ -530,7 +597,7 @@ async function renderOverlay() {
   ctx.fillRect(0, plateH - 5 * k, w, 5 * k)
 
   // 5. Type, panel only.
-  drawType(ctx, w, k)
+  drawType(ctx, w, k, s, plateH)
 }
 
 function drawRoute(ctx: CanvasRenderingContext2D, plateW: number, plateH: number, k: number, accent: string) {
@@ -585,20 +652,44 @@ function drawRoute(ctx: CanvasRenderingContext2D, plateW: number, plateH: number
   }
 }
 
-function drawType(ctx: CanvasRenderingContext2D, w: number, k: number) {
+/**
+ * The two layouts share every colour, family, tracking rule and cell
+ * source, and differ only in canvas box, type sizes and the row
+ * arrangement — so `drawType` just dispatches on the sheet.
+ */
+function drawType(ctx: CanvasRenderingContext2D, w: number, k: number, s: Sheet, plateH: number) {
   const d = activityData.value
   if (!d) return
 
-  const setFont = (family: string, weight: number, size: number, letterSpacingEm = 0) => {
-    ctx.font = `${weight} ${size}px ${family}`
-    if ('letterSpacing' in ctx) {
-      ;(ctx as unknown as { letterSpacing: string }).letterSpacing = `${(letterSpacingEm * size).toFixed(2)}px`
-    }
-  }
-  const resetLetterSpacing = () => {
-    if ('letterSpacing' in ctx) (ctx as unknown as { letterSpacing: string }).letterSpacing = '0px'
-  }
+  if (s === LANDSCAPE_SHEET) drawTypeLandscape(ctx, w, k, s, plateH, d)
+  else drawTypePortrait(ctx, w, k, d)
+}
 
+/** Shared four-up stat cell: value over label, left-aligned. */
+function drawStatCell(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  valueTop: number,
+  labelTop: number,
+  cell: { label: string, value: string },
+  k: number,
+  valueSize: number,
+  labelSize: number,
+) {
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+
+  setFont(ctx, SANS_FONT_FAMILY, 600, valueSize * k)
+  ctx.fillStyle = textColor.value
+  ctx.fillText(cell.value, x, valueTop)
+
+  setFont(ctx, SANS_FONT_FAMILY, 700, labelSize * k, 0.12)
+  ctx.fillStyle = MUTED_TEXT_COLOR
+  ctx.fillText(cell.label, x, labelTop)
+  resetLetterSpacing(ctx)
+}
+
+function drawTypePortrait(ctx: CanvasRenderingContext2D, w: number, k: number, d: ActivityOverlayData) {
   ctx.save()
 
   const innerLeft = 28 * k
@@ -606,8 +697,7 @@ function drawType(ctx: CanvasRenderingContext2D, w: number, k: number) {
   const innerWidth = w - 56 * k
 
   // ── Row 1: title + place/date, baseline-aligned ──
-  // setFont(SANS_FONT_FAMILY, 800, 31 * k)
-  setFont(SERIF_FONT_FAMILY, 400, 42 * k)
+  setFont(ctx, SERIF_FONT_FAMILY, 400, 42 * k)
   const titleLines = wrapText(ctx, title.value || capitalizeFirst(d.name), innerWidth * 0.7).slice(0, 2)
   const titleLineHeight = 40 * k
   const baseTitleBaseline = 484 * k
@@ -617,7 +707,7 @@ function drawType(ctx: CanvasRenderingContext2D, w: number, k: number) {
   titleLines.forEach((ln, i) => {
     ctx.fillText(ln, innerLeft, baseTitleBaseline + i * titleLineHeight)
   })
-  resetLetterSpacing()
+  resetLetterSpacing(ctx)
   // If the title wraps, every row below shifts down by the extra line(s).
   const extra = (titleLines.length - 1) * titleLineHeight
   const lastTitleBaseline = baseTitleBaseline + extra
@@ -627,11 +717,11 @@ function drawType(ctx: CanvasRenderingContext2D, w: number, k: number) {
   if (shownMetrics.value.has('date')) parts.push(fmtDate(d.startDateLocal))
   const topLine = parts.join(' · ').toUpperCase()
   if (topLine) {
-    setFont(SANS_FONT_FAMILY, 700, 10 * k, 0.16)
+    setFont(ctx, SANS_FONT_FAMILY, 700, 10 * k, 0.16)
     ctx.textAlign = 'right'
     ctx.fillStyle = MUTED_TEXT_COLOR
     ctx.fillText(topLine, innerRight, lastTitleBaseline)
-    resetLetterSpacing()
+    resetLetterSpacing(ctx)
   }
 
   // ── Hairline ──
@@ -648,17 +738,17 @@ function drawType(ctx: CanvasRenderingContext2D, w: number, k: number) {
   const unitBaseline = 555 * k + extra
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
-  setFont(SANS_FONT_FAMILY, 800, 52 * k, -0.04)
+  setFont(ctx, SANS_FONT_FAMILY, 800, 52 * k, -0.04)
   ctx.fillStyle = textColor.value
   const distText = fmtDistanceKm(d.distanceMeters)
   ctx.fillText(distText, innerLeft, distBaseline)
   const distWidth = ctx.measureText(distText).width
-  resetLetterSpacing()
+  resetLetterSpacing(ctx)
 
-  setFont(SANS_FONT_FAMILY, 700, 10 * k, 0.14)
+  setFont(ctx, SANS_FONT_FAMILY, 700, 10 * k, 0.14)
   ctx.fillStyle = lineColor.value
   ctx.fillText('KM', innerLeft + distWidth + 9 * k, unitBaseline)
-  resetLetterSpacing()
+  resetLetterSpacing(ctx)
 
   // ── Row 3: four-up stat grid, left-packed ──
   const cells = ledgerCells.value
@@ -667,19 +757,104 @@ function drawType(ctx: CanvasRenderingContext2D, w: number, k: number) {
     const colW = (innerWidth - 3 * colGap) / 4
     const valueTop = 573 * k + extra
     const labelTop = 595 * k + extra
-    ctx.textAlign = 'left'
-    ctx.textBaseline = 'top'
     cells.forEach((c, i) => {
       const x = innerLeft + i * (colW + colGap)
+      drawStatCell(ctx, x, valueTop, labelTop, c, k, 19, 9)
+    })
+  }
 
-      setFont(SANS_FONT_FAMILY, 600, 19 * k)
-      ctx.fillStyle = textColor.value
-      ctx.fillText(c.value, x, valueTop)
+  ctx.restore()
+}
 
-      setFont(SANS_FONT_FAMILY, 700, 9 * k, 0.12)
-      ctx.fillStyle = MUTED_TEXT_COLOR
-      ctx.fillText(c.label, x, labelTop)
-      resetLetterSpacing()
+/**
+ * Landscape (6B): two rows instead of one band — identity/date+title on the
+ * left of row 1, the distance headline right-aligned on row 1, then a
+ * four-up stat grid on row 2. `plateH` is the *actual* (possibly
+ * title-shrunk) plate height in canvas px, already baked into the
+ * background by buildBackground/computeLandscapeTitleLines — every
+ * panel-relative position below is anchored to it, so it doesn't need to
+ * re-derive the title wrap itself except to know how many lines to draw.
+ */
+function drawTypeLandscape(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  k: number,
+  s: Sheet,
+  plateH: number,
+  d: ActivityOverlayData,
+) {
+  ctx.save()
+
+  const innerLeft = 28 * k
+  const innerRight = w - 28 * k
+  const innerWidth = w - 56 * k
+
+  // The distance headline's baseline is pinned to the sheet's *nominal*
+  // plate height (not the shrunk one) — it's constant regardless of title
+  // wrap, and the title's last line is aligned to share it.
+  const distanceBaseline = s.plateH * k + 62 * k
+  const titleBaseline0 = plateH + 62 * k
+  const dateTopY = plateH + 18 * k
+
+  // ── Date (optional), above the title ──
+  const parts: string[] = []
+  if (place.value.trim()) parts.push(place.value.trim())
+  if (shownMetrics.value.has('date')) parts.push(fmtDate(d.startDateLocal))
+  const dateLine = parts.join(' · ').toUpperCase()
+  if (dateLine) {
+    setFont(ctx, SANS_FONT_FAMILY, 700, 10 * k, 0.16)
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+    ctx.fillStyle = MUTED_TEXT_COLOR
+    ctx.fillText(dateLine, innerLeft, dateTopY)
+    resetLetterSpacing(ctx)
+  }
+
+  // ── Title, up to 2 lines, ending at distanceBaseline ──
+  setFont(ctx, SERIF_FONT_FAMILY, 400, 36 * k)
+  const titleLines = wrapText(ctx, title.value || capitalizeFirst(d.name), innerWidth * 0.6).slice(0, 2)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = textColor.value
+  titleLines.forEach((ln, i) => {
+    ctx.fillText(ln, innerLeft, titleBaseline0 + i * LANDSCAPE_TITLE_LINE_HEIGHT * k)
+  })
+  resetLetterSpacing(ctx)
+
+  // ── Distance headline, right-aligned so value+gap+unit ends at innerRight ──
+  const unitText = 'KM'
+  setFont(ctx, SANS_FONT_FAMILY, 700, 10 * k, 0.14)
+  const unitWidth = ctx.measureText(unitText).width
+  ctx.textAlign = 'right'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = lineColor.value
+  ctx.fillText(unitText, innerRight, distanceBaseline - 3 * k)
+  resetLetterSpacing(ctx)
+
+  setFont(ctx, SANS_FONT_FAMILY, 800, 46 * k, -0.04)
+  ctx.fillStyle = textColor.value
+  ctx.fillText(fmtDistanceKm(d.distanceMeters), innerRight - unitWidth - 7 * k, distanceBaseline)
+  resetLetterSpacing(ctx)
+
+  // ── Hairline ──
+  const hairlineY = plateH + 88 * k
+  ctx.strokeStyle = 'rgba(242,237,227,0.24)'
+  ctx.lineWidth = Math.max(1, k)
+  ctx.beginPath()
+  ctx.moveTo(innerLeft, hairlineY)
+  ctx.lineTo(innerRight, hairlineY)
+  ctx.stroke()
+
+  // ── Row 2: four-up stat grid, left-packed, full inner width ──
+  const cells = ledgerCells.value
+  if (cells.length) {
+    const colGap = 10 * k
+    const colW = (innerWidth - 3 * colGap) / 4
+    const valueTop = plateH + 101 * k
+    const labelTop = plateH + 122 * k
+    cells.forEach((c, i) => {
+      const x = innerLeft + i * (colW + colGap)
+      drawStatCell(ctx, x, valueTop, labelTop, c, k, 18, 9)
     })
   }
 
@@ -691,8 +866,17 @@ watch([photoImage, treated], async () => {
   nextTick(() => renderOverlay())
 })
 
+// A title (or its activity-name fallback) edit can change how many lines
+// the landscape title wraps to, which resizes the photo plate — rebuild the
+// background rather than just re-rendering on top of it. No-op on the
+// portrait sheet, where title wrap never affects plate size.
+watch([title, activityData], async () => {
+  if (sheet.value === LANDSCAPE_SHEET && photoImage.value) await buildBackground()
+  nextTick(() => renderOverlay())
+})
+
 watch(
-  [lineColor, textColor, title, place, shownMetrics, activityData, routeOffsetX, routeOffsetY],
+  [lineColor, textColor, place, shownMetrics, routeOffsetX, routeOffsetY],
   () => {
     nextTick(() => renderOverlay())
   },
