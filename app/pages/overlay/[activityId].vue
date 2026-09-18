@@ -78,33 +78,42 @@ const textColor = ref(DEFAULT_TEXT_COLOR)
 const title = ref('') // seeded from the activity name
 const place = ref('')
 // Distance is permanent (it's the headline); the rest are opt-in.
-const shownMetrics = ref<Set<string>>(new Set(['distance', 'time', 'avgPower', 'elevation']))
+const shownMetrics = ref<Set<string>>(new Set(['distance', 'time', 'elevation']))
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const exportW = ref(0)
 const exportH = ref(0)
 
-// Derived from the loaded photo's natural size — not a user control. Square
-// photos (ratio exactly 1) take the landscape sheet. Falls back to portrait
-// before a photo is loaded (matches the pre-landscape preview placeholder).
+// 'auto' derives the sheet from the loaded photo's natural size (square
+// photos take the landscape sheet); 'portrait'/'landscape' override it —
+// e.g. force the vertical design onto a horizontal photo. Falls back to
+// portrait in 'auto' before a photo is loaded (matches the placeholder).
+const orientation = ref<'auto' | 'portrait' | 'landscape'>('auto')
 const sheet = computed<Sheet>(() => {
+  if (orientation.value === 'portrait') return PORTRAIT_SHEET
+  if (orientation.value === 'landscape') return LANDSCAPE_SHEET
   const img = photoImage.value
   if (!img) return PORTRAIT_SHEET
   return img.naturalWidth >= img.naturalHeight ? LANDSCAPE_SHEET : PORTRAIT_SHEET
 })
 
-// ── Draggable route position ─────────────────────────────────────────────
+// ── Draggable route + photo position ─────────────────────────────────────
 //
-// The route line is the only element drawn over the photo, and the only one
-// that can be dragged. Offset is in canvas pixel space, relative to its
-// default layout position, clamped so it can't be dragged out of the plate.
+// The route line and the photo are the two things that can be dragged —
+// picking the route when the pointer is over its line/dot, the photo
+// (panned within its cover-fit crop) otherwise. Offsets are in canvas pixel
+// space, relative to each element's default layout position, clamped so
+// neither can be dragged out of the plate.
 const routeOffsetX = ref(0)
 const routeOffsetY = ref(0)
-const dragging = ref<'route' | null>(null)
+const photoOffsetX = ref(0)
+const photoOffsetY = ref(0)
+const dragging = ref<'route' | 'photo' | null>(null)
 
 interface Box { x: number, y: number, w: number, h: number }
 // Updated on every renderOverlay() call, read by the pointerdown hit test.
 let routeBounds: Box | null = null
+let plateBounds: Box | null = null
 let dragStartPoint = { x: 0, y: 0 }
 let dragStartOffset = { x: 0, y: 0 }
 
@@ -145,7 +154,6 @@ const metricDefs = computed<MetricDef[]>(() => {
   return [
     { key: 'distance', label: 'Distance', ledgerLabel: '', available: true },
     { key: 'time', label: 'Time', ledgerLabel: 'DURATION', available: true },
-    { key: 'avgPower', label: 'Avg power', ledgerLabel: 'AVG POWER', available: d?.avgWatts != null },
     { key: 'elevation', label: 'Elevation', ledgerLabel: 'ELEVATION', available: true },
     { key: 'avgSpeed', label: 'Avg speed', ledgerLabel: 'KM/H AVG', available: d?.avgSpeedMetersPerSecond != null },
     { key: 'date', label: 'Date', ledgerLabel: 'DATE', available: true },
@@ -222,7 +230,6 @@ function metricValue(key: string): string {
   if (!d) return ''
   switch (key) {
     case 'time': return fmtTime(d.movingTimeSeconds)
-    case 'avgPower': return d.avgWatts != null ? `${Math.round(d.avgWatts)} W` : ''
     case 'elevation': return `${Math.round(d.elevationGainMeters)} m`
     case 'avgSpeed': return d.avgSpeedMetersPerSecond != null ? (d.avgSpeedMetersPerSecond * 3.6).toFixed(1) : ''
     case 'date': return fmtDate(d.startDateLocal)
@@ -234,7 +241,7 @@ function metricValue(key: string): string {
 // Ledger cells = selected metrics minus distance (the headline) and date
 // (which rides in the top-right of row 1 with the place), in panel order,
 // capped at the four-up stat grid, left-packed.
-const LEDGER_ORDER = ['time', 'avgPower', 'elevation', 'avgSpeed', 'np']
+const LEDGER_ORDER = ['time', 'elevation', 'avgSpeed', 'np']
 const ledgerCells = computed(() =>
   LEDGER_ORDER
     .map((k) => metricDefs.value.find((m) => m.key === k)!)
@@ -267,10 +274,13 @@ function onFileChange(e: Event) {
   img.onload = () => {
     photoImage.value = img
     photoMeta.value = { name: file.name, w: img.naturalWidth, h: img.naturalHeight }
-    // A new photo can have very different dimensions — start the route back
-    // at its default layout position rather than carrying over a stale offset.
+    // A new photo can have very different dimensions — start the route and
+    // photo back at their default layout position rather than carrying over
+    // a stale offset.
     routeOffsetX.value = 0
     routeOffsetY.value = 0
+    photoOffsetX.value = 0
+    photoOffsetY.value = 0
   }
   img.src = url
 }
@@ -278,6 +288,8 @@ function onFileChange(e: Event) {
 function resetPositions() {
   routeOffsetX.value = 0
   routeOffsetY.value = 0
+  photoOffsetX.value = 0
+  photoOffsetY.value = 0
 }
 
 // ── Route projection: lat/lng -> canvas xy (equirectangular, scale-to-fit) ─
@@ -537,8 +549,20 @@ async function buildBackground() {
   const coverScale = Math.max(plateW / img.naturalWidth, plateH / img.naturalHeight)
   const drawW = img.naturalWidth * coverScale
   const drawH = img.naturalHeight * coverScale
-  const dx = (plateW - drawW) / 2 - o
-  const dy = (plateH - drawH) / 2 - o
+
+  // Pan within the cover-fit crop — clamped so the overscaled bleed always
+  // still covers the plate (same clamp-and-write-back pattern as the route
+  // drag below).
+  const clamp = (value: number, lo: number, hi: number) => (lo <= hi ? Math.min(Math.max(value, lo), hi) : 0)
+  const overflowX = Math.max(0, drawW - plateW) / 2
+  const overflowY = Math.max(0, drawH - plateH) / 2
+  const px = clamp(photoOffsetX.value, -overflowX, overflowX)
+  const py = clamp(photoOffsetY.value, -overflowY, overflowY)
+  if (px !== photoOffsetX.value) photoOffsetX.value = px
+  if (py !== photoOffsetY.value) photoOffsetY.value = py
+
+  const dx = (plateW - drawW) / 2 - o + px
+  const dy = (plateH - drawH) / 2 - o + py
   bctx.drawImage(img, dx, dy, drawW + o * 2, drawH + o * 2)
 
   if (treated.value) {
@@ -573,6 +597,7 @@ async function renderOverlay() {
   const s = sheet.value
   const k = w / s.ref
   const plateH = bgCanvas.height
+  plateBounds = { x: 0, y: 0, w, h: plateH }
 
   // 1. Fill the sheet with the panel colour, 2. composite the photo plate.
   ctx.clearRect(0, 0, w, h)
@@ -861,7 +886,7 @@ function drawTypeLandscape(
   ctx.restore()
 }
 
-watch([photoImage, treated], async () => {
+watch([photoImage, treated, orientation], async () => {
   await buildBackground()
   nextTick(() => renderOverlay())
 })
@@ -872,6 +897,14 @@ watch([photoImage, treated], async () => {
 // portrait sheet, where title wrap never affects plate size.
 watch([title, activityData], async () => {
   if (sheet.value === LANDSCAPE_SHEET && photoImage.value) await buildBackground()
+  nextTick(() => renderOverlay())
+})
+
+// Panning the photo re-crops and re-filters the plate, so it needs a full
+// background rebuild too (unlike the route, which is drawn straight onto
+// the render canvas on every pointermove).
+watch([photoOffsetX, photoOffsetY], async () => {
+  await buildBackground()
   nextTick(() => renderOverlay())
 })
 
@@ -898,9 +931,17 @@ function pointInBox(p: { x: number, y: number }, box: Box | null): boolean {
 
 function onOverlayPointerDown(e: PointerEvent) {
   const p = getCanvasPoint(e)
-  if (!pointInBox(p, routeBounds)) return
-  dragging.value = 'route'
-  dragStartOffset = { x: routeOffsetX.value, y: routeOffsetY.value }
+  if (pointInBox(p, routeBounds)) {
+    dragging.value = 'route'
+    dragStartOffset = { x: routeOffsetX.value, y: routeOffsetY.value }
+  }
+  else if (pointInBox(p, plateBounds)) {
+    dragging.value = 'photo'
+    dragStartOffset = { x: photoOffsetX.value, y: photoOffsetY.value }
+  }
+  else {
+    return
+  }
   dragStartPoint = p
   canvasRef.value?.setPointerCapture(e.pointerId)
 }
@@ -910,8 +951,14 @@ function onOverlayPointerMove(e: PointerEvent) {
   const p = getCanvasPoint(e)
   const dx = p.x - dragStartPoint.x
   const dy = p.y - dragStartPoint.y
-  routeOffsetX.value = dragStartOffset.x + dx
-  routeOffsetY.value = dragStartOffset.y + dy
+  if (dragging.value === 'route') {
+    routeOffsetX.value = dragStartOffset.x + dx
+    routeOffsetY.value = dragStartOffset.y + dy
+  }
+  else {
+    photoOffsetX.value = dragStartOffset.x + dx
+    photoOffsetY.value = dragStartOffset.y + dy
+  }
 }
 
 function onOverlayPointerUp() {
@@ -1004,14 +1051,15 @@ function downloadOverlay() {
             />
             <div
               v-if="!photoImage"
-              class="flex aspect-[432/647] items-center justify-center bg-[#161412] text-[13px] text-white/50"
+              class="flex items-center justify-center bg-[#161412] text-[13px] text-white/50"
+              :style="{ aspectRatio: `${sheet.w} / ${sheet.h}` }"
             >
               Upload a photo to preview the overlay.
             </div>
           </div>
 
           <div class="flex flex-wrap items-center justify-center gap-x-[14px] gap-y-1 text-[12px] text-[#8a827a]">
-            <span>Drag the route to reposition</span>
+            <span>Drag the photo or route to reposition</span>
             <span class="text-[#c7c2bd]">·</span>
             <button
               type="button"
@@ -1075,6 +1123,30 @@ function downloadOverlay() {
                   Replace
                 </button>
               </div>
+            </div>
+
+            <!-- Orientation -->
+            <div>
+              <p class="mb-[9px] text-[10px] font-semibold uppercase tracking-[0.11em] text-[#a8a29e]">
+                Orientation
+              </p>
+              <div class="flex w-full rounded-[9px] bg-[#f5f5f4] p-[3px]">
+                <button
+                  v-for="opt in (['auto', 'portrait', 'landscape'] as const)"
+                  :key="opt"
+                  type="button"
+                  class="flex-1 rounded-[6px] py-[6px] text-center text-[12px] capitalize"
+                  :class="orientation === opt
+                    ? 'bg-white font-semibold text-[#1c1917] shadow-[0_1px_2px_rgba(28,25,23,0.08)]'
+                    : 'font-medium text-[#78716c]'"
+                  @click="orientation = opt"
+                >
+                  {{ opt }}
+                </button>
+              </div>
+              <p class="mt-2 text-[11px] text-[#c7c2bd]">
+                Auto picks the sheet from the photo; Portrait/Landscape override it.
+              </p>
             </div>
 
             <!-- Photo effect -->
