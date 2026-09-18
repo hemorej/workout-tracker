@@ -39,7 +39,7 @@ const OVERLAY_FONT_FAMILY = '"Hanken Grotesk", system-ui, sans-serif'
 const DEFAULT_LINE_COLOR = '#ea580c'
 const DEFAULT_TEXT_COLOR = '#ffffff'
 /** Swatch palette shared by the line colour and text colour controls. */
-const LINE_PALETTE = ['#ea580c', '#eeb902', '#ffffff', '#1c1917', '#2d7dd2']
+const LINE_PALETTE = ['#ea580c', '#eeb902', '#ffffff', '#1c1917', '#5398BE']
 /**
  * The design reference width. Every poster type size and offset below is
  * quoted at this width; multiply by `canvasWidth / POSTER_REF_WIDTH` when
