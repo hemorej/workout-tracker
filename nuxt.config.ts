@@ -24,12 +24,12 @@ export default defineNuxtConfig({
 
     /**
      * `@nuxt/icon` (pulled in by `@nuxt/ui`). Default behaviour bundles the
-     * *entire* installed Iconify collections (`@iconify-json/heroicons` +
-     * `@iconify-json/lucide`, ~1.2 MB of JSON) into the Nitro server output
+     * *entire* installed Iconify collection (`@iconify-json/heroicons`, the
+     * only one installed) into the Nitro server output
      * so the runtime `/api/_nuxt_icon` endpoint can serve any icon on demand.
      *
      * This app only ever renders ~20 distinct icons, all statically named in
-     * templates (no dynamic `i-lucide-${x}` construction anywhere). So:
+     * templates (no dynamic `i-heroicons-${x}` construction anywhere). So:
      *   - `serverBundle: false` — drop the full collections from the server
      *     build entirely.
      *   - `clientBundle.scan` — walk the app source, find every `i-{prefix}-*`
@@ -143,6 +143,59 @@ export default defineNuxtConfig({
             colors: {
                 primary: 'orange',
                 neutral: 'stone',
+            },
+            /**
+             * Nuxt UI's built-in components (modal close button, select
+             * chevrons, toast status icons, loading spinners, …) default to
+             * Lucide. Remap every default slot to its Heroicons equivalent so
+             * the whole app renders a single icon set. Lucide is deliberately
+             * NOT installed, so an unmapped slot would render blank — keep this
+             * list in sync with Nuxt UI's default icons.
+             */
+            icons: {
+                arrowDown: 'i-heroicons-arrow-down',
+                arrowLeft: 'i-heroicons-arrow-left',
+                arrowRight: 'i-heroicons-arrow-right',
+                arrowUp: 'i-heroicons-arrow-up',
+                caution: 'i-heroicons-exclamation-circle',
+                check: 'i-heroicons-check',
+                chevronDoubleLeft: 'i-heroicons-chevron-double-left',
+                chevronDoubleRight: 'i-heroicons-chevron-double-right',
+                chevronDown: 'i-heroicons-chevron-down',
+                chevronLeft: 'i-heroicons-chevron-left',
+                chevronRight: 'i-heroicons-chevron-right',
+                chevronUp: 'i-heroicons-chevron-up',
+                close: 'i-heroicons-x-mark',
+                copy: 'i-heroicons-document-duplicate',
+                copyCheck: 'i-heroicons-clipboard-document-check',
+                dark: 'i-heroicons-moon',
+                drag: 'i-heroicons-bars-3',
+                ellipsis: 'i-heroicons-ellipsis-horizontal',
+                error: 'i-heroicons-x-circle',
+                external: 'i-heroicons-arrow-up-right',
+                eye: 'i-heroicons-eye',
+                eyeOff: 'i-heroicons-eye-slash',
+                file: 'i-heroicons-document',
+                folder: 'i-heroicons-folder',
+                folderOpen: 'i-heroicons-folder-open',
+                hash: 'i-heroicons-hashtag',
+                info: 'i-heroicons-information-circle',
+                light: 'i-heroicons-sun',
+                loading: 'i-heroicons-arrow-path',
+                menu: 'i-heroicons-bars-3',
+                minus: 'i-heroicons-minus',
+                panelClose: 'i-heroicons-chevron-double-left',
+                panelOpen: 'i-heroicons-chevron-double-right',
+                plus: 'i-heroicons-plus',
+                reload: 'i-heroicons-arrow-path',
+                search: 'i-heroicons-magnifying-glass',
+                stop: 'i-heroicons-stop',
+                star: 'i-heroicons-star',
+                success: 'i-heroicons-check-circle',
+                system: 'i-heroicons-computer-desktop',
+                tip: 'i-heroicons-light-bulb',
+                upload: 'i-heroicons-arrow-up-tray',
+                warning: 'i-heroicons-exclamation-triangle',
             },
         },
     },

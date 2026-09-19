@@ -15,7 +15,8 @@ Track your daily sessions, visualise fitness and fatigue over time, and understa
 | Framework | Nuxt 4 (`compatibilityVersion: 4`) |
 | Frontend | Vue 3.5, TypeScript |
 | State | Pinia (`@pinia/nuxt`) |
-| UI | Nuxt UI v4 (Tailwind v4) |
+| UI | Nuxt UI v4 (Tailwind v4), Heroicons |
+| Fonts | Self-hosted via `@fontsource` (no remote font requests) |
 | Auth | `nuxt-auth-utils` (cookie sessions) + scrypt (`@adonisjs/hash`) |
 | Database | PostgreSQL 18 |
 | ORM | Drizzle ORM (`drizzle-orm/node-postgres`) |
@@ -35,6 +36,9 @@ sprocket/
 │   │   └── overlay/[activityId].vue ← Standalone FIT ride overlay view
 │   ├── components/
 │   │   ├── BikeLogo.vue / BikeSpinner.vue ← Wordmark icon / loading spinner
+│   │   ├── FlameIcon / MountainIcon / IntervalsIcon.vue ← Custom glyphs Heroicons lacks
+│   │   ├── HistorySegmentsPanel.vue ← History → Segments tab (starred-segment top-5 efforts)
+│   │   ├── TodaysEventsDialog.vue ← Planning tab: today's Zwift climbs + races
 │   │   ├── MetricsSummary.vue  ← Weekly stats + CTL/TSB cards
 │   │   ├── MetricsHistoryChart.vue ← Inline-SVG CTL/TSB line chart
 │   │   ├── WorkoutCard.vue     ← Single day row (workout or rest)
@@ -59,12 +63,16 @@ sprocket/
 │   │   ├── auth/               ← login / logout / register (register returns 403)
 │   │   ├── coach/generate.post.ts    ← AI coach: Anthropic → structured workout + fuelling guide
 │   │   ├── fit/upload.post.ts        ← Manual FIT upload (indoor/Zwift completed-workout branch)
+│   │   ├── ftp/current.get.ts        ← Current FTP marker
 │   │   ├── history/index.get.ts      ← Aggregated history periods + power bests panel
+│   │   ├── segments/                 ← index.get / sync.post / reconcile.post (nightly, secret-authed)
+│   │   ├── zwift/today.get.ts        ← Today's climb portals + upcoming races
 │   │   ├── metrics/series.get.ts     ← Daily CTL/TSB series for charting (?weeks=8)
 │   │   ├── planned-workouts/         ← index.get / index.put / [date].delete
 │   │   ├── strava/                   ← recent-rides.get, activity/[id].get
 │   │   ├── users/                    ← me.get / me.put (FTP seed, weight, training plan)
 │   │   ├── wahoo/by-date.get.ts      ← Wahoo workout for a calendar day + parsed FIT metrics
+│   │   ├── wahoo/webhook.post.ts     ← PUBLIC secret-authed webhook: stores FIT, upserts workout
 │   │   └── workouts/                 ← index.get / index.post / [id].patch / [id].delete
 │   ├── db/
 │   │   ├── index.ts            ← Drizzle client (singleton pool)
@@ -76,6 +84,8 @@ sprocket/
 │       ├── fit.ts              ← FIT parsing: normalized power, TSS, power-curve bests, distance
 │       ├── ftp.ts              ← Shared "current FTP" lookup (fallback 230 W)
 │       ├── strava.ts / wahoo.ts ← Refresh-token exchange + activity/FIT fetching (single-user OAuth)
+│       ├── fitWorkout.ts / fitStorage.ts / wahooWebhook.ts ← FIT→workout shaping, raw FIT persistence, webhook types
+│       ├── stravaSegments.ts / zwiftEvents.ts ← Segment sync helpers / Zwift events scraping
 │       ├── anthropic.ts        ← Anthropic client + CoachWorkoutSchema (structured output)
 │       ├── polyline.ts         ← Google-encoded polyline decoder
 │       └── logger.ts           ← getLogger(domain), tslog structured logging
@@ -162,7 +172,7 @@ LOG_LEVEL=info
 # In psql or your preferred client:
 psql postgres
 CREATE DATABASE workout_tracker;
-CREATE USER workout_tracker WITH PASSWORD 'UjzIe9cvU9sJTwEYAIbU8gXBViKnSbJAj3gbPpEXVOc';
+CREATE USER workout_tracker WITH PASSWORD '...';
 GRANT ALL PRIVILEGES ON DATABASE workout_tracker TO workout_tracker;
 CREATE USER postgres WITH SUPERUSER CREATEDB CREATEROLE LOGIN PASSWORD 'postgres';
 ```
@@ -254,6 +264,10 @@ One row per duration per workout. Unique index on `(workout_id, duration)`.
 | `duration_minutes` | integer | Optional planned duration |
 | `created_at` | timestamptz | Default: now() |
 
+### `tracked_segments` / `segment_efforts`
+
+Starred Strava segments (un-starring sets `starred = false`, never deletes) and their per-effort history, keyed on Strava ids so every write is an upsert. Shown in History → Segments. See CLAUDE.md → "Tracked segments".
+
 ### `wahoo_power_bests` / `wahoo_tokens`
 
 `wahoo_power_bests` records power-curve bests auto-detected from rides seen via the Wahoo API (keyed on the Wahoo activity id), merged into the History tab alongside `power_bests`. `wahoo_tokens` holds the single connected account's rotating OAuth refresh token — Wahoo issues a new one on every refresh, so it must be persisted rather than read from `.env` after the first exchange (see `server/utils/wahoo.ts`).
@@ -306,7 +320,7 @@ Measures how fresh you are at the start of the day, before adding today's load. 
 
 ## API reference
 
-All routes require a valid session cookie except `/api/auth/login` and `/api/auth/register`.
+All routes require a valid session cookie except `/api/auth/login`, `/api/auth/register`, and the two secret-authed machine endpoints (`/api/wahoo/webhook`, `/api/segments/reconcile`).
 
 | Method | Path | Description |
 |---|---|---|
@@ -328,6 +342,12 @@ All routes require a valid session cookie except `/api/auth/login` and `/api/aut
 | GET | `/api/wahoo/by-date?date=YYYY-MM-DD` | Wahoo workout for that day + parsed FIT metrics |
 | POST | `/api/fit/upload` | Manual FIT upload (multipart), indoor/Zwift branch |
 | POST | `/api/coach/generate` | AI coach: generate a structured workout from the training plan |
+| GET | `/api/ftp/current` | Current FTP (latest `ftp_watts` marker) |
+| GET | `/api/segments` | Starred segments with their top-5 efforts |
+| POST | `/api/segments/sync` | Manual "Sync segments" (session auth) |
+| POST | `/api/segments/reconcile` | Nightly reconcile — **public**, shared-secret auth (`NUXT_SEGMENTS_SYNC_TOKEN`) |
+| POST | `/api/wahoo/webhook` | Wahoo workout-summary webhook — **public**, shared-secret auth (`NUXT_WAHOO_WEBHOOK_TOKEN`) |
+| GET | `/api/zwift/today?date=YYYY-MM-DD` | Today's climb portals + upcoming races |
 
 ### GET /api/workouts response shape
 
@@ -391,7 +411,7 @@ All routes require a valid session cookie except `/api/auth/login` and `/api/aut
 
 ## Strava integration
 
-Single-user "pre-fill from a recent ride" flow — there's no in-app OAuth flow and no webhooks/polling. `server/utils/strava.ts` exchanges a long-lived `STRAVA_REFRESH_TOKEN` for a short-lived access token (cached in-process, refreshed as needed) and exposes `fetchRecentRides()`. `GET /api/strava/recent-rides` returns the last 3 Ride-type activities, which the Add Workout form uses to pre-fill name, moving time, and date — TSS and power bests always stay manual since Strava's own NP/TSS formula doesn't match the user's bike computer.
+Single-user flow — there's no in-app OAuth flow. `server/utils/strava.ts` exchanges a long-lived `STRAVA_REFRESH_TOKEN` for a short-lived access token (cached in-process, refreshed as needed) and exposes `fetchRecentStravaRides()`. `GET /api/strava/recent-rides` returns the last 3 `Ride`/`VirtualRide` activities for the completed-workout picker, supplying the ride *title* and outdoor/trainer classification. TSS, duration, distance and power bests always come from a parsed FIT file (Wahoo API or manual upload) since Strava's own NP/TSS formula doesn't match the user's bike computer. Strava also powers the tracked-segments feature (needs a Strava subscription for effort history).
 
 To (re)acquire a refresh token: register an app at [strava.com/settings/api](https://www.strava.com/settings/api) with Authorization Callback Domain `localhost`, visit the OAuth authorize URL with `scope=activity:read_all`, approve, copy the `code` param from the (failed-to-load) `localhost` redirect, then `POST https://www.strava.com/oauth/token` with `client_id`, `client_secret`, `code`, `grant_type=authorization_code` to get the initial token pair.
 
@@ -434,6 +454,14 @@ The Planning tab shows a rolling 4-week grid (current week + 3 ahead) where you 
 - **Weekly TSS totals** — each week header shows the sum of planned TSS for that week.
 
 Planned workouts are stored in the `planned_workouts` table and are independent of actual logged workouts.
+
+---
+
+## Design conventions
+
+- **Fonts are self-hosted.** Hanken Grotesk, Archivo and Instrument Serif are vendored via `@fontsource` packages and declared with `@font-face` in `app/assets/css/main.css`; `nuxt.config.ts` disables `@nuxt/fonts` remote providers for them. No request ever goes to Google Fonts or another font CDN.
+- **Icons are Heroicons** (`i-heroicons-*`). Nuxt UI's built-in component icons are remapped from Lucide to Heroicons via `appConfig.ui.icons`. A few custom SVG components cover glyphs Heroicons lacks (flame, mountain, intervals, bike logo). Some older components still hand-inline SVGs — prefer `<UIcon>` for new work.
+- **Theme:** orange primary, stone neutral. See `CLAUDE.md` for the full conventions.
 
 ---
 
