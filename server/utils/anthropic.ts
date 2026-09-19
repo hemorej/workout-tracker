@@ -8,7 +8,7 @@
  * earning its place in the server bundle. What the SDK was doing for us and
  * how it's replaced here:
  *   - `client.messages.stream()` + `finalMessage()` → hand-rolled SSE parse
- *     in `streamCoachRequest` (accumulate `text_delta`s, watch `stop_reason`).
+ *     in `streamStructuredRequest` (accumulate `text_delta`s, watch `stop_reason`).
  *   - `zodOutputFormat(schema)` → the explicit `COACH_WORKOUT_JSON_SCHEMA`
  *     literal below, sent as `output_config.format`. Kept as a plain literal
  *     (not generated from the Zod schema) because the structured-output
@@ -97,6 +97,15 @@ export const CoachWorkoutSchema = z.object({
 
 export type CoachWorkout = z.infer<typeof CoachWorkoutSchema>
 
+/** Fuelling-only response — used by the Planning tab's "fuelling guidelines
+ *  only" row action, which doesn't need (and shouldn't pay the token cost of)
+ *  a full block structure. */
+export const FuellingGuideSchema = z.object({
+  fuellingGuide: z.string().describe('pre-ride, during-ride, and post-ride fuelling/hydration guidance for this specific workout, as three short paragraphs separated by blank lines (one per phase, each starting with a "Pre-ride:"/"During:"/"Post-ride:" label)'),
+})
+
+export type FuellingGuide = z.infer<typeof FuellingGuideSchema>
+
 /**
  * Wire schema for `output_config.format`. Must stay in sync with
  * `CoachWorkoutSchema` above — kept hand-written (see the file header for
@@ -168,13 +177,26 @@ const COACH_WORKOUT_JSON_SCHEMA = {
   },
 } as const
 
+const FUELLING_GUIDE_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['fuellingGuide'],
+  properties: {
+    fuellingGuide: {
+      type: 'string',
+      description: 'pre-ride, during-ride, and post-ride fuelling/hydration guidance for this specific workout, as three short paragraphs separated by blank lines (one per phase, each starting with a "Pre-ride:"/"During:"/"Post-ride:" label)',
+    },
+  },
+} as const
+
 /**
- * One streamed structured-output call. Returns the validated workout, or
+ * One streamed structured-output call. Returns the validated response, or
  * throws — `AnthropicTransientError` for something the caller may retry, a
  * plain `Error` for anything terminal (bad request, refusal, truncation,
- * schema mismatch). Never returns a partial result.
+ * schema mismatch). Never returns a partial result. Generic over the
+ * response shape so it serves both the full-workout and fuelling-only calls.
  */
-async function streamCoachRequest(apiKey: string, body: string): Promise<CoachWorkout> {
+async function streamStructuredRequest<T>(apiKey: string, body: string, schema: z.ZodType<T>): Promise<T> {
   const controller = new AbortController()
   let firstTokenSeen = false
   let timer: ReturnType<typeof setTimeout> = setTimeout(
@@ -290,37 +312,17 @@ async function streamCoachRequest(apiKey: string, body: string): Promise<CoachWo
     throw new Error('coach response was not valid JSON')
   }
 
-  const result = CoachWorkoutSchema.safeParse(parsed)
+  const result = schema.safeParse(parsed)
   if (!result.success) {
     throw new Error(`coach response did not match the expected schema: ${result.error.message.slice(0, 300)}`)
   }
   return result.data
 }
 
-/**
- * Generate today's workout. `systemBlocks` is the assembled `system` prompt
- * (training plan + coach instructions, built by the route); `userText` is
- * the single user turn. Retries transient failures with backoff; a terminal
- * failure (or exhausted retries) throws.
- */
-export async function generateCoachWorkout(
-  systemBlocks: AnthropicSystemBlock[],
-  userText: string,
-): Promise<CoachWorkout> {
-  const apiKey = useRuntimeConfig().anthropicApiKey
-  if (!apiKey) {
-    throw createError({ statusCode: 500, statusMessage: 'ANTHROPIC_API_KEY is not configured' })
-  }
-
-  const body = JSON.stringify({
-    model: MODEL,
-    max_tokens: MAX_TOKENS,
-    stream: true,
-    system: systemBlocks,
-    messages: [{ role: 'user', content: userText }],
-    output_config: { format: { type: 'json_schema', schema: COACH_WORKOUT_JSON_SCHEMA } },
-  })
-
+/** Retries `run` on transient failures with backoff; a terminal failure (or
+ *  exhausted retries) throws. Shared by the full-workout and fuelling-only
+ *  generators below. */
+async function withCoachRetries<T>(run: () => Promise<T>): Promise<T> {
   let lastErr: unknown
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
@@ -331,7 +333,7 @@ export async function generateCoachWorkout(
     }
 
     try {
-      return await streamCoachRequest(apiKey, body)
+      return await run()
     }
     catch (err) {
       lastErr = err
@@ -341,6 +343,61 @@ export async function generateCoachWorkout(
   }
 
   throw lastErr
+}
+
+function requireApiKey(): string {
+  const apiKey = useRuntimeConfig().anthropicApiKey
+  if (!apiKey) {
+    throw createError({ statusCode: 500, statusMessage: 'ANTHROPIC_API_KEY is not configured' })
+  }
+  return apiKey
+}
+
+/**
+ * Generate a full workout (structured blocks + fuelling guide). `systemBlocks`
+ * is the assembled `system` prompt (training plan + coach instructions, built
+ * by the route); `userText` is the single user turn.
+ */
+export async function generateCoachWorkout(
+  systemBlocks: AnthropicSystemBlock[],
+  userText: string,
+): Promise<CoachWorkout> {
+  const apiKey = requireApiKey()
+
+  const body = JSON.stringify({
+    model: MODEL,
+    max_tokens: MAX_TOKENS,
+    stream: true,
+    system: systemBlocks,
+    messages: [{ role: 'user', content: userText }],
+    output_config: { format: { type: 'json_schema', schema: COACH_WORKOUT_JSON_SCHEMA } },
+  })
+
+  return withCoachRetries(() => streamStructuredRequest(apiKey, body, CoachWorkoutSchema))
+}
+
+/**
+ * Generate the fuelling guide only, skipping the block structure entirely —
+ * used by the Planning tab's "fuelling guidelines only" row action. Same
+ * request shape as `generateCoachWorkout`, just a smaller schema and token
+ * budget.
+ */
+export async function generateCoachFuellingGuide(
+  systemBlocks: AnthropicSystemBlock[],
+  userText: string,
+): Promise<FuellingGuide> {
+  const apiKey = requireApiKey()
+
+  const body = JSON.stringify({
+    model: MODEL,
+    max_tokens: 1024,
+    stream: true,
+    system: systemBlocks,
+    messages: [{ role: 'user', content: userText }],
+    output_config: { format: { type: 'json_schema', schema: FUELLING_GUIDE_JSON_SCHEMA } },
+  })
+
+  return withCoachRetries(() => streamStructuredRequest(apiKey, body, FuellingGuideSchema))
 }
 
 /** `Retry-After` is seconds (or an HTTP date); we only handle the seconds form. */

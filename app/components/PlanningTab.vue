@@ -3,7 +3,8 @@ import { usePlanningStore } from '~/stores/planning'
 import type { PlanEntry } from '~/stores/planning'
 
 const planning = usePlanningStore()
-const emit = defineEmits<{ openTodaysEvents: [] }>()
+const emit = defineEmits<{ openTodaysEvents: [], buildWorkout: [date: string] }>()
+const toast = useToast()
 
 onMounted(() => planning.fetchPlans())
 
@@ -230,6 +231,52 @@ async function swapWithAbove(date: string) {
   }
 }
 
+// ── Build actions ────────────────────────────────────────────────────────────
+// Two row actions that hand a planned day off to the AI coach: "fuelling
+// guidelines only" (generates just the fuelling text and previews it in the
+// existing note popup below) and "build complete workout" (generates a full
+// structured workout, same generator as the Training Log's "Auto" button,
+// and opens it in the Workout Builder tab). Both are only offered for
+// future/today rows with an actual session planned — not rest days.
+
+function canBuild(day: (typeof planning.plans)[number]) {
+  return !day.isPast && getDraft(day.date).type !== 'rest'
+}
+
+async function buildWorkout(date: string) {
+  // Persist any pending edits first so the coach generates from saved values.
+  await save(date)
+  emit('buildWorkout', date)
+}
+
+const fuellingLoadingDate = ref<string | null>(null)
+
+async function buildFuellingGuide(date: string) {
+  await save(date)
+  fuellingLoadingDate.value = date
+  try {
+    const { fuellingGuide } = await $fetch<{ fuellingGuide: string }>('/api/coach/generate', {
+      method: 'POST',
+      query: { date, mode: 'fuelling' },
+    })
+    // Open the existing note popup, then overwrite its buffer with the
+    // generated text — the user reviews/edits and hits Save like any other
+    // note; nothing is persisted until they do.
+    openNoteModal(date)
+    noteBuffer.value = fuellingGuide
+  }
+  catch {
+    toast.add({
+      title: "Couldn't generate a fuelling guide",
+      description: 'Make sure a training plan is set for your account, then try again.',
+      color: 'error',
+    })
+  }
+  finally {
+    fuellingLoadingDate.value = null
+  }
+}
+
 // ── Live projections ─────────────────────────────────────────────────────────
 // Recomputes CTL/TSB for every future day using draft TSS values so the
 // numbers update as the user types, before the field is saved.
@@ -432,6 +479,8 @@ async function clearNote() {
             <span class="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-300">CTL</span>
             <span class="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-300">TSB</span>
             <span class="w-4 shrink-0" />
+            <span class="w-px h-3.5 shrink-0 bg-stone-100" />
+            <span class="w-14 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-300">Build</span>
           </div>
 
           <!-- Day rows -->
@@ -601,6 +650,38 @@ async function clearNote() {
                 class="animate-spin text-stone-300 w-3 h-3"
               />
             </div>
+
+            <!-- Build actions — planned days only -->
+            <span class="hidden sm:block w-px self-stretch shrink-0 bg-stone-100" />
+            <span class="hidden sm:flex w-14 shrink-0 items-center justify-center gap-1">
+              <template v-if="!day.isPast">
+                <button
+                  type="button"
+                  :disabled="!canBuild(day) || fuellingLoadingDate === day.date"
+                  class="w-6 h-6 inline-flex items-center justify-center rounded-md border transition-colors"
+                  :class="canBuild(day)
+                    ? 'border-stone-200 text-sky-500 hover:bg-sky-50 hover:border-sky-200 cursor-pointer'
+                    : 'border-stone-100 text-stone-200 cursor-default'"
+                  title="Fuelling guidelines only"
+                  @click="buildFuellingGuide(day.date)"
+                >
+                  <UIcon v-if="fuellingLoadingDate === day.date" name="i-heroicons-arrow-path" class="animate-spin w-3 h-3" />
+                  <FlameIcon v-else class="w-[13px] h-[13px]" />
+                </button>
+                <button
+                  type="button"
+                  :disabled="!canBuild(day)"
+                  class="w-6 h-6 inline-flex items-center justify-center rounded-md border transition-colors"
+                  :class="canBuild(day)
+                    ? 'border-stone-200 text-orange-600 hover:bg-orange-50 hover:border-orange-200 cursor-pointer'
+                    : 'border-stone-100 text-stone-200 cursor-default'"
+                  title="Build complete workout"
+                  @click="buildWorkout(day.date)"
+                >
+                  <IntervalsIcon class="w-[13px] h-[13px]" />
+                </button>
+              </template>
+            </span>
           </div>
           </div>
         </div>

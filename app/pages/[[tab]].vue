@@ -208,12 +208,15 @@ function preventUnloadDuringAutoBuild(e: BeforeUnloadEvent) {
   e.preventDefault()
 }
 
-async function onAutoBuild() {
+async function onAutoBuild(date?: string) {
   if (window.innerWidth < 1024) return
   isAutoBuilding.value = true
   window.addEventListener('beforeunload', preventUnloadDuringAutoBuild)
   try {
-    const workout = await $fetch<CoachWorkout>('/api/coach/generate', { method: 'POST' })
+    const workout = await $fetch<CoachWorkout>('/api/coach/generate', {
+      method: 'POST',
+      query: date ? { date } : undefined,
+    })
     coach.setPendingWorkout(workout)
     // Don't set activeTab.value = 'builder' here: `/` and `/builder` are separate
     // route records (see coach.ts), so that would synchronously mount a throwaway
@@ -233,6 +236,12 @@ async function onAutoBuild() {
     isAutoBuilding.value = false
     window.removeEventListener('beforeunload', preventUnloadDuringAutoBuild)
   }
+}
+
+/** "Build complete workout" action on a Planning tab row — same generator as
+ * the Training Log's "Auto" button, just for the picked date instead of today. */
+function onBuildPlannedWorkout(date: string) {
+  onAutoBuild(date)
 }
 
 function openAddWorkout() {
@@ -894,7 +903,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
          name/stat row and toolbar row back down to match. -->
     <main
       class="mx-auto px-6 py-10 space-y-10"
-      :class="activeTab === 'builder' ? 'max-w-6xl' : 'max-w-3xl'"
+      :class="activeTab === 'builder' ? 'max-w-6xl' : activeTab === 'planning' ? 'max-w-[860px]' : 'max-w-3xl'"
     >
 
       <!-- ── Planning tab ────────────────────────────────────────── -->
@@ -903,7 +912,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
            dashboard (the `log` tab) payload small. WorkoutBuilderTab in
            particular is ~1.3k lines. -->
       <template v-if="activeTab === 'planning'">
-      <LazyPlanningTab @open-todays-events="showTodaysEvents = true" />
+      <LazyPlanningTab @open-todays-events="showTodaysEvents = true" @build-workout="onBuildPlannedWorkout" />
       </template>
 
       <!-- ── Workout builder tab ──────────────────────────────────── -->
