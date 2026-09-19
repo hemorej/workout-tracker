@@ -237,8 +237,8 @@ function confirmDelete() {
        panel 2 (metrics chips + actions) revealed via horizontal scroll-snap.
        Hidden at sm+ where the full grid below takes over. -->
   <div
-    class="sm:hidden relative flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
-    :class="day.isRestDay && !isPlannedDay ? 'opacity-50' : ''"
+    class="sm:hidden relative flex no-scrollbar"
+    :class="day.isRestDay && !isPlannedDay ? 'opacity-50' : 'overflow-x-auto snap-x snap-mandatory'"
   >
     <!-- Panel 1: resting state -->
     <div class="relative snap-start shrink-0 w-full flex items-center gap-3 px-6 py-2">
@@ -270,8 +270,10 @@ function confirmDelete() {
           {{ mobileDuration }}<template v-if="distanceDisplay"> · {{ distanceDisplay }}</template>
         </p>
       </div>
-      <!-- Faint chevron hinting the row is swipeable -->
-      <svg class="w-3 h-3 text-stone-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Faint chevron hinting the row is swipeable — pure rest days have
+           no panel 2 actions to reveal, so the hint (and the panel itself)
+           is skipped entirely for them. -->
+      <svg v-if="!day.isRestDay || isPlannedDay" class="w-3 h-3 text-stone-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 6l6 6-6 6" />
       </svg>
     </div>
@@ -279,8 +281,10 @@ function confirmDelete() {
     <!-- Panel 2: reveal — CTL/TSB, PR badge, TSS, RPE, actions all on one
          row at reduced text size, evenly spaced across the full width.
          flex-wrap stays as a safety net in case a row runs out of space
-         (e.g. long delete-confirm text), but sizes are tuned to fit on one line. -->
-    <div class="snap-start shrink-0 w-full flex items-center justify-between flex-wrap gap-0.5 px-4 py-2 bg-stone-50">
+         (e.g. long delete-confirm text), but sizes are tuned to fit on one line.
+         Omitted for pure rest days — the row isn't swipeable so there's no
+         way to reach it, and rest days have no metrics/actions anyway. -->
+    <div v-if="!day.isRestDay || isPlannedDay" class="snap-start shrink-0 w-full flex items-center justify-between flex-wrap gap-0.5 px-4 py-2 bg-stone-50">
       <span
         v-if="hasPowerBests"
         class="inline-flex items-center gap-0.5 shrink-0 text-[11px] text-[#3F6212] font-semibold bg-[#F3F7EA] border border-[#D0DFB4] rounded-full px-1.5 py-[1px] tabular-nums"
