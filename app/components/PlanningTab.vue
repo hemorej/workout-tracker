@@ -479,8 +479,8 @@ async function clearNote() {
             <span class="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-300">CTL</span>
             <span class="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-300">TSB</span>
             <span class="w-4 shrink-0" />
-            <span class="w-px h-3.5 shrink-0 bg-stone-100" />
-            <span class="w-14 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-300">Build</span>
+            <span class="hidden lg:block w-px h-3.5 shrink-0 bg-stone-100" />
+            <span class="hidden lg:block w-14 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-300">Build</span>
           </div>
 
           <!-- Day rows -->
@@ -651,9 +651,12 @@ async function clearNote() {
               />
             </div>
 
-            <!-- Build actions — planned days only -->
-            <span class="hidden sm:block w-px self-stretch shrink-0 bg-stone-100" />
-            <span class="hidden sm:flex w-14 shrink-0 items-center justify-center gap-1">
+            <!-- Build actions — planned days only. Desktop-only (lg+): the
+                 underlying generate call itself no-ops below 1024px (see
+                 onAutoBuild's guard in [[tab]].vue), matching goToBuilder's
+                 same-width gate for the builder tab generally. -->
+            <span class="hidden lg:block w-px self-stretch shrink-0 bg-stone-100" />
+            <span class="hidden lg:flex w-14 shrink-0 items-center justify-center gap-1">
               <template v-if="!day.isPast">
                 <button
                   type="button"
