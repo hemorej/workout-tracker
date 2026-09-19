@@ -53,6 +53,12 @@ function formatDate(dateStr: string) {
   return `${day} ${num}${suffix}`
 }
 
+function formatDateShort(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00Z`)
+  const day = d.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })
+  return `${day} ${d.getUTCDate()}`
+}
+
 function weekLabel(mondayDate: string) {
   const d = new Date(`${mondayDate}T00:00:00Z`)
   return d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -495,8 +501,9 @@ async function clearNote() {
             ]"
           >
             <!-- Date label -->
-            <span class="w-12 sm:w-16 shrink-0 text-sm text-stone-500 tabular">
-              {{ formatDate(day.date) }}
+            <span class="w-[52px] sm:w-16 shrink-0 text-sm text-stone-500 tabular whitespace-nowrap">
+              <span class="sm:hidden">{{ formatDateShort(day.date) }}</span>
+              <span class="hidden sm:inline">{{ formatDate(day.date) }}</span>
             </span>
 
             <!-- Zone badge (click to cycle) -->
@@ -555,23 +562,46 @@ async function clearNote() {
             </button>
             <div v-else class="hidden sm:block w-5 shrink-0" />
 
-            <!-- TSS: compact read-only text in narrow/vertical layouts;
-                 from `sm` up, an editable input for future days, or static
-                 text for past days (logged value, plus planned when diverged) -->
-            <div class="shrink-0">
-              <span v-if="day.isPast" class="sm:hidden text-xs tabular text-stone-500">
-                {{ day.actual?.tss ?? 0 }}
-                <span v-if="tssDiverged(day)" class="text-[11px] tabular text-stone-400 mx-0.5">⁄</span>
-                <span v-if="tssDiverged(day)" class="text-[11px] tabular text-stone-400">{{ day.plan?.tss ?? 0 }}</span>
-                <span class="text-stone-300"> TSS</span>
-              </span>
-              <span v-else class="sm:hidden text-xs tabular" :class="getDraft(day.date).tss ? 'text-stone-500' : 'text-stone-300'">
-                {{ getDraft(day.date).tss ?? '—' }}<span class="text-stone-300"> TSS</span>
-              </span>
+            <!-- Metrics — stacked with icon column on mobile (bolt/clock replace
+                 the "TSS"/"min" text labels), labelled pair from sm: up -->
+            <div class="shrink-0 flex flex-col gap-0.5 sm:hidden">
+              <label class="flex items-center gap-1.5 h-6 pl-1.5 pr-1.5 -mr-1.5 rounded-md focus-within:bg-stone-100 transition-colors cursor-text">
+                <UIcon name="i-heroicons-bolt" :class="['w-[11px] h-[11px] shrink-0', day.isPast ? 'text-stone-600' : 'text-stone-500']" />
+                <span
+                  v-if="day.isPast"
+                  class="w-[34px] text-sm text-right tabular"
+                  :class="tssDiverged(day) ? 'font-semibold text-stone-600' : 'text-stone-500'"
+                  :title="tssDiverged(day) ? `Planned ${day.plan?.tss ?? 0} TSS` : undefined"
+                >{{ day.actual?.tss ?? 0 }}</span>
+                <input
+                  v-else
+                  v-model.number="getDraft(day.date).tss"
+                  type="number" min="0" max="999" placeholder="—"
+                  class="w-[34px] text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none tabular no-spinner"
+                  @blur="save(day.date)"
+                  @keydown.enter="($event.target as HTMLInputElement).blur()"
+                >
+              </label>
+              <label class="flex items-center gap-1.5 h-6 pl-1.5 pr-1.5 -mr-1.5 rounded-md focus-within:bg-stone-100 transition-colors cursor-text">
+                <UIcon name="i-heroicons-clock" :class="['w-[11px] h-[11px] shrink-0', day.isPast ? 'text-stone-600' : 'text-stone-500']" />
+                <span v-if="day.isPast" class="w-[34px] text-sm text-right tabular text-stone-500">{{ day.actual?.durationMinutes ?? 0 }}</span>
+                <input
+                  v-else
+                  v-model.number="getDraft(day.date).durationMinutes"
+                  type="number" min="0" max="999" placeholder="—"
+                  class="w-[34px] text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none tabular no-spinner"
+                  @blur="save(day.date)"
+                  @keydown.enter="($event.target as HTMLInputElement).blur()"
+                >
+              </label>
+            </div>
 
+            <!-- TSS — sm: up, editable input for future days, static text
+                 for past days (logged value, plus planned when diverged) -->
+            <div class="hidden sm:block shrink-0">
               <span
                 v-if="day.isPast"
-                class="hidden sm:flex w-14 shrink-0 items-baseline justify-end gap-px px-1 py-0.5 -mx-1"
+                class="flex w-14 shrink-0 items-baseline justify-end gap-px px-1 py-0.5 -mx-1"
               >
                 <span class="text-sm tabular" :class="tssDiverged(day) ? 'font-semibold text-stone-600' : 'text-stone-500'">{{ day.actual?.tss ?? 0 }}</span>
                 <span v-if="tssDiverged(day)" class="text-[11px] tabular text-stone-400 mx-0.5">⁄</span>
@@ -579,7 +609,7 @@ async function clearNote() {
               </span>
               <span
                 v-else
-                class="hidden sm:flex w-14 shrink-0 items-baseline justify-end gap-px px-1 py-0.5 -mx-1"
+                class="flex w-14 shrink-0 items-baseline justify-end gap-px px-1 py-0.5 -mx-1"
               >
                 <input
                   :value="getDraft(day.date).tss ?? ''"
@@ -597,18 +627,10 @@ async function clearNote() {
               </span>
             </div>
 
-            <!-- Duration: compact read-only text in narrow/vertical layouts;
-                 from `sm` up, an editable input for future days, or static
+            <!-- Duration — sm: up, editable input for future days, static
                  text (the actual logged minutes) for past days -->
-            <div class="shrink-0">
-              <span v-if="day.isPast" class="sm:hidden text-xs tabular text-stone-500">
-                {{ day.actual?.durationMinutes ?? 0 }}<span class="text-stone-300"> min</span>
-              </span>
-              <span v-else class="sm:hidden text-xs tabular" :class="getDraft(day.date).durationMinutes ? 'text-stone-500' : 'text-stone-300'">
-                {{ getDraft(day.date).durationMinutes ?? '—' }}<span class="text-stone-300"> min</span>
-              </span>
-
-              <span v-if="day.isPast" class="hidden sm:block w-12 shrink-0 text-right text-sm tabular text-stone-500 px-1 py-0.5 -mx-1">
+            <div class="hidden sm:block shrink-0">
+              <span v-if="day.isPast" class="block w-12 shrink-0 text-right text-sm tabular text-stone-500 px-1 py-0.5 -mx-1">
                 {{ day.actual?.durationMinutes ?? 0 }}
               </span>
               <input
@@ -619,7 +641,7 @@ async function clearNote() {
                 min="0"
                 max="999"
                 placeholder="—"
-                class="hidden sm:block w-12 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular no-spinner transition-colors"
+                class="block w-12 text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1 py-0.5 -mx-1 tabular no-spinner transition-colors"
                 @input="setDurationMinutes(day.date, ($event.target as HTMLInputElement).value)"
                 @blur="save(day.date)"
                 @change="save(day.date)"
