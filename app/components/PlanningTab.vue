@@ -252,9 +252,10 @@ async function buildWorkout(date: string) {
 const fuellingLoadingDate = ref<string | null>(null)
 
 async function buildFuellingGuide(date: string) {
-  await save(date)
+  if (fuellingLoadingDate.value) return
   fuellingLoadingDate.value = date
   try {
+    await save(date)
     const { fuellingGuide } = await $fetch<{ fuellingGuide: string }>('/api/coach/generate', {
       method: 'POST',
       query: { date, mode: 'fuelling' },
