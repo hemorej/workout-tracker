@@ -511,33 +511,10 @@ function confirmDelete() {
           </svg>
           {{ day.workout?.powerBests?.length }}
         </span>
-        <span
-          v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
-          class="inline-flex items-center gap-1 shrink-0 text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap tabular-nums"
-          :title="tssLabel"
-          :aria-label="tssLabel"
-        >
-          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-          </svg>
-          {{ isPlannedDay ? plannedPlan?.tss : day.workout?.tss }}
-        </span>
-        <span
-          v-if="day.workout?.rpe"
-          class="inline-flex items-center gap-1 shrink-0 text-xs text-[#BE185D] font-semibold bg-[#FDF2F8] border border-[#FBCFE8] rounded-full px-2 py-0.5 whitespace-nowrap tabular-nums"
-          :title="rpeLabel"
-          :aria-label="rpeLabel"
-        >
-          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-          </svg>
-          {{ day.workout?.rpe }}
-        </span>
-
-        <!-- Planned pill — the only action on a planned row. Buildable plans open
+        <!-- Planned pill — sits left of the TSS pill so TSS aligns with logged rows. The only action on a planned row. Buildable plans open
              the Manual / Auto build choice; outdoor plans (no builder) route
              straight to the completed-workout picker. -->
-        <template v-else-if="isPlannedDay">
+        <template v-if="isPlannedDay">
           <button
             v-if="isPlannedOutdoor"
             title="Open to log details"
@@ -581,6 +558,29 @@ function confirmDelete() {
             Planned
           </button>
         </template>
+        <span
+          v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
+          class="inline-flex items-center gap-1 shrink-0 text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap tabular-nums"
+          :title="tssLabel"
+          :aria-label="tssLabel"
+        >
+          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+          </svg>
+          {{ isPlannedDay ? plannedPlan?.tss : day.workout?.tss }}
+        </span>
+        <span
+          v-if="day.workout?.rpe"
+          class="inline-flex items-center gap-1 shrink-0 text-xs text-[#BE185D] font-semibold bg-[#FDF2F8] border border-[#FBCFE8] rounded-full px-2 py-0.5 whitespace-nowrap tabular-nums"
+          :title="rpeLabel"
+          :aria-label="rpeLabel"
+        >
+          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+          </svg>
+          {{ day.workout?.rpe }}
+        </span>
+
 
         <!-- Standalone "mark as completed" tick — opens the completed-workout
              picker directly (the Planned pill is the build hand-off). Dimmed by
@@ -589,7 +589,7 @@ function confirmDelete() {
           v-if="isPlannedDay"
           title="Mark as completed"
           aria-label="Mark as completed"
-          class="flex items-center justify-center self-start shrink-0 w-9 h-9 -mt-2 rounded-full border-none bg-transparent text-[#4B88A2] opacity-65 transition-all hover:opacity-100 hover:text-[#3B6E84] hover:bg-[#e6f0f5]"
+          class="flex items-center justify-center self-start shrink-0 w-10 h-10 -mt-2.5 rounded-full border-none bg-transparent text-[#4B88A2] opacity-65 transition-all hover:opacity-100 hover:text-[#3B6E84] hover:bg-[#e6f0f5]"
           @click="emit('mark-completed')"
         >
           <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -597,6 +597,8 @@ function confirmDelete() {
             <path d="M8 12l3 3 5-6" />
           </svg>
         </button>
+        <!-- Empty kebab-width slot: shifts the tick left so it sits over the RPE pill column of logged rows -->
+        <span v-if="isPlannedDay" class="shrink-0 w-10" aria-hidden="true" />
 
         <!-- Overflow menu — Edit ride / Refresh from Wahoo / Re-upload FIT /
              photo overlay, then a separator and the destructive Delete workout.
