@@ -44,7 +44,7 @@
         "@adonisjs/hash": "^10.1.1",
         "@iconify-json/heroicons": "^1.2.3",
         "@nuxt/devtools": "^3.4.2",
-        "@types/node": "^26.5.1",
+        "@types/node": "^26.6.1",
         "@types/pg": "^8.23.1",
         "drizzle-kit": "^0.31.10",
         "typescript": "^5.7.0",
