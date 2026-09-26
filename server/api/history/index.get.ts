@@ -29,8 +29,9 @@
  */
 
 import { eq, asc, inArray } from 'drizzle-orm'
-import { workouts, powerBests as powerBestsTable, wahooPowerBests, users, POWER_BEST_DURATIONS } from '../../db/schema'
+import { workouts, powerBests as powerBestsTable, users, POWER_BEST_DURATIONS } from '../../db/schema'
 import { useDB } from '../../db'
+import { getPowerBestCandidates, EIGHT_WEEKS_MS } from '../../utils/powerBests'
 
 type GroupBy = 'week' | 'month' | 'year'
 
@@ -161,36 +162,18 @@ export default defineEventHandler(async (event) => {
 
   // ── Power bests panel ─────────────────────────────────────────────────────
 
-  const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() - 56) // 8 weeks
-  const cutoffStr = cutoff.toISOString().slice(0, 10)
-
-  const workoutDateById = new Map(allWorkouts.map((w) => [w.id, w.date]))
+  const cutoffStr = new Date(Date.now() - EIGHT_WEEKS_MS).toISOString().slice(0, 10)
 
   // Merge candidates from both sources — manual entries (tied to a workout date)
-  // and Wahoo-derived bests (tied to an activity date) — before ranking.
+  // and Wahoo-derived bests (tied to an activity date) — before ranking. Shared
+  // with the write-time best-effort filter (server/utils/powerBests.ts) so the
+  // "Last 8 Weeks"/"All Time" columns here and what gets saved as a best effort
+  // on a workout can never drift apart.
   const candidatesByDuration = new Map<string, { watts: number; date: string }[]>()
-  function addCandidate(duration: string, watts: number, date: string) {
-    const list = candidatesByDuration.get(duration)
-    if (list) list.push({ watts, date })
-    else candidatesByDuration.set(duration, [{ watts, date }])
-  }
-
-  for (const pb of allPowerBests) {
-    const date = workoutDateById.get(pb.workoutId)
-    if (date) addCandidate(pb.duration, pb.watts, date)
-  }
-
-  const allWahooBests = await db
-    .select({
-      duration: wahooPowerBests.duration,
-      watts: wahooPowerBests.watts,
-      achievedAt: wahooPowerBests.achievedAt,
-    })
-    .from(wahooPowerBests)
-
-  for (const wb of allWahooBests) {
-    addCandidate(wb.duration, wb.watts, wb.achievedAt)
+  for (const c of await getPowerBestCandidates(db, user.id)) {
+    const list = candidatesByDuration.get(c.duration)
+    if (list) list.push({ watts: c.watts, date: c.date })
+    else candidatesByDuration.set(c.duration, [{ watts: c.watts, date: c.date }])
   }
 
   const last8wBests: Record<string, number> = {}

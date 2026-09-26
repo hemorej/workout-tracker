@@ -120,6 +120,13 @@ function medal(rank: number): string {
   return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : String(rank)
 }
 
+/** True if any recorded effort falls within the last 5 days — mirrors the
+ * orange "logged workout" accent line convention in WorkoutCard.vue. */
+function hasRecentEffort(s: TrackedSegment): boolean {
+  const cutoff = Date.now() - 5 * 24 * 60 * 60 * 1000
+  return s.efforts.some(e => new Date(e.startDate).getTime() >= cutoff)
+}
+
 function climbLabel(cat: number | null): string | null {
   if (cat == null || cat <= 0) return null
   return cat >= 5 ? 'HC' : `Cat ${cat}`
@@ -192,7 +199,13 @@ function powerValue(e: SegmentEffort): string {
 
     <!-- Segment list -->
     <div v-else class="bg-white rounded-xl border border-stone-100 overflow-hidden divide-y divide-[#f7f5f3]">
-      <div v-for="(seg, i) in segments" :key="seg.id" :class="i % 2 === 0 ? 'bg-stone-50' : 'bg-white'">
+      <div v-for="(seg, i) in segments" :key="seg.id" class="relative" :class="i % 2 === 0 ? 'bg-stone-50' : 'bg-white'">
+        <!-- Recent-effort accent — thin orange left border, mirrors the
+             logged-workout accent line on the Training Log rows -->
+        <div
+          v-if="hasRecentEffort(seg)"
+          class="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-orange-600 rounded-full"
+        />
         <!-- Summary row — everything aligns to the first text line (name / best time) -->
         <div class="flex items-start hover:bg-stone-100 transition-colors">
         <button

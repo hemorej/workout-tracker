@@ -14,7 +14,10 @@
  *   notes?:          string   — optional free text
  *   ftpWatts?:       number   — optional, positive integer (watts)
  *   rideType?:       string   — optional, 'trainer' | 'outdoor'
- *   powerBests?:     { duration: string; watts: number }[]
+ *   powerBests?:     { duration: string; watts: number }[] — raw parsed candidates for
+ *                      every duration; only the ones that beat the athlete's trailing
+ *                      8-week (or all-time, as fallback) max for that duration are
+ *                      actually stored — see filterNewBestEfforts in utils/powerBests.ts
  *   fitData?:        WorkoutFitData — optional, extra stats from a parsed FIT file
  *   laps?:           WorkoutLap[] — optional, per-lap splits from a parsed FIT file
  *   stravaActivityId?: number — optional, set when created via the "Mark as
@@ -32,6 +35,7 @@ import { workouts, powerBests, POWER_BEST_DURATIONS, type WorkoutFitData, type W
 import { useDB } from '../../db'
 import { invalidateMetrics } from '../../utils/metricsCache'
 import { syncActivitySegmentEfforts } from '../../utils/stravaSegments'
+import { filterNewBestEfforts } from '../../utils/powerBests'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -245,9 +249,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: 'Failed to create workout.' })
   }
 
-  if (pbInput.length > 0) {
+  const bestEfforts = await filterNewBestEfforts(db, user.id, date, pbInput)
+  if (bestEfforts.length > 0) {
     await db.insert(powerBests).values(
-      pbInput.map((pb) => ({ workoutId: newWorkout.id, duration: pb.duration, watts: pb.watts })),
+      bestEfforts.map((pb) => ({ workoutId: newWorkout.id, duration: pb.duration, watts: pb.watts })),
     )
   }
 

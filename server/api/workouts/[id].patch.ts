@@ -12,7 +12,9 @@
  *
  * powerBests, if provided, fully replaces the workout's existing power-best
  * rows (delete + reinsert) rather than merging — the simplest correct way to
- * handle both additions and removals from a freshly re-parsed file.
+ * handle both additions and removals from a freshly re-parsed file. As on
+ * POST, only durations that beat the trailing 8-week (or all-time, as
+ * fallback) max are actually re-inserted — see filterNewBestEfforts.
  *
  * Returns:
  *   200 { workout }  on success
@@ -25,6 +27,7 @@ import { workouts, powerBests, POWER_BEST_DURATIONS, type WorkoutFitData, type W
 import { useDB } from '../../db'
 import { invalidateMetrics } from '../../utils/metricsCache'
 import { syncActivitySegmentEfforts } from '../../utils/stravaSegments'
+import { filterNewBestEfforts } from '../../utils/powerBests'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -231,9 +234,10 @@ export default defineEventHandler(async (event) => {
 
   if (Array.isArray(body.powerBests)) {
     await db.delete(powerBests).where(eq(powerBests.workoutId, id))
-    if (pbInput.length > 0) {
+    const bestEfforts = await filterNewBestEfforts(db, user.id, updatedWorkout.date, pbInput, id)
+    if (bestEfforts.length > 0) {
       await db.insert(powerBests).values(
-        pbInput.map((pb) => ({ workoutId: id, duration: pb.duration, watts: pb.watts })),
+        bestEfforts.map((pb) => ({ workoutId: id, duration: pb.duration, watts: pb.watts })),
       )
     }
   }
