@@ -81,6 +81,11 @@ const ftpWatts = ref<number | null>(props.prefill?.ftpWatts ?? null)
 const powerBestRows = ref<{ duration: string; watts: number | null }[]>(
   (props.prefill?.powerBests ?? []).map((pb) => ({ duration: pb.duration, watts: pb.watts })),
 )
+// Carried through from props.prefill by default, and overwritten by a manual
+// FIT upload below (see onFitFileSelected) — same fields the Strava/Wahoo
+// "Mark as completed" flow prefills, just sourced from a locally-picked file.
+const fitData = ref<WorkoutFitData | null>(props.prefill?.fitData ?? null)
+const laps = ref<WorkoutLap[] | null>(props.prefill?.laps ?? null)
 
 function addPowerBestRow() {
   // Find the first duration not yet used
@@ -117,6 +122,9 @@ function reset() {
   powerBestRows.value = []
   optionalExpanded.value = false
   validationError.value = null
+  fitData.value = null
+  laps.value = null
+  uploadError.value = null
 }
 
 defineExpose({ reset })
@@ -126,6 +134,61 @@ defineExpose({ reset })
 const toast = useToast()
 const isLoading = ref(false)
 const validationError = ref<string | null>(null)
+
+// ── Manual FIT file upload (optional) ───────────────────────────────────
+// Reuses POST /api/fit/upload — the same endpoint and response shape the
+// "Mark as completed" indoor/virtual upload flow uses (see [[tab]].vue) —
+// to auto-fill duration/distance/TSS/power bests from a locally-picked FIT
+// file, without needing a matched Strava/Wahoo activity.
+interface ParsedFitUpload {
+  tss: number
+  powerBests: { duration: string; watts: number }[]
+  durationSeconds: number
+  distanceMeters: number
+  fitData: WorkoutFitData
+  laps: WorkoutLap[] | null
+}
+
+const fitFileInput = ref<HTMLInputElement | null>(null)
+const isUploadingFit = ref(false)
+const uploadError = ref<string | null>(null)
+
+async function onFitFileSelected(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+
+  isUploadingFit.value = true
+  uploadError.value = null
+
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const parsed = await $fetch<ParsedFitUpload>('/api/fit/upload', { method: 'POST', body: formData })
+
+    form.durationMinutes = Math.round(parsed.durationSeconds / 60)
+    form.distanceKm = parsed.distanceMeters > 0 ? Math.round((parsed.distanceMeters / 1000) * 10) / 10 : null
+    form.tss = parsed.tss
+    powerBestRows.value = parsed.powerBests.map((pb) => ({ duration: pb.duration, watts: pb.watts }))
+    fitData.value = parsed.fitData
+    laps.value = parsed.laps
+    if (powerBestRows.value.length > 0) optionalExpanded.value = true
+
+    toast.add({
+      title: 'FIT file parsed',
+      description: 'Duration, distance, TSS, and power bests were filled in — review before saving.',
+      color: 'success',
+    })
+  }
+  catch (err: unknown) {
+    uploadError.value = (err as { data?: { statusMessage?: string } })?.data?.statusMessage
+      ?? "Couldn't parse that FIT file."
+  }
+  finally {
+    isUploadingFit.value = false
+    // Reset so picking the same file again still fires a change event.
+    if (fitFileInput.value) fitFileInput.value.value = ''
+  }
+}
 
 async function handleSubmit() {
   if (!form.name.trim()) {
@@ -171,8 +234,8 @@ async function handleSubmit() {
     ftpWatts: ftpWatts.value ? Math.round(ftpWatts.value) : null,
     rideType: rideType.value,
     powerBests: validPowerBests.length > 0 ? validPowerBests : undefined,
-    fitData: props.prefill?.fitData ?? undefined,
-    laps: props.prefill?.laps ?? undefined,
+    fitData: fitData.value ?? undefined,
+    laps: laps.value ?? undefined,
     stravaActivityId: props.prefill?.stravaActivityId ?? undefined,
   }
 
@@ -221,6 +284,35 @@ async function handleSubmit() {
         class="w-full"
       />
     </UFormField>
+
+    <!-- FIT file upload (optional) — auto-fills duration/distance/TSS/power
+         bests below, same parser and response shape as the "Mark as
+         completed" upload flow (see onFitFileSelected). -->
+    <div class="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-4 py-3">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-xs font-semibold text-stone-500 uppercase tracking-wide">FIT file (optional)</p>
+          <p class="text-xs text-stone-400 mt-0.5">Auto-fills duration, distance, TSS, and power bests.</p>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 hover:text-orange-700 transition-colors disabled:opacity-50"
+          :disabled="isUploadingFit"
+          @click="fitFileInput?.click()"
+        >
+          <BikeSpinner v-if="isUploadingFit" :size="14" />
+          {{ isUploadingFit ? 'Parsing…' : 'Upload' }}
+        </button>
+      </div>
+      <input
+        ref="fitFileInput"
+        type="file"
+        accept=".fit"
+        class="hidden"
+        @change="onFitFileSelected"
+      >
+      <p v-if="uploadError" class="text-xs text-rose-400 mt-2">{{ uploadError }}</p>
+    </div>
 
     <!-- Duration + Distance + TSS + RPE — short fields, one row.
          Column widths are weighted (not an even 1fr each) so every label
