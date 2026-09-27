@@ -21,6 +21,8 @@ type SteadyBlock = { id: number, type: 'steady', duration: number, power: number
 type IntervalBlock = { id: number, type: 'interval', reps: number, onDuration: number, onPower: number, onCadence: number | null, offDuration: number, offPower: number, offCadence: number | null }
 type Block = RampBlock | SteadyBlock | IntervalBlock
 
+const DEFAULT_CADENCE = 85
+
 interface Segment {
   blockId: number
   duration: number
@@ -591,7 +593,12 @@ function download() {
       xml += `    <SteadyState Duration="${b.duration}" Power="${b.power}"${b.cadence ? ` Cadence="${b.cadence}"` : ''}/>\n`
     }
     else if (b.type === 'interval') {
-      xml += `    <IntervalsT Repeat="${b.reps}" OnDuration="${b.onDuration}" OffDuration="${b.offDuration}" OnPower="${b.onPower}" OffPower="${b.offPower}"${b.onCadence ? ` Cadence="${b.onCadence}"` : ''}${b.offCadence ? ` CadenceResting="${b.offCadence}"` : ''}/>\n`
+      // Zwift renders a missing Cadence/CadenceResting as 0rpm rather than "unconstrained"
+      // when the other one is set, so if either side has a cadence, both must be emitted.
+      const hasCadence = b.onCadence || b.offCadence
+      const onCadence = hasCadence ? (b.onCadence || DEFAULT_CADENCE) : null
+      const offCadence = hasCadence ? (b.offCadence || DEFAULT_CADENCE) : null
+      xml += `    <IntervalsT Repeat="${b.reps}" OnDuration="${b.onDuration}" OffDuration="${b.offDuration}" OnPower="${b.onPower}" OffPower="${b.offPower}"${onCadence ? ` Cadence="${onCadence}"` : ''}${offCadence ? ` CadenceResting="${offCadence}"` : ''}/>\n`
     }
   }
   xml += '  </workout>\n</workout_file>'
