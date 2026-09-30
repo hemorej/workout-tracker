@@ -91,16 +91,13 @@ export default defineEventHandler(async (event) => {
 
   // Record the raw bests first-class, but prefill only genuine improvements.
   // Must compute the filter *before* the upsert, and exclude this ride's own
-  // rows (an earlier preview, or an existing workout on this date on refresh).
+  // workout row on refresh (same-day wahoo rows are excluded by the filter).
   const [existing] = await db
     .select({ id: workouts.id })
     .from(workouts)
     .where(and(eq(workouts.userId, user.id), eq(workouts.date, achievedAt)))
     .limit(1)
-  const prefill = await withNewBestEffortsOnly(db, user.id, achievedAt, fields, {
-    workoutId: existing?.id,
-    wahooActivityId: match.id,
-  })
+  const prefill = await withNewBestEffortsOnly(db, user.id, achievedAt, fields, existing?.id)
 
   await upsertWahooPowerBests(db, match.id, fields.powerBests, achievedAt)
 

@@ -94,18 +94,18 @@ export async function upsertWahooPowerBests(
  * Prefill-time version of the save-time filter: drops `powerBests` down to
  * the durations that beat the athlete's trailing-8-week (or all-time) max as
  * of `date`, so the Add Workout form only prefills genuine best efforts.
- * `excludeWorkoutId` / `excludeWahooActivityId` keep the ride's own
- * previously-stored rows from acting as their own baseline.
+ * `excludeWorkoutId` keeps the ride's own stored rows from acting as its own
+ * baseline (same-day wahoo_power_bests rows are excluded by the filter itself).
  */
 export async function withNewBestEffortsOnly(
   db: ReturnType<typeof useDB>,
   userId: number,
   date: string,
   fields: FitWorkoutFields,
-  exclude: { workoutId?: number; wahooActivityId?: number } = {},
+  excludeWorkoutId?: number,
 ): Promise<FitWorkoutFields> {
   return {
     ...fields,
-    powerBests: await filterNewBestEfforts(db, userId, date, fields.powerBests, exclude.workoutId, exclude.wahooActivityId),
+    powerBests: await filterNewBestEfforts(db, userId, date, fields.powerBests, excludeWorkoutId),
   }
 }

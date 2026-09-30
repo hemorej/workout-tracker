@@ -69,5 +69,5 @@ export default defineEventHandler(async (event) => {
     .from(workouts)
     .where(and(eq(workouts.userId, user.id), eq(workouts.date, datePart)))
     .limit(1)
-  return withNewBestEffortsOnly(db, user.id, datePart, fields, { workoutId: existing?.id })
+  return withNewBestEffortsOnly(db, user.id, datePart, fields, existing?.id)
 })

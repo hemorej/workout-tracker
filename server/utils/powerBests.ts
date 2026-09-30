@@ -36,7 +36,7 @@ export async function getPowerBestCandidates(
   db: ReturnType<typeof useDB>,
   userId: number,
   excludeWorkoutId?: number,
-  excludeWahooActivityId?: number,
+  excludeWahooDate?: string,
 ): Promise<PowerBestCandidate[]> {
   const ownPowerBests = await db
     .select({ duration: powerBests.duration, watts: powerBests.watts, date: workouts.date })
@@ -53,7 +53,7 @@ export async function getPowerBestCandidates(
   const wahooBests = await db
     .select({ duration: wahooPowerBests.duration, watts: wahooPowerBests.watts, date: wahooPowerBests.achievedAt })
     .from(wahooPowerBests)
-    .where(excludeWahooActivityId !== undefined ? ne(wahooPowerBests.activityId, excludeWahooActivityId) : undefined)
+    .where(excludeWahooDate !== undefined ? ne(wahooPowerBests.achievedAt, excludeWahooDate) : undefined)
 
   return [...ownPowerBests, ...wahooBests]
 }
@@ -81,7 +81,6 @@ export async function filterNewBestEfforts(
   workoutDate: string,
   candidates: { duration: string; watts: number }[],
   excludeWorkoutId?: number,
-  excludeWahooActivityId?: number,
 ): Promise<{ duration: string; watts: number }[]> {
   if (candidates.length === 0) return []
 
@@ -89,7 +88,10 @@ export async function filterNewBestEfforts(
     .toISOString()
     .slice(0, 10)
 
-  const existing = await getPowerBestCandidates(db, userId, excludeWorkoutId, excludeWahooActivityId)
+  // The user logs one ride per day, so any wahoo_power_bests rows dated the
+  // workout's day are this same ride (written on by-date preview, before the
+  // workout was saved) — excluded so it can't be its own baseline.
+  const existing = await getPowerBestCandidates(db, userId, excludeWorkoutId, workoutDate)
 
   const last8w = new Map<string, number>()
   const allTime = new Map<string, number>()
