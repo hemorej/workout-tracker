@@ -555,18 +555,16 @@ function addBlock(type: 'warmup' | 'cooldown' | 'interval') {
   selectedId.value = block.id
 }
 
-function addSweetSpot() {
-  const block: Block = { id: nextId.value, type: 'interval', reps: 3, onDuration: 600, onPower: 0.91, onCadence: null, offDuration: 300, offPower: 0.5, offCadence: null }
-  blocks.value = [...blocks.value, block]
-  nextId.value += 1
-  selectedId.value = block.id
-}
-
 function addSteady(pct: number) {
   const block: Block = { id: nextId.value, type: 'steady', duration: 300, power: pct, cadence: null }
   blocks.value = [...blocks.value, block]
   nextId.value += 1
   selectedId.value = block.id
+}
+
+// Sweet spot = 88–94% FTP; add a single steady block at the midpoint.
+function addSweetSpot() {
+  addSteady(0.91)
 }
 
 function clearWorkout() {
