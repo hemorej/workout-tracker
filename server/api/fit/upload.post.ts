@@ -21,7 +21,10 @@
 
 import { parseFitFile } from '../../utils/fit'
 import { getCurrentFtpWatts } from '../../utils/ftp'
-import { metricsToWorkoutFields } from '../../utils/fitWorkout'
+import { useDB } from '../../db'
+import { eq, and } from 'drizzle-orm'
+import { workouts } from '../../db/schema'
+import { metricsToWorkoutFields, withNewBestEffortsOnly } from '../../utils/fitWorkout'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -53,5 +56,18 @@ export default defineEventHandler(async (event) => {
     ftpWatts,
   })
 
-  return metricsToWorkoutFields(metrics, ftpWatts)
+  const fields = metricsToWorkoutFields(metrics, ftpWatts)
+
+  // Optional "date" form field = the ride's day; bests are compared against
+  // the 8 weeks before it. Without it the raw bests are returned unfiltered.
+  const datePart = parts?.find((p) => p.name === 'date')?.data?.toString()
+  if (!datePart || !/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return fields
+
+  const db = useDB()
+  const [existing] = await db
+    .select({ id: workouts.id })
+    .from(workouts)
+    .where(and(eq(workouts.userId, user.id), eq(workouts.date, datePart)))
+    .limit(1)
+  return withNewBestEffortsOnly(db, user.id, datePart, fields, existing?.id)
 })
