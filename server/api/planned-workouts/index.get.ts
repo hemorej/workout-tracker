@@ -1,7 +1,7 @@
 /**
  * GET /api/planned-workouts
  *
- * Returns 4 weeks of planned workouts starting from the current Monday,
+ * Returns 4+ weeks (more if later days are planned) of planned workouts starting from the current Monday,
  * plus projected CTL and TSB values for each day based on:
  *   - CTL/ATL as of the end of yesterday, from the user's actual training history
  *   - planned TSS values for each future day (or the actual logged TSS for
@@ -10,13 +10,13 @@
  *
  * Response shape:
  * {
- *   plans: PlannedDay[]   — 28 days, Monday–Sunday × 4 weeks
+ *   plans: PlannedDay[]   — 28+ days, Monday–Sunday × 4+ weeks
  *   currentCtl: number    — seed CTL for future projections (yesterday's value)
  *   currentAtl: number    — seed ATL for future projections (yesterday's value)
  * }
  */
 
-import { eq, asc, and, inArray } from 'drizzle-orm'
+import { eq, asc, desc, and, inArray } from 'drizzle-orm'
 import { plannedWorkouts, workouts, users } from '../../db/schema'
 import { useDB } from '../../db'
 import { computeMetricsSeries } from '../../utils/tss'
@@ -56,8 +56,22 @@ export default defineEventHandler(async (event) => {
   const monday = new Date(todayUtc)
   monday.setUTCDate(todayUtc.getUTCDate() - daysFromMonday)
 
+  // At least 4 weeks, extended to whole weeks so any later planned day (e.g. in
+  // a week added with "Add week") is still returned after a reload.
+  const [lastPlanned] = await db
+    .select({ date: plannedWorkouts.date })
+    .from(plannedWorkouts)
+    .where(eq(plannedWorkouts.userId, user.id))
+    .orderBy(desc(plannedWorkouts.date))
+    .limit(1)
+  let dayCount = 28
+  if (lastPlanned) {
+    const span = Math.floor((new Date(`${lastPlanned.date}T00:00:00Z`).getTime() - monday.getTime()) / 86_400_000) + 1
+    dayCount = Math.max(28, Math.ceil(span / 7) * 7)
+  }
+
   const dates: string[] = []
-  for (let i = 0; i < 28; i++) {
+  for (let i = 0; i < dayCount; i++) {
     const d = new Date(monday)
     d.setUTCDate(monday.getUTCDate() + i)
     dates.push(d.toISOString().slice(0, 10))

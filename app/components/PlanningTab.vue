@@ -713,6 +713,17 @@ async function clearNote() {
         </div>
       </div>
 
+      <div class="flex justify-center">
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-600 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 cursor-pointer transition-colors"
+          @click="planning.addWeek()"
+        >
+          <UIcon name="i-heroicons-plus" class="w-4 h-4" />
+          Add week
+        </button>
+      </div>
+
     </template>
 
     <!-- Empty state (no history yet to seed projection) -->

@@ -149,5 +149,28 @@ export const usePlanningStore = defineStore('planning', () => {
     recomputeProjections()
   }
 
-  return { plans, currentCtl, currentAtl, isLoading, error, fetchPlans, savePlan, clearPlan }
+  /**
+   * Appends a blank week (7 unplanned future days) after the last day in the
+   * grid and recomputes projections. Client-side only — nothing is persisted
+   * until the user plans a day, and a refetch returns to the default grid.
+   */
+  function addWeek() {
+    const last = plans.value[plans.value.length - 1]
+    if (!last) return
+    const d = new Date(`${last.date}T00:00:00Z`)
+    for (let i = 0; i < 7; i++) {
+      d.setUTCDate(d.getUTCDate() + 1)
+      plans.value.push({
+        date: d.toISOString().slice(0, 10),
+        isPast: false,
+        plan: null,
+        actual: null,
+        projectedCtl: 0,
+        projectedTsb: 0,
+      })
+    }
+    recomputeProjections()
+  }
+
+  return { plans, currentCtl, currentAtl, isLoading, error, fetchPlans, savePlan, clearPlan, addWeek }
 })
