@@ -19,6 +19,7 @@ import { sql } from 'drizzle-orm'
 import { wahooPowerBests, type WorkoutFitData, type WorkoutLap } from '../db/schema'
 import type { ParsedFitMetrics } from './fit'
 import type { useDB } from '../db'
+import { filterNewBestEfforts } from './powerBests'
 
 const EIGHT_WEEKS_MS = 8 * 7 * 24 * 60 * 60 * 1000
 
@@ -87,4 +88,24 @@ export async function upsertWahooPowerBests(
       WHERE rank > 3 AND achieved_at < ${cutoff}
     )
   `)
+}
+
+/**
+ * Prefill-time version of the save-time filter: drops `powerBests` down to
+ * the durations that beat the athlete's trailing-8-week (or all-time) max as
+ * of `date`, so the Add Workout form only prefills genuine best efforts.
+ * `excludeWorkoutId` / `excludeWahooActivityId` keep the ride's own
+ * previously-stored rows from acting as their own baseline.
+ */
+export async function withNewBestEffortsOnly(
+  db: ReturnType<typeof useDB>,
+  userId: number,
+  date: string,
+  fields: FitWorkoutFields,
+  exclude: { workoutId?: number; wahooActivityId?: number } = {},
+): Promise<FitWorkoutFields> {
+  return {
+    ...fields,
+    powerBests: await filterNewBestEfforts(db, userId, date, fields.powerBests, exclude.workoutId, exclude.wahooActivityId),
+  }
 }

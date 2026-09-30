@@ -36,6 +36,7 @@ export async function getPowerBestCandidates(
   db: ReturnType<typeof useDB>,
   userId: number,
   excludeWorkoutId?: number,
+  excludeWahooActivityId?: number,
 ): Promise<PowerBestCandidate[]> {
   const ownPowerBests = await db
     .select({ duration: powerBests.duration, watts: powerBests.watts, date: workouts.date })
@@ -52,6 +53,7 @@ export async function getPowerBestCandidates(
   const wahooBests = await db
     .select({ duration: wahooPowerBests.duration, watts: wahooPowerBests.watts, date: wahooPowerBests.achievedAt })
     .from(wahooPowerBests)
+    .where(excludeWahooActivityId !== undefined ? ne(wahooPowerBests.activityId, excludeWahooActivityId) : undefined)
 
   return [...ownPowerBests, ...wahooBests]
 }
@@ -79,6 +81,7 @@ export async function filterNewBestEfforts(
   workoutDate: string,
   candidates: { duration: string; watts: number }[],
   excludeWorkoutId?: number,
+  excludeWahooActivityId?: number,
 ): Promise<{ duration: string; watts: number }[]> {
   if (candidates.length === 0) return []
 
@@ -86,7 +89,7 @@ export async function filterNewBestEfforts(
     .toISOString()
     .slice(0, 10)
 
-  const existing = await getPowerBestCandidates(db, userId, excludeWorkoutId)
+  const existing = await getPowerBestCandidates(db, userId, excludeWorkoutId, excludeWahooActivityId)
 
   const last8w = new Map<string, number>()
   const allTime = new Map<string, number>()

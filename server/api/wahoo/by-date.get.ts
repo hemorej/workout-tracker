@@ -29,8 +29,10 @@
 
 import { useDB } from '../../db'
 import { findRideByDate, fetchAndParseActivity } from '../../utils/wahoo'
+import { eq, and } from 'drizzle-orm'
+import { workouts } from '../../db/schema'
 import { getCurrentFtpWatts } from '../../utils/ftp'
-import { metricsToWorkoutFields, upsertWahooPowerBests } from '../../utils/fitWorkout'
+import { metricsToWorkoutFields, upsertWahooPowerBests, withNewBestEffortsOnly } from '../../utils/fitWorkout'
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -87,6 +89,19 @@ export default defineEventHandler(async (event) => {
   const fields = metricsToWorkoutFields(metrics, ftpWatts)
   const achievedAt = ride.startDateLocal.slice(0, 10)
 
+  // Record the raw bests first-class, but prefill only genuine improvements.
+  // Must compute the filter *before* the upsert, and exclude this ride's own
+  // rows (an earlier preview, or an existing workout on this date on refresh).
+  const [existing] = await db
+    .select({ id: workouts.id })
+    .from(workouts)
+    .where(and(eq(workouts.userId, user.id), eq(workouts.date, achievedAt)))
+    .limit(1)
+  const prefill = await withNewBestEffortsOnly(db, user.id, achievedAt, fields, {
+    workoutId: existing?.id,
+    wahooActivityId: match.id,
+  })
+
   await upsertWahooPowerBests(db, match.id, fields.powerBests, achievedAt)
 
   getLogger('wahoo').info('wahoo.activity_parsed', {
@@ -96,5 +111,5 @@ export default defineEventHandler(async (event) => {
     ftpWatts,
   })
 
-  return { ride, ...fields }
+  return { ride, ...prefill }
 })

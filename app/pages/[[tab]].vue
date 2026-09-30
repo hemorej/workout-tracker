@@ -445,6 +445,7 @@ async function onFitFileSelected(event: Event) {
   try {
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('date', activity.startDateLocal.slice(0, 10))
     const parsed = await $fetch<ParsedFitPrefill>('/api/fit/upload', { method: 'POST', body: formData })
     if (pickerPurpose.value === 'refresh') {
       openEditModalFromRefresh(prefillFromParsedFit(activity, parsed))
