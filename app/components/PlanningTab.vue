@@ -21,13 +21,19 @@ function isCurrentWeek(week: { days: { date: string }[] }) {
 // ── Zone config ──────────────────────────────────────────────────────────────
 
 const ZONES = [
-  { value: 'zone2', label: 'Z2', color: 'sky' },
-  { value: 'zone4', label: 'Z4', color: 'yellow' },
-  { value: 'zone5', label: 'Z5', color: 'orange' },
-  { value: 'zone6', label: 'Z6', color: 'red' },
-  { value: 'rest', label: 'REST', color: 'pink' },
-  { value: 'outdoor', label: 'OUT', color: 'emerald' },
+  { value: 'zone2', label: 'Zone 2' },
+  { value: 'zone4', label: 'Zone 4' },
+  { value: 'zone5', label: 'Zone 5' },
+  { value: 'zone6', label: 'Zone 6' },
+  { value: 'rest', label: 'Rest' },
+  { value: 'outdoor', label: 'Outdoor' },
 ]
+
+const NO_ZONE = { value: null, label: 'No type' }
+
+function zoneLabel(type: string | null) {
+  return ZONES.find(z => z.value === type)?.label ?? NO_ZONE.label
+}
 
 const ZONE_CLASSES: Record<string, string> = {
   zone2: 'bg-sky-100 text-sky-700 border-sky-200',
@@ -35,7 +41,7 @@ const ZONE_CLASSES: Record<string, string> = {
   zone5: 'bg-orange-100 text-orange-700 border-orange-200',
   zone6: 'bg-red-100 text-red-700 border-red-200',
   rest: 'bg-pink-100 text-pink-600 border-pink-200',
-  outdoor: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  outdoor: 'bg-[#ddeaff] text-[#495cc9] border-[#c4d6f5]',
   '': 'bg-stone-100 text-stone-500 border-stone-200',
 }
 
@@ -184,12 +190,19 @@ async function save(date: string) {
   }
 }
 
-function cycleType(date: string) {
-  const draft = getDraft(date)
-  const zones = [null, 'zone2', 'zone4', 'zone5', 'zone6', 'rest', 'outdoor']
-  const idx = zones.indexOf(draft.type)
-  draft.type = zones[(idx + 1) % zones.length] ?? null
+function setType(date: string, type: string | null) {
+  getDraft(date).type = type
   save(date)
+}
+
+function typeMenuItems(date: string) {
+  const current = getDraft(date).type
+  return [...ZONES, NO_ZONE].map(z => ({
+    label: z.label,
+    value: z.value,
+    selected: z.value === current,
+    onSelect: () => setType(date, z.value),
+  }))
 }
 
 // ── Swap with day above ──────────────────────────────────────────────────────
@@ -506,16 +519,43 @@ async function clearNote() {
               <span class="hidden sm:inline">{{ formatDate(day.date) }}</span>
             </span>
 
-            <!-- Zone badge (click to cycle) -->
-            <button
-              class="shrink-0 w-9 h-7 rounded-md border text-xs font-bold uppercase tracking-wide transition-colors cursor-pointer"
+            <!-- Workout type — dropdown to pick. Past days show the badge only. -->
+            <span
+              v-if="day.isPast"
+              class="shrink-0 w-9 h-7 inline-flex items-center justify-center rounded-md border"
               :class="zoneClass(getDraft(day.date).type)"
-              :disabled="day.isPast"
-              :title="getDraft(day.date).type ?? 'No zone — click to set'"
-              @click="!day.isPast && cycleType(day.date)"
+              :title="zoneLabel(getDraft(day.date).type)"
             >
-              {{ getDraft(day.date).type ? ZONES.find(z => z.value === getDraft(day.date).type)?.label : '·' }}
-            </button>
+              <ZoneIcon :type="getDraft(day.date).type" class="w-4 h-4 text-sm" />
+            </span>
+            <UDropdownMenu
+              v-else
+              :items="typeMenuItems(day.date)"
+              :content="{ align: 'start' }"
+              :ui="{ content: 'w-44' }"
+            >
+              <button
+                type="button"
+                class="shrink-0 w-9 h-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer"
+                :class="zoneClass(getDraft(day.date).type)"
+                :title="`${zoneLabel(getDraft(day.date).type)} — change type`"
+                :aria-label="`Workout type: ${zoneLabel(getDraft(day.date).type)}. Change`"
+              >
+                <ZoneIcon :type="getDraft(day.date).type" class="w-4 h-4 text-sm" />
+              </button>
+
+              <template #item-leading="{ item }">
+                <span
+                  class="shrink-0 w-6 h-5 inline-flex items-center justify-center rounded border"
+                  :class="zoneClass(item.value)"
+                >
+                  <ZoneIcon :type="item.value" class="w-3.5 h-3.5 text-xs" />
+                </span>
+              </template>
+              <template #item-trailing="{ item }">
+                <UIcon v-if="item.selected" name="i-heroicons-check" class="w-3 h-3 text-stone-500" />
+              </template>
+            </UDropdownMenu>
 
             <!-- Workout name: compact truncated text in narrow/vertical layouts,
                  editable input from `sm` up -->
