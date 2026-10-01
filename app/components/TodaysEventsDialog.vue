@@ -70,7 +70,10 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') emit('close')
 }
 
+// `immediate` because the page mounts this lazily (v-if) already open, so the
+// watcher never sees a false → true transition.
 watch(() => props.open, (isOpen) => {
+  if (!import.meta.client) return
   if (isOpen) {
     load()
     window.addEventListener('keydown', onKeydown)
@@ -78,6 +81,10 @@ watch(() => props.open, (isOpen) => {
   else {
     window.removeEventListener('keydown', onKeydown)
   }
+}, { immediate: true })
+
+onBeforeUnmount(() => {
+  if (import.meta.client) window.removeEventListener('keydown', onKeydown)
 })
 </script>
 

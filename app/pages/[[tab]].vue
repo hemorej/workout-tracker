@@ -1583,7 +1583,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           <div v-if="historyLoading" class="flex justify-center py-16">
             <BikeSpinner :size="24" class="text-stone-300" />
           </div>
-          <MetricsHistoryChart v-else :series="historySeries" />
+          <LazyMetricsHistoryChart v-else :series="historySeries" />
         </div>
       </div>
     </Teleport>
@@ -1633,7 +1633,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
     />
 
     <!-- ── Today's Zwift events dialog (Planning tab) ─────────────────── -->
-    <TodaysEventsDialog :open="showTodaysEvents" @close="showTodaysEvents = false" />
+    <LazyTodaysEventsDialog v-if="showTodaysEvents" open @close="showTodaysEvents = false" />
 
   </div>
 </template>
