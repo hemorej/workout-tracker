@@ -103,7 +103,6 @@ export default defineEventHandler(async (event) => {
         notes: workouts.notes,
         ftpWatts: workouts.ftpWatts,
         rideType: workouts.rideType,
-        fitData: workouts.fitData,
       })
       .from(workouts)
       .where(eq(workouts.userId, user.id))
@@ -258,7 +257,7 @@ export default defineEventHandler(async (event) => {
     // This is a tiny query (≤ `limit` rows) even though the full series may be long.
     const pageDateSet = new Set(pageSlice.map((d) => d.date))
 
-    const pageWorkouts: WorkoutRow[] = await db
+    const pageWorkouts: WorkoutRow[] = pageDateSet.size === 0 ? [] : await db
       .select({
         id: workouts.id,
         date: workouts.date,
@@ -275,14 +274,11 @@ export default defineEventHandler(async (event) => {
         stravaActivityId: workouts.stravaActivityId,
       })
       .from(workouts)
-      .where(eq(workouts.userId, user.id))
+      .where(and(eq(workouts.userId, user.id), inArray(workouts.date, [...pageDateSet])))
 
-    // Filter in JS (Drizzle doesn't support `date IN (...)` on string arrays
-    // without raw SQL; filtering server-side is fine for ≤ 60 rows per page)
-    const filteredPageWorkouts = pageWorkouts.filter((w) => pageDateSet.has(w.date))
-    const workoutByDate = new Map(filteredPageWorkouts.map((w) => [w.date, w]))
+    const workoutByDate = new Map(pageWorkouts.map((w) => [w.date, w]))
 
-    const pbByWorkoutId = await powerBestsByWorkoutId(filteredPageWorkouts.map((w) => w.id))
+    const pbByWorkoutId = await powerBestsByWorkoutId(pageWorkouts.map((w) => w.id))
 
     days = pageSlice.map((day) => {
       const workout = workoutByDate.get(day.date)
