@@ -24,6 +24,10 @@
  * The metrics series itself is cached — see server/utils/metricsCache.ts.
  * It is invalidated on every workout write and rebuilt on the next GET.
  *
+ * The list deliberately omits the heavy `fit_data` / `laps` JSONB columns and
+ * returns a `hasFitData` flag instead — the ride-stats overlay loads them on
+ * demand from GET /api/workouts/:id.
+ *
  * Response shape:
  * {
  *   days: DayEntry[]          — paginated, newest first
@@ -34,11 +38,11 @@
  * }
  */
 
-import { eq, asc, desc, and, gte, lte, ilike, inArray, sql, type SQL } from 'drizzle-orm'
-import { workouts, users, powerBests, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
+import { eq, desc, and, gte, lte, ilike, inArray, sql, type SQL } from 'drizzle-orm'
+import { workouts, powerBests } from '../../db/schema'
 import { useDB } from '../../db'
-import { computeMetricsSeries, computeWeeklyStats, type DayMetrics } from '../../utils/tss'
-import { getCachedMetrics, setCachedMetrics } from '../../utils/metricsCache'
+import { computeWeeklyStats, type DayMetrics } from '../../utils/tss'
+import { getMetricsSeries } from '../../utils/metricsCache'
 
 /** Escapes LIKE wildcard characters so search text is matched literally */
 function escapeLikePattern(input: string): string {
@@ -71,50 +75,10 @@ export default defineEventHandler(async (event) => {
 
   // ── Metrics series (cached) ────────────────────────────────────────────────
 
-  // Try the cache first. A null return means the entry is absent, stale, or
-  // outdated (series ends before today), so we fall through to a full compute.
-  let series = getCachedMetrics(user.id)
+  // Cached, de-duplicated series — see server/utils/metricsCache.ts
+  const series = await getMetricsSeries(user.id)
 
   const db = useDB()
-
-  if (!series) {
-    // ── Cache miss: full computation path ───────────────────────────────────
-
-    // Fetch the user's starting CTL/ATL preferences (set once, rarely changes)
-    const [userRow] = await db
-      .select({ initialCtl: users.initialCtl, initialAtl: users.initialAtl })
-      .from(users)
-      .where(eq(users.id, user.id))
-      .limit(1)
-
-    const initialCTL = userRow?.initialCtl ?? 0
-    const initialATL = userRow?.initialAtl ?? initialCTL
-
-    // Fetch the full workout history — required to seed CTL/ATL from day one
-    const allWorkouts = await db
-      .select({
-        id: workouts.id,
-        date: workouts.date,
-        name: workouts.name,
-        durationMinutes: workouts.durationMinutes,
-        distanceKm: workouts.distanceKm,
-        tss: workouts.tss,
-        rpe: workouts.rpe,
-        notes: workouts.notes,
-        ftpWatts: workouts.ftpWatts,
-        rideType: workouts.rideType,
-        fitData: workouts.fitData,
-      })
-      .from(workouts)
-      .where(eq(workouts.userId, user.id))
-      .orderBy(asc(workouts.date))
-
-    // Compute the full day-by-day series (first workout → today)
-    series = computeMetricsSeries(allWorkouts, { initialCTL, initialATL })
-
-    // Store in cache so subsequent GETs skip this work
-    setCachedMetrics(user.id, series)
-  }
 
   // O(1) date → metrics lookups, used for both branches below.
   const seriesByDate = new Map<string, DayMetrics>(series.map((d) => [d.date, d]))
@@ -149,8 +113,7 @@ export default defineEventHandler(async (event) => {
     notes: string | null
     ftpWatts: number | null
     rideType: string | null
-    fitData: WorkoutFitData | null
-    laps: WorkoutLap[] | null
+    hasFitData: boolean
     stravaActivityId: number | null
   }
 
@@ -181,8 +144,7 @@ export default defineEventHandler(async (event) => {
       notes: row.notes,
       ftpWatts: row.ftpWatts,
       rideType: row.rideType,
-      fitData: row.fitData,
-      laps: row.laps,
+      hasFitData: row.hasFitData,
       stravaActivityId: row.stravaActivityId,
       powerBests: pbByWorkoutId.get(row.id) ?? [],
     }
@@ -226,8 +188,7 @@ export default defineEventHandler(async (event) => {
         notes: workouts.notes,
         ftpWatts: workouts.ftpWatts,
         rideType: workouts.rideType,
-        fitData: workouts.fitData,
-        laps: workouts.laps,
+        hasFitData: sql<boolean>`${workouts.fitData} is not null`,
         stravaActivityId: workouts.stravaActivityId,
       })
       .from(workouts)
@@ -258,7 +219,7 @@ export default defineEventHandler(async (event) => {
     // This is a tiny query (≤ `limit` rows) even though the full series may be long.
     const pageDateSet = new Set(pageSlice.map((d) => d.date))
 
-    const pageWorkouts: WorkoutRow[] = await db
+    const pageWorkouts: WorkoutRow[] = pageDateSet.size === 0 ? [] : await db
       .select({
         id: workouts.id,
         date: workouts.date,
@@ -270,19 +231,15 @@ export default defineEventHandler(async (event) => {
         notes: workouts.notes,
         ftpWatts: workouts.ftpWatts,
         rideType: workouts.rideType,
-        fitData: workouts.fitData,
-        laps: workouts.laps,
+        hasFitData: sql<boolean>`${workouts.fitData} is not null`,
         stravaActivityId: workouts.stravaActivityId,
       })
       .from(workouts)
-      .where(eq(workouts.userId, user.id))
+      .where(and(eq(workouts.userId, user.id), inArray(workouts.date, [...pageDateSet])))
 
-    // Filter in JS (Drizzle doesn't support `date IN (...)` on string arrays
-    // without raw SQL; filtering server-side is fine for ≤ 60 rows per page)
-    const filteredPageWorkouts = pageWorkouts.filter((w) => pageDateSet.has(w.date))
-    const workoutByDate = new Map(filteredPageWorkouts.map((w) => [w.date, w]))
+    const workoutByDate = new Map(pageWorkouts.map((w) => [w.date, w]))
 
-    const pbByWorkoutId = await powerBestsByWorkoutId(filteredPageWorkouts.map((w) => w.id))
+    const pbByWorkoutId = await powerBestsByWorkoutId(pageWorkouts.map((w) => w.id))
 
     days = pageSlice.map((day) => {
       const workout = workoutByDate.get(day.date)

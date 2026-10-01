@@ -28,8 +28,8 @@
  * }
  */
 
-import { eq, asc, inArray } from 'drizzle-orm'
-import { workouts, powerBests as powerBestsTable, users, POWER_BEST_DURATIONS } from '../../db/schema'
+import { eq, asc, sql } from 'drizzle-orm'
+import { workouts, users, POWER_BEST_DURATIONS } from '../../db/schema'
 import { useDB } from '../../db'
 import { getPowerBestCandidates, EIGHT_WEEKS_MS } from '../../utils/powerBests'
 
@@ -76,32 +76,30 @@ export default defineEventHandler(async (event) => {
 
   const db = useDB()
 
-  const allWorkouts = await db
-    .select({
-      id: workouts.id,
-      date: workouts.date,
-      tss: workouts.tss,
-      durationMinutes: workouts.durationMinutes,
-      distanceKm: workouts.distanceKm,
-      ftpWatts: workouts.ftpWatts,
-    })
-    .from(workouts)
-    .where(eq(workouts.userId, user.id))
-    .orderBy(asc(workouts.date))
-
-  const workoutIds = allWorkouts.map((w) => w.id)
-  const allPowerBests = workoutIds.length > 0
-    ? await db
-        .select({
-          workoutId: powerBestsTable.workoutId,
-          duration: powerBestsTable.duration,
-          watts: powerBestsTable.watts,
-        })
-        .from(powerBestsTable)
-        .where(inArray(powerBestsTable.workoutId, workoutIds))
-    : []
-
-  const workoutIdsWithPowerBests = new Set(allPowerBests.map((pb) => pb.workoutId))
+  // The three reads are independent, so run them concurrently. `hasPowerBests`
+  // is an EXISTS subquery rather than a second query with every workout id in
+  // an IN list. Table names are written out in the subquery on purpose: Drizzle
+  // drops qualifiers in single-table selects, which would bind `id` to pb.id.
+  const [allWorkouts, candidates, [userRow]] = await Promise.all([
+    db
+      .select({
+        id: workouts.id,
+        date: workouts.date,
+        tss: workouts.tss,
+        durationMinutes: workouts.durationMinutes,
+        distanceKm: workouts.distanceKm,
+        ftpWatts: workouts.ftpWatts,
+        hasPowerBests: sql<boolean>`exists (select 1 from power_bests pb where pb.workout_id = workouts.id)`,
+      })
+      .from(workouts)
+      .where(eq(workouts.userId, user.id))
+      .orderBy(asc(workouts.date)),
+    getPowerBestCandidates(db, user.id),
+    db
+      .select({ weightKg: users.weightKg })
+      .from(users)
+      .where(eq(users.id, user.id)),
+  ])
 
   // ── Group workouts into periods ────────────────────────────────────────────
 
@@ -137,7 +135,7 @@ export default defineEventHandler(async (event) => {
       p.hasFtp = true
       p.ftpWatts = w.ftpWatts
     }
-    if (workoutIdsWithPowerBests.has(w.id)) {
+    if (w.hasPowerBests) {
       p.hasPowerBests = true
     }
   }
@@ -170,7 +168,7 @@ export default defineEventHandler(async (event) => {
   // "Last 8 Weeks"/"All Time" columns here and what gets saved as a best effort
   // on a workout can never drift apart.
   const candidatesByDuration = new Map<string, { watts: number; date: string }[]>()
-  for (const c of await getPowerBestCandidates(db, user.id)) {
+  for (const c of candidates) {
     const list = candidatesByDuration.get(c.duration)
     if (list) list.push({ watts: c.watts, date: c.date })
     else candidatesByDuration.set(c.duration, [{ watts: c.watts, date: c.date }])
@@ -197,10 +195,6 @@ export default defineEventHandler(async (event) => {
   // Current FTP: most recent non-null ftpWatts (allWorkouts sorted asc, so last wins)
   const currentFtp = allWorkouts.filter((w) => w.ftpWatts != null).at(-1)?.ftpWatts ?? null
 
-  const [userRow] = await db
-    .select({ weightKg: users.weightKg })
-    .from(users)
-    .where(eq(users.id, user.id))
   const weightKg = userRow?.weightKg ?? null
 
   // Surface which durations have any data for the panel

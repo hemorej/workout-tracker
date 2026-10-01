@@ -150,8 +150,19 @@ function closeUserSettings() {
 // ── Ride stats overlay ("brief ride stats" on a logged workout's title) ──
 const fitOverlayWorkout = ref<WorkoutDetail | null>(null)
 
-function openFitOverlay(day: DayEntry) {
-  fitOverlayWorkout.value = day.workout
+// The list omits the heavy fitData/laps JSONB, so fetch them on demand and
+// open the overlay once they're in (a single-row lookup, so near-instant).
+async function openFitOverlay(day: DayEntry) {
+  if (!day.workout) return
+  try {
+    const detail = await $fetch<{ fitData: WorkoutFitData | null, laps: WorkoutLap[] | null }>(
+      `/api/workouts/${day.workout.id}`,
+    )
+    fitOverlayWorkout.value = { ...day.workout, ...detail }
+  }
+  catch {
+    toast.add({ title: 'Couldn\'t load ride stats', color: 'error' })
+  }
 }
 
 function closeFitOverlay() {
@@ -1572,7 +1583,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           <div v-if="historyLoading" class="flex justify-center py-16">
             <BikeSpinner :size="24" class="text-stone-300" />
           </div>
-          <MetricsHistoryChart v-else :series="historySeries" />
+          <LazyMetricsHistoryChart v-else :series="historySeries" />
         </div>
       </div>
     </Teleport>
@@ -1622,7 +1633,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
     />
 
     <!-- ── Today's Zwift events dialog (Planning tab) ─────────────────── -->
-    <TodaysEventsDialog :open="showTodaysEvents" @close="showTodaysEvents = false" />
+    <LazyTodaysEventsDialog v-if="showTodaysEvents" open @close="showTodaysEvents = false" />
 
   </div>
 </template>
