@@ -16,11 +16,10 @@
  * }
  */
 
-import { eq, asc, desc, and, inArray } from 'drizzle-orm'
+import { eq, desc, and, gte, lte, inArray } from 'drizzle-orm'
 import { plannedWorkouts, workouts, users } from '../../db/schema'
 import { useDB } from '../../db'
-import { computeMetricsSeries } from '../../utils/tss'
-import { getCachedMetrics } from '../../utils/metricsCache'
+import { getMetricsSeries } from '../../utils/metricsCache'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -28,25 +27,8 @@ export default defineEventHandler(async (event) => {
 
   // Get the metrics series (cache or full compute) — includes today, reflecting
   // any workout already logged today
-  let series = getCachedMetrics(user.id)
-  if (!series) {
-    const [userRow] = await db
-      .select({ initialCtl: users.initialCtl, initialAtl: users.initialAtl })
-      .from(users)
-      .where(eq(users.id, user.id))
-      .limit(1)
-
-    const allWorkouts = await db
-      .select({ date: workouts.date, tss: workouts.tss, durationMinutes: workouts.durationMinutes })
-      .from(workouts)
-      .where(eq(workouts.userId, user.id))
-      .orderBy(asc(workouts.date))
-
-    series = computeMetricsSeries(allWorkouts, {
-      initialCTL: userRow?.initialCtl ?? 0,
-      initialATL: userRow?.initialAtl ?? 0,
-    })
-  }
+  const series = await getMetricsSeries(user.id)
+  const seriesByDate = new Map(series.map(d => [d.date, d]))
 
   // Build 4 weeks of dates starting from current week's Monday
   const today = new Date()
@@ -85,7 +67,7 @@ export default defineEventHandler(async (event) => {
   // Today counts as "logged" (and therefore read-only, like a past day) once
   // an actual workout exists for it — otherwise its row is still projected
   // from the planned TSS like any future day.
-  const todayEntry = series.find(d => d.date === todayStr)
+  const todayEntry = seriesByDate.get(todayStr)
   const isTodayLogged = !!todayEntry && !todayEntry.isRestDay
 
   // Actual logged totals per day, for past days only — lets the UI show what
@@ -108,7 +90,7 @@ export default defineEventHandler(async (event) => {
   // using today's own series entry here would double-count today's load
   // once it's logged, since the projection loop below applies today's TSS
   // (planned or actual) itself.
-  const yesterdayEntry = series.find(d => d.date === yesterdayStr)
+  const yesterdayEntry = seriesByDate.get(yesterdayStr)
   let currentCtl: number
   let currentAtl: number
   if (yesterdayEntry) {
@@ -131,11 +113,13 @@ export default defineEventHandler(async (event) => {
   const rows = await db
     .select()
     .from(plannedWorkouts)
-    .where(eq(plannedWorkouts.userId, user.id))
+    .where(and(
+      eq(plannedWorkouts.userId, user.id),
+      gte(plannedWorkouts.date, dates[0]!),
+      lte(plannedWorkouts.date, dates.at(-1)!),
+    ))
 
-  const planByDate = new Map(
-    rows.filter(r => dates.includes(r.date)).map(r => [r.date, r]),
-  )
+  const planByDate = new Map(rows.map(r => [r.date, r]))
 
   // Compute projections day by day — must match the decay constants in
   // server/utils/tss.ts (the TrainingPeaks/Coggan PMC standard: TSS delta / N)
@@ -161,7 +145,7 @@ export default defineEventHandler(async (event) => {
     }
     else {
       // Use actual historical data for past days
-      const historical = series?.find(d => d.date === date)
+      const historical = seriesByDate.get(date)
       projCtl = historical?.ctl ?? ctl
       projAtl = historical?.atl ?? atl
       ctl = projCtl

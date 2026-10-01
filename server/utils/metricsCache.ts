@@ -32,7 +32,10 @@
  * forward from there.
  */
 
-import type { DayMetrics } from './tss'
+import { eq, asc } from 'drizzle-orm'
+import { workouts, users } from '../db/schema'
+import { useDB } from '../db'
+import { computeMetricsSeries, type DayMetrics } from './tss'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -121,4 +124,62 @@ export function setCachedMetrics(userId: number, series: DayMetrics[]): void {
  */
 export function invalidateMetrics(userId: number): void {
   _store.delete(userId)
+  // Drop any compute already in flight so its (now stale) result isn't cached
+  _inflight.delete(userId)
+}
+
+/**
+ * Computes in progress, keyed by user. The dashboard's SSR load fires several
+ * endpoints in parallel; on a cold cache they all share one compute instead of
+ * each scanning the whole workouts table.
+ */
+const _inflight = new Map<number, Promise<DayMetrics[]>>()
+
+async function computeSeries(userId: number): Promise<DayMetrics[]> {
+  const db = useDB()
+
+  const [userRow] = await db
+    .select({ initialCtl: users.initialCtl, initialAtl: users.initialAtl })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+
+  const initialCTL = userRow?.initialCtl ?? 0
+  const initialATL = userRow?.initialAtl ?? initialCTL
+
+  // Only the columns the series needs — never the fit_data/laps JSONB
+  const allWorkouts = await db
+    .select({
+      date: workouts.date,
+      tss: workouts.tss,
+      durationMinutes: workouts.durationMinutes,
+      distanceKm: workouts.distanceKm,
+    })
+    .from(workouts)
+    .where(eq(workouts.userId, userId))
+    .orderBy(asc(workouts.date))
+
+  return computeMetricsSeries(allWorkouts, { initialCTL, initialATL })
+}
+
+/**
+ * The single entry point for the metrics series: returns the cached series, or
+ * computes (once, even for concurrent callers) and caches it.
+ */
+export async function getMetricsSeries(userId: number): Promise<DayMetrics[]> {
+  const cached = getCachedMetrics(userId)
+  if (cached) return cached
+
+  const existing = _inflight.get(userId)
+  if (existing) return existing
+
+  const pending = computeSeries(userId).then((series) => {
+    // Skip caching if a write invalidated the user while we were computing
+    if (_inflight.get(userId) === pending) setCachedMetrics(userId, series)
+    return series
+  }).finally(() => {
+    if (_inflight.get(userId) === pending) _inflight.delete(userId)
+  })
+  _inflight.set(userId, pending)
+  return pending
 }

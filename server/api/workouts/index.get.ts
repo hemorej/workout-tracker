@@ -34,11 +34,11 @@
  * }
  */
 
-import { eq, asc, desc, and, gte, lte, ilike, inArray, sql, type SQL } from 'drizzle-orm'
-import { workouts, users, powerBests, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
+import { eq, desc, and, gte, lte, ilike, inArray, sql, type SQL } from 'drizzle-orm'
+import { workouts, powerBests, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
 import { useDB } from '../../db'
-import { computeMetricsSeries, computeWeeklyStats, type DayMetrics } from '../../utils/tss'
-import { getCachedMetrics, setCachedMetrics } from '../../utils/metricsCache'
+import { computeWeeklyStats, type DayMetrics } from '../../utils/tss'
+import { getMetricsSeries } from '../../utils/metricsCache'
 
 /** Escapes LIKE wildcard characters so search text is matched literally */
 function escapeLikePattern(input: string): string {
@@ -71,49 +71,10 @@ export default defineEventHandler(async (event) => {
 
   // ── Metrics series (cached) ────────────────────────────────────────────────
 
-  // Try the cache first. A null return means the entry is absent, stale, or
-  // outdated (series ends before today), so we fall through to a full compute.
-  let series = getCachedMetrics(user.id)
+  // Cached, de-duplicated series — see server/utils/metricsCache.ts
+  const series = await getMetricsSeries(user.id)
 
   const db = useDB()
-
-  if (!series) {
-    // ── Cache miss: full computation path ───────────────────────────────────
-
-    // Fetch the user's starting CTL/ATL preferences (set once, rarely changes)
-    const [userRow] = await db
-      .select({ initialCtl: users.initialCtl, initialAtl: users.initialAtl })
-      .from(users)
-      .where(eq(users.id, user.id))
-      .limit(1)
-
-    const initialCTL = userRow?.initialCtl ?? 0
-    const initialATL = userRow?.initialAtl ?? initialCTL
-
-    // Fetch the full workout history — required to seed CTL/ATL from day one
-    const allWorkouts = await db
-      .select({
-        id: workouts.id,
-        date: workouts.date,
-        name: workouts.name,
-        durationMinutes: workouts.durationMinutes,
-        distanceKm: workouts.distanceKm,
-        tss: workouts.tss,
-        rpe: workouts.rpe,
-        notes: workouts.notes,
-        ftpWatts: workouts.ftpWatts,
-        rideType: workouts.rideType,
-      })
-      .from(workouts)
-      .where(eq(workouts.userId, user.id))
-      .orderBy(asc(workouts.date))
-
-    // Compute the full day-by-day series (first workout → today)
-    series = computeMetricsSeries(allWorkouts, { initialCTL, initialATL })
-
-    // Store in cache so subsequent GETs skip this work
-    setCachedMetrics(user.id, series)
-  }
 
   // O(1) date → metrics lookups, used for both branches below.
   const seriesByDate = new Map<string, DayMetrics>(series.map((d) => [d.date, d]))
