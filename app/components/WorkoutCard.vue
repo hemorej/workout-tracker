@@ -126,7 +126,7 @@ const plannedDurationDisplay = computed(() => {
 // ── Power data indicators ────────────────────────────────────────────────
 const hasFtp = computed(() => !!props.day.workout?.ftpWatts)
 const hasPowerBests = computed(() => (props.day.workout?.powerBests?.length ?? 0) > 0)
-const hasFitData = computed(() => !!props.day.workout?.fitData)
+const hasFitData = computed(() => !!props.day.workout?.hasFitData)
 const hasStravaActivity = computed(() => !!props.day.workout?.stravaActivityId)
 /** Photo overlay builder only makes sense for outdoor rides — no route/map data for indoor/trainer rides */
 const isOutdoorRide = computed(() => props.day.workout?.rideType === 'outdoor')

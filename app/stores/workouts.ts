@@ -62,9 +62,12 @@ export interface WorkoutDetail {
   notes: string | null
   ftpWatts: number | null
   rideType: 'trainer' | 'outdoor' | null
-  fitData: WorkoutFitData | null
-  /** Per-lap splits, if the FIT file had 2+ laps — see server/db/schema.ts. */
-  laps: WorkoutLap[] | null
+  /** Whether a parsed FIT file's stats exist — the list omits the payload itself. */
+  hasFitData: boolean
+  /** Loaded on demand via GET /api/workouts/:id (the list omits it), see fetchWorkoutFitDetail. */
+  fitData?: WorkoutFitData | null
+  /** Per-lap splits, if the FIT file had 2+ laps — see server/db/schema.ts. Loaded on demand with fitData. */
+  laps?: WorkoutLap[] | null
   /** Strava activity this workout was created from, if any — see server/db/schema.ts. */
   stravaActivityId: number | null
   powerBests: PowerBestEntry[]

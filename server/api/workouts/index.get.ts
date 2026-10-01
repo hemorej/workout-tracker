@@ -24,6 +24,10 @@
  * The metrics series itself is cached — see server/utils/metricsCache.ts.
  * It is invalidated on every workout write and rebuilt on the next GET.
  *
+ * The list deliberately omits the heavy `fit_data` / `laps` JSONB columns and
+ * returns a `hasFitData` flag instead — the ride-stats overlay loads them on
+ * demand from GET /api/workouts/:id.
+ *
  * Response shape:
  * {
  *   days: DayEntry[]          — paginated, newest first
@@ -35,7 +39,7 @@
  */
 
 import { eq, desc, and, gte, lte, ilike, inArray, sql, type SQL } from 'drizzle-orm'
-import { workouts, powerBests, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
+import { workouts, powerBests } from '../../db/schema'
 import { useDB } from '../../db'
 import { computeWeeklyStats, type DayMetrics } from '../../utils/tss'
 import { getMetricsSeries } from '../../utils/metricsCache'
@@ -109,8 +113,7 @@ export default defineEventHandler(async (event) => {
     notes: string | null
     ftpWatts: number | null
     rideType: string | null
-    fitData: WorkoutFitData | null
-    laps: WorkoutLap[] | null
+    hasFitData: boolean
     stravaActivityId: number | null
   }
 
@@ -141,8 +144,7 @@ export default defineEventHandler(async (event) => {
       notes: row.notes,
       ftpWatts: row.ftpWatts,
       rideType: row.rideType,
-      fitData: row.fitData,
-      laps: row.laps,
+      hasFitData: row.hasFitData,
       stravaActivityId: row.stravaActivityId,
       powerBests: pbByWorkoutId.get(row.id) ?? [],
     }
@@ -186,8 +188,7 @@ export default defineEventHandler(async (event) => {
         notes: workouts.notes,
         ftpWatts: workouts.ftpWatts,
         rideType: workouts.rideType,
-        fitData: workouts.fitData,
-        laps: workouts.laps,
+        hasFitData: sql<boolean>`${workouts.fitData} is not null`,
         stravaActivityId: workouts.stravaActivityId,
       })
       .from(workouts)
@@ -230,8 +231,7 @@ export default defineEventHandler(async (event) => {
         notes: workouts.notes,
         ftpWatts: workouts.ftpWatts,
         rideType: workouts.rideType,
-        fitData: workouts.fitData,
-        laps: workouts.laps,
+        hasFitData: sql<boolean>`${workouts.fitData} is not null`,
         stravaActivityId: workouts.stravaActivityId,
       })
       .from(workouts)
