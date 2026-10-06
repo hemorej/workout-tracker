@@ -33,6 +33,7 @@ import { getCurrentFtpWatts } from '../../utils/ftp'
 import { metricsToWorkoutFields, upsertWahooPowerBests } from '../../utils/fitWorkout'
 import { fetchRecentStravaRides } from '../../utils/strava'
 import { saveFitFile } from '../../utils/fitStorage'
+import { filterNewBestEfforts } from '../../utils/powerBests'
 import { secretMatches, type WahooWebhookBody } from '../../utils/wahooWebhook'
 
 const log = getLogger('wahoo')
@@ -189,10 +190,13 @@ export default defineEventHandler(async (event) => {
     }
 
     // ── Power bests (per-workout, full replace) ─────────────────────────
+    // Only durations that beat the trailing-8-week (or all-time) max are stored
+    // as best efforts — same filter as POST/PATCH /api/workouts.
     await db.delete(powerBests).where(eq(powerBests.workoutId, workoutId))
-    if (fields.powerBests.length > 0) {
+    const bestEfforts = await filterNewBestEfforts(db, userId, rideDate, fields.powerBests, workoutId)
+    if (bestEfforts.length > 0) {
       await db.insert(powerBests).values(
-        fields.powerBests.map((pb) => ({ workoutId, duration: pb.duration, watts: pb.watts })),
+        bestEfforts.map((pb) => ({ workoutId, duration: pb.duration, watts: pb.watts })),
       )
     }
 
