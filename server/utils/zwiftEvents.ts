@@ -114,8 +114,10 @@ function parseTodaysClimbNames(html: string, todayStr: string): TodaysClimbName[
   for (const m of cellHtml.matchAll(eventPattern)) {
     const portal = CATEGORY_PORTAL_LABELS[Number(m[1])]
     if (!portal) continue
-    // Weekly climb titles carry an XP suffix, e.g. "Cote de Trebiac (250 XP)".
-    const name = m[2]!.replace(/\s*\(\d+\s*XP\)\s*$/i, '').trim()
+    // Weekly climb titles carry a reward suffix that Insider has changed over
+    // time, e.g. "Cote de Trebiac (250 XP)", "Mûr de Bretagne (15k Drops)" —
+    // strip any trailing parenthetical rather than matching one wording.
+    const name = m[2]!.replace(/\s*\([^)]*\)\s*$/, '').trim()
     results.push({ portal, name })
   }
   return results
