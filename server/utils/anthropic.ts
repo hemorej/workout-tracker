@@ -400,6 +400,129 @@ export async function generateCoachFuellingGuide(
   return withCoachRetries(() => streamStructuredRequest(apiKey, body, FuellingGuideSchema))
 }
 
+/**
+ * Multi-week plan suggestion (server/api/coach/generate-plan.post.ts). One
+ * entry per requested day; days the model leaves empty come back with all-null
+ * fields and are dropped by the route.
+ */
+export const PLAN_DAY_TYPES = ['zone2', 'zone4', 'zone5', 'zone6', 'rest', 'outdoor'] as const
+
+export const CoachPlanSchema = z.object({
+  weeks: z.array(z.object({
+    monday: z.string().describe('YYYY-MM-DD of the Monday starting this week'),
+    role: z.enum(['build', 'recovery']),
+    days: z.array(z.object({
+      date: z.string().describe('YYYY-MM-DD'),
+      name: z.string().nullable(),
+      type: z.enum(PLAN_DAY_TYPES).nullable(),
+      tss: z.number().nullable(),
+      durationMinutes: z.number().nullable(),
+      notes: z.string().nullable(),
+    })),
+  })),
+})
+
+export type CoachPlan = z.infer<typeof CoachPlanSchema>
+
+const nullable = <T extends object>(schema: T) => ({ anyOf: [schema, { type: 'null' }] })
+
+const COACH_PLAN_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['weeks'],
+  properties: {
+    weeks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['monday', 'role', 'days'],
+        properties: {
+          monday: { type: 'string', description: 'YYYY-MM-DD of the Monday starting this week' },
+          role: { type: 'string', enum: ['build', 'recovery'] },
+          days: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['date', 'name', 'type', 'tss', 'durationMinutes', 'notes'],
+              properties: {
+                date: { type: 'string', description: 'YYYY-MM-DD' },
+                name: nullable({ type: 'string' }),
+                type: nullable({ type: 'string', enum: [...PLAN_DAY_TYPES] }),
+                tss: nullable({ type: 'number' }),
+                durationMinutes: nullable({ type: 'number' }),
+                notes: nullable({ type: 'string' }),
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const
+
+/** Generate 1–4 weeks of planned workouts (name/type/TSS/duration per day). */
+export async function generateCoachPlan(
+  systemBlocks: AnthropicSystemBlock[],
+  userText: string,
+): Promise<CoachPlan> {
+  const apiKey = requireApiKey()
+
+  const body = JSON.stringify({
+    model: MODEL,
+    max_tokens: 8000,
+    stream: true,
+    system: systemBlocks,
+    messages: [{ role: 'user', content: userText }],
+    output_config: { format: { type: 'json_schema', schema: COACH_PLAN_JSON_SCHEMA } },
+  })
+
+  return withCoachRetries(() => streamStructuredRequest(apiKey, body, CoachPlanSchema))
+}
+
+/**
+ * Weekly TSS progression of one training block, parsed out of the free-text
+ * training plan (used by block-position detection when no "w1:" marker is
+ * present). `weeklyTss` is null when the plan doesn't state weekly loads.
+ */
+export const BlockProgressionSchema = z.object({
+  weeklyTss: z.array(z.number()).nullable(),
+})
+
+export type BlockProgression = z.infer<typeof BlockProgressionSchema>
+
+const BLOCK_PROGRESSION_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['weeklyTss'],
+  properties: {
+    weeklyTss: nullable({
+      type: 'array',
+      description: 'target total TSS for each week of one repeating training block, in order (week 1 first, recovery week last)',
+      items: { type: 'number' },
+    }),
+  },
+} as const
+
+export async function extractBlockProgression(
+  systemBlocks: AnthropicSystemBlock[],
+  userText: string,
+): Promise<BlockProgression> {
+  const apiKey = requireApiKey()
+
+  const body = JSON.stringify({
+    model: MODEL,
+    max_tokens: 512,
+    stream: true,
+    system: systemBlocks,
+    messages: [{ role: 'user', content: userText }],
+    output_config: { format: { type: 'json_schema', schema: BLOCK_PROGRESSION_JSON_SCHEMA } },
+  })
+
+  return withCoachRetries(() => streamStructuredRequest(apiKey, body, BlockProgressionSchema))
+}
+
 /** `Retry-After` is seconds (or an HTTP date); we only handle the seconds form. */
 function parseRetryAfter(header: string | null): number | undefined {
   if (!header) return undefined

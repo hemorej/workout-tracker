@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { usePlanningStore } from '~/stores/planning'
 import type { PlanEntry } from '~/stores/planning'
+import { sameSession } from '~/stores/planning'
 
 const planning = usePlanningStore()
 const emit = defineEmits<{ openTodaysEvents: [], buildWorkout: [date: string] }>()
 const toast = useToast()
 
 onMounted(() => planning.fetchPlans())
+// Leaving the tab with a Suggest-plan preview open discards it silently — nothing was saved.
+onBeforeUnmount(() => planning.discardDraft())
+
+/** After Suggest-plan Apply/Undo rewrote these dates, drop stale per-row edit buffers
+ * so a later blur can't write the old values back. */
+function resetEditBuffers(dates: string[]) {
+  for (const d of dates) delete drafts[d]
+}
 
 // Today's date as YYYY-MM-DD (local time), used to find the current week.
 const todayStr = computed(() => {
@@ -84,13 +93,13 @@ const weeks = computed(() => {
 /** The TSS to display and count for a day: actual once it's in the past, else planned. */
 function effectiveTss(day: (typeof planning.plans)[number]) {
   if (day.isPast) return day.actual?.tss ?? 0
-  return getDraft(day.date).tss ?? 0
+  return shown(day.date).tss ?? 0
 }
 
 /** The duration to display and count for a day: actual once it's in the past, else planned. */
 function effectiveMinutes(day: (typeof planning.plans)[number]) {
   if (day.isPast) return day.actual?.durationMinutes ?? 0
-  return getDraft(day.date).durationMinutes ?? 0
+  return shown(day.date).durationMinutes ?? 0
 }
 
 /** True when a past day's logged TSS differs from what was planned for it. */
@@ -150,6 +159,45 @@ function getDraft(date: string): PlanEntry {
     }
   }
   return drafts[date]!
+}
+
+// ── Suggest-plan preview ─────────────────────────────────────────────────────
+// While a suggestion is previewed (store.draft), rows render the suggested entry
+// instead of the saved/edited one, and the week body ignores pointer input.
+
+const previewing = computed(() => planning.suggestPhase === 'generating' || planning.suggestPhase === 'preview')
+
+/** What a row displays: the suggestion for future days when previewing, else the edit buffer. */
+function shown(date: string): PlanEntry {
+  return planning.draft?.[date] ?? getDraft(date)
+}
+
+function suggestion(date: string) {
+  return planning.draft?.[date] ?? null
+}
+
+/** Suggested entry differs from what's saved (drives the orange dot). */
+function isSuggestedChange(date: string) {
+  const s = suggestion(date)
+  const saved = planning.plans.find(d => d.date === date)?.plan
+  return !!s && !sameSession(saved, s)
+}
+
+/** "Replaces 4×8 threshold · 85" — only when a different workout is already planned. */
+function replacesText(date: string) {
+  const s = suggestion(date)
+  const saved = planning.plans.find(d => d.date === date)?.plan
+  if (!s || !saved || !(saved.name || saved.type || saved.tss != null) || sameSession(saved, s)) return null
+  return `Replaces ${saved.name ?? zoneLabel(saved.type)}${saved.tss != null ? ` · ${saved.tss}` : ''}`
+}
+
+function suggestLabel(monday: string) {
+  return planning.suggestWeeks.find(w => w.monday === monday)?.label ?? null
+}
+
+/** Saved total for the week (logged for past days, saved plan for future) — for "was N". */
+function weekSavedTss(days: typeof planning.plans) {
+  return days.reduce((sum, d) => sum + (d.isPast ? (d.actual?.tss ?? 0) : (d.plan?.tss ?? 0)), 0)
 }
 
 /** Sets a day's draft TSS from the raw input string, treating an emptied
@@ -300,7 +348,7 @@ async function moveWorkout(from: string, to: string) {
 // future/today rows with an actual session planned — not rest days.
 
 function canBuild(day: (typeof planning.plans)[number]) {
-  return !day.isPast && getDraft(day.date).type !== 'rest'
+  return !day.isPast && shown(day.date).type !== 'rest'
 }
 
 async function buildWorkout(date: string) {
@@ -357,7 +405,8 @@ const liveProjections = computed(() => {
       atl = day.projectedCtl - day.projectedTsb
     }
     else {
-      const tss = drafts[day.date]?.tss ?? day.plan?.tss ?? 0
+      const suggested = planning.draft?.[day.date]
+      const tss = suggested ? (suggested.tss ?? 0) : (drafts[day.date]?.tss ?? day.plan?.tss ?? 0)
       ctl = tss * CTL_DECAY + ctl * (1 - CTL_DECAY)
       atl = tss * ATL_DECAY + atl * (1 - ATL_DECAY)
       result[day.date] = {
@@ -456,18 +505,26 @@ async function clearNote() {
 
     <template v-else-if="weeks.length">
 
+      <div class="flex justify-end">
+        <PlanSuggest @changed="resetEditBuffers" />
+      </div>
+
       <!-- ── 4 weeks ──────────────────────────────────────────────────────── -->
       <div
         v-for="week in weeks"
         :key="week.monday"
-        class="flex flex-col sm:flex-row bg-white rounded-xl border border-stone-100"
+        class="flex flex-col sm:flex-row bg-white rounded-xl transition-opacity"
+        :class="[
+          suggestLabel(week.monday) ? 'border-[1.5px] border-dashed border-orange-400' : 'border border-stone-100',
+          planning.suggestPhase === 'generating' && suggestLabel(week.monday) ? 'opacity-60' : '',
+        ]"
       >
         <!-- Week label margin — a top bar on narrow viewports so it doesn't eat
              into the day-row width, a sticky side column at sm+. Note:
              overflow-hidden must stay off this element's ancestors up to the
              page's scroll container, or sticky positioning breaks — the rounded
              clipping is applied per-column below instead. -->
-        <div class="shrink-0 sm:whitespace-nowrap rounded-t-xl sm:rounded-t-none sm:rounded-l-xl border-b sm:border-b-0 sm:border-r border-stone-100 bg-stone-50">
+        <div class="shrink-0 sm:whitespace-nowrap rounded-t-xl sm:rounded-t-none sm:rounded-l-xl border-b sm:border-b-0 sm:border-r border-stone-100 " :class="suggestLabel(week.monday) ? 'bg-orange-50' : 'bg-stone-50'">
           <div
             class="sticky flex items-baseline justify-between gap-3 px-3 py-1.5 sm:block sm:px-3 sm:py-2.5 sm:text-right"
             style="top: var(--app-sticky-h, 0px)"
@@ -487,6 +544,17 @@ async function clearNote() {
               </button>
             </div>
             <div class="flex items-baseline gap-2 sm:block">
+              <div v-if="suggestLabel(week.monday)" class="sm:mt-1.5">
+                <span
+                  v-if="planning.suggestPhase === 'generating'"
+                  class="inline-flex items-center gap-1 rounded-md bg-orange-100 px-[7px] py-[2px] text-[10.5px] font-semibold text-orange-700"
+                >
+                  <UIcon name="i-heroicons-arrow-path" class="animate-spin w-2.5 h-2.5" />Generating…
+                </span>
+                <span v-else class="inline-block rounded-md bg-orange-100 px-[7px] py-[2px] text-[10.5px] font-semibold text-orange-700">
+                  {{ suggestLabel(week.monday) }}
+                </span>
+              </div>
               <div class="sm:mt-1.5 text-sm font-semibold tabular text-stone-700 leading-tight">
                 {{ weekHours(week.days) ?? '—' }}
               </div>
@@ -511,13 +579,22 @@ async function clearNote() {
                 <div v-else class="hidden sm:block text-sm font-semibold tabular text-stone-700 leading-tight">
                   {{ weekPlannedTss(week.days) }}<span class="text-[10px] font-medium text-stone-400"> TSS</span>
                 </div>
+                <div
+                  v-if="planning.suggestPhase === 'preview' && suggestLabel(week.monday) && weekSavedTss(week.days) !== weekPlannedTss(week.days)"
+                  class="text-[11px] tabular text-stone-400 leading-tight"
+                >
+                  was {{ weekSavedTss(week.days) }}
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Week body -->
-        <div class="flex-1 min-w-0 overflow-hidden rounded-b-xl sm:rounded-b-none sm:rounded-r-xl">
+        <div
+          class="flex-1 min-w-0 overflow-hidden rounded-b-xl sm:rounded-b-none sm:rounded-r-xl"
+          :class="previewing ? 'pointer-events-none select-none' : ''"
+        >
           <!-- Column headers -->
           <div class="hidden sm:flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 pt-2 pb-1 border-b border-stone-100">
             <span class="w-12 sm:w-16 shrink-0" />
@@ -570,10 +647,10 @@ async function clearNote() {
             <span
               v-if="day.isPast"
               class="shrink-0 w-9 h-7 inline-flex items-center justify-center rounded-md border"
-              :class="zoneClass(getDraft(day.date).type)"
-              :title="zoneLabel(getDraft(day.date).type)"
+              :class="zoneClass(shown(day.date).type)"
+              :title="zoneLabel(shown(day.date).type)"
             >
-              <ZoneIcon :type="getDraft(day.date).type" class="w-4 h-4 text-sm" />
+              <ZoneIcon :type="shown(day.date).type" class="w-4 h-4 text-sm" />
             </span>
             <UDropdownMenu
               v-else
@@ -584,11 +661,11 @@ async function clearNote() {
               <button
                 type="button"
                 class="shrink-0 w-9 h-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer"
-                :class="zoneClass(getDraft(day.date).type)"
-                :title="`${zoneLabel(getDraft(day.date).type)} — change type`"
-                :aria-label="`Workout type: ${zoneLabel(getDraft(day.date).type)}. Change`"
+                :class="zoneClass(shown(day.date).type)"
+                :title="`${zoneLabel(shown(day.date).type)} — change type`"
+                :aria-label="`Workout type: ${zoneLabel(shown(day.date).type)}. Change`"
               >
-                <ZoneIcon :type="getDraft(day.date).type" class="w-4 h-4 text-sm" />
+                <ZoneIcon :type="shown(day.date).type" class="w-4 h-4 text-sm" />
               </button>
 
               <template #item-leading="{ item }">
@@ -605,22 +682,30 @@ async function clearNote() {
             </UDropdownMenu>
 
             <!-- Workout name: compact truncated text in narrow/vertical layouts,
-                 editable input from `sm` up -->
-            <span
-              class="sm:hidden flex-1 min-w-0 truncate text-[13px] px-1.5"
-              :class="getDraft(day.date).name ? 'text-stone-700' : 'text-stone-300'"
-            >
-              {{ getDraft(day.date).name || 'Workout name' }}
-            </span>
-            <input
-              v-model="getDraft(day.date).name"
-              type="text"
-              placeholder="Workout name"
-              :disabled="day.isPast"
-              class="hidden sm:block flex-1 min-w-0 text-sm text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1.5 py-1 -mx-1.5 transition-colors disabled:cursor-default"
-              @blur="save(day.date)"
-              @keydown.enter="($event.target as HTMLInputElement).blur()"
-            >
+                 editable input from `sm` up. While a suggestion is previewed, an
+                 orange dot marks changed rows and a second line names what's replaced. -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span v-if="isSuggestedChange(day.date)" class="size-1.5 shrink-0 rounded-full bg-orange-500" />
+                <span
+                  class="sm:hidden flex-1 min-w-0 truncate text-[13px] px-1.5"
+                  :class="shown(day.date).name ? 'text-stone-700' : 'text-stone-300'"
+                >
+                  {{ shown(day.date).name || 'Workout name' }}
+                </span>
+                <input
+                  :value="shown(day.date).name ?? ''"
+                  type="text"
+                  placeholder="Workout name"
+                  :disabled="day.isPast"
+                  class="hidden sm:block flex-1 min-w-0 text-sm text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none focus:bg-stone-50 rounded px-1.5 py-1 -mx-1.5 transition-colors disabled:cursor-default"
+                  @input="getDraft(day.date).name = ($event.target as HTMLInputElement).value"
+                  @blur="save(day.date)"
+                  @keydown.enter="($event.target as HTMLInputElement).blur()"
+                >
+              </div>
+              <div v-if="replacesText(day.date)" class="truncate pl-1.5 text-[11px] text-stone-400">{{ replacesText(day.date) }}</div>
+            </div>
 
             <!-- Drag handle — drag onto another future day in the same week -->
             <span
@@ -663,9 +748,10 @@ async function clearNote() {
                 >{{ day.actual?.tss ?? 0 }}</span>
                 <input
                   v-else
-                  v-model.number="getDraft(day.date).tss"
+                  :value="shown(day.date).tss ?? ''"
                   type="number" min="0" max="999" placeholder="—"
                   class="w-[34px] text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none tabular no-spinner"
+                  @input="setTss(day.date, ($event.target as HTMLInputElement).value)"
                   @blur="save(day.date)"
                   @keydown.enter="($event.target as HTMLInputElement).blur()"
                 >
@@ -675,9 +761,10 @@ async function clearNote() {
                 <span v-if="day.isPast" class="w-[34px] text-sm text-right tabular text-stone-500">{{ day.actual?.durationMinutes ?? 0 }}</span>
                 <input
                   v-else
-                  v-model.number="getDraft(day.date).durationMinutes"
+                  :value="shown(day.date).durationMinutes ?? ''"
                   type="number" min="0" max="999" placeholder="—"
                   class="w-[34px] text-sm text-right text-stone-700 placeholder-stone-300 bg-transparent border-0 outline-none tabular no-spinner"
+                  @input="setDurationMinutes(day.date, ($event.target as HTMLInputElement).value)"
                   @blur="save(day.date)"
                   @keydown.enter="($event.target as HTMLInputElement).blur()"
                 >
@@ -700,7 +787,7 @@ async function clearNote() {
                 class="flex w-14 shrink-0 items-baseline justify-end gap-px px-1 py-0.5 -mx-1"
               >
                 <input
-                  :value="getDraft(day.date).tss ?? ''"
+                  :value="shown(day.date).tss ?? ''"
                   type="number"
                   inputmode="numeric"
                   min="0"
@@ -723,7 +810,7 @@ async function clearNote() {
               </span>
               <input
                 v-else
-                :value="getDraft(day.date).durationMinutes ?? ''"
+                :value="shown(day.date).durationMinutes ?? ''"
                 type="number"
                 inputmode="numeric"
                 min="0"
