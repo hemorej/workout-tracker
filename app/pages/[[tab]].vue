@@ -192,25 +192,7 @@ function closeHistoryChart() {
   showHistoryChart.value = false
 }
 
-/** "Planned" icon on a planned day — switch to the builder tab pre-filled with the plan's name.
- *  Builder tab is hidden below `lg` (see nav below), so skip on phone-sized viewports.
- *
- *  The name travels via a `planName` query param rather than a template ref + setName()
- *  call: `[[tab]]` compiles `/` and `/builder` to separate route records, so navigateTo()
- *  here remounts the whole page (and WorkoutBuilderTab with it) — a ref call made right
- *  after would land on the instance that's about to be destroyed, not the one that
- *  survives. WorkoutBuilderTab reads the query itself on mount instead. */
-function goToBuilder() {
-  if (window.innerWidth < 1024) return
-  const name = todayPlan.value?.plan?.name
-  activeTab.value = 'builder'
-  navigateTo({ path: '/builder', query: name ? { planName: name } : undefined })
-}
-
 // ── "Auto-build" — AI-generated workout via the coach endpoint ───────────
-// Only today's row can ever show the Planned pill (plannedWorkout is only
-// passed for day.date === todayStr, see the WorkoutCard usage below), so a
-// single flag is enough — no per-row keying needed.
 const isAutoBuilding = ref(false)
 
 // Guards against an accidental tab close/refresh while the request is in
@@ -1315,12 +1297,9 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           :key="day.date"
           :day="day"
           :planned-workout="day.date === todayStr ? todayPlan : null"
-          :is-auto-building="isAutoBuilding"
           :is-refreshing-ride-data="refreshingWorkoutId !== null && day.workout?.id === refreshingWorkoutId"
           @delete="onDeleteWorkout"
           @mark-completed="onMarkCompleted"
-          @go-to-builder="goToBuilder"
-          @auto-build="onAutoBuild"
           @open-fit-overlay="openFitOverlay(day)"
           @refresh-ride-data="onRefreshRideData(day)"
           @edit="onEditWorkout(day)"

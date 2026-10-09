@@ -7,11 +7,9 @@
  * `/` and `/builder` are separate route records under the `[[tab]]`
  * catch-all page, so navigating between them remounts the whole page —
  * an imperative call on WorkoutBuilderTab's instance right after
- * navigateTo() would land on the dying instance, not the new one (see
- * the comment on goToBuilder() in app/pages/[[tab]].vue). Pinia store
+ * navigateTo() would land on the dying instance, not the new one. Pinia store
  * state isn't tied to component lifecycle, so it survives the remount —
- * WorkoutBuilderTab reads it on mount instead, same idiom as the
- * `planName` query param it already reads.
+ * WorkoutBuilderTab reads it on mount instead.
  *
  * Read-once: consumePendingWorkout() clears the value so navigating back
  * to the builder later doesn't reapply stale data.

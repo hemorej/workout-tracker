@@ -851,8 +851,7 @@ async function clearNote() {
 
             <!-- Build actions — planned days only. Desktop-only (lg+): the
                  underlying generate call itself no-ops below 1024px (see
-                 onAutoBuild's guard in [[tab]].vue), matching goToBuilder's
-                 same-width gate for the builder tab generally. -->
+                 onAutoBuild's guard in [[tab]].vue). -->
             <span class="hidden lg:block w-px self-stretch shrink-0 bg-stone-100" />
             <span class="hidden lg:flex w-14 shrink-0 items-center justify-center gap-1">
               <template v-if="!day.isPast">

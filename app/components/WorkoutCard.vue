@@ -23,8 +23,6 @@ import type { PlannedDay } from '~/stores/planning'
 interface Props {
   day: DayEntry
   plannedWorkout?: PlannedDay | null
-  /** True while an auto-build (AI) request is in flight for this day's plan. */
-  isAutoBuilding?: boolean
   /** True while a "refresh ride data" fetch/parse is in flight for this day's workout. */
   isRefreshingRideData?: boolean
 }
@@ -33,8 +31,6 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: 'delete', id: number): void
   (e: 'mark-completed'): void
-  (e: 'go-to-builder'): void
-  (e: 'auto-build'): void
   (e: 'open-fit-overlay'): void
   (e: 'refresh-ride-data'): void
   (e: 'edit'): void
@@ -110,8 +106,6 @@ const hasLongNotes = computed(
 // ── Planned workout state ────────────────────────────────────────────────
 const plannedPlan = computed(() => props.plannedWorkout?.plan ?? null)
 const isPlannedDay = computed(() => props.day.isRestDay && !!plannedPlan.value)
-/** Outdoor plans have no workout builder (manual/auto) to send the rider to — just a placeholder pill */
-const isPlannedOutdoor = computed(() => plannedPlan.value?.type === 'outdoor')
 
 const plannedDurationDisplay = computed(() => {
   const mins = plannedPlan.value?.durationMinutes ?? 0
@@ -192,19 +186,6 @@ const mobileDuration = computed(() => {
   return isPlannedDay.value ? plannedDurationDisplay.value : durationDisplay.value
 })
 
-// ── Planned pill: start from scratch vs auto-build ───────────────────────
-const showBuildChoice = ref(false)
-
-function chooseFromScratch() {
-  showBuildChoice.value = false
-  emit('go-to-builder')
-}
-
-function chooseAutoBuild() {
-  showBuildChoice.value = false
-  emit('auto-build')
-}
-
 // ── Delete confirmation ──────────────────────────────────────────────────
 const showDeleteConfirm = ref(false)
 
@@ -223,9 +204,9 @@ function confirmDelete() {
 <template>
   <!--
     Each day is a fixed-column grid row, not a card:
-      84px date | flexible title/metrics | 210px [PR badge + TSS pill + RPE-or-Planned pill + action icon]
+      84px date | flexible title/metrics | 210px [PR badge + TSS pill + RPE pill + action icon]
     The TSS column is separate so every TSS pill's right edge lines up
-    regardless of digit count. The last column groups the RPE/Planned pill
+    regardless of digit count. The last column groups the RPE pill
     with the row's action icon in a single flex-end row with a small gap,
     so they sit snug together instead of spreading across the column.
     Workout rows have a left accent line in orange-600.
@@ -328,23 +309,17 @@ function confirmDelete() {
         </svg>
         {{ day.workout?.rpe }}
       </span>
-      <!-- Planned pill: on mobile the Workout Builder (Manual / Auto) is unavailable -->
-      <button
+      <!-- Planned marker — icon only, no action -->
+      <span
         v-else-if="isPlannedDay"
-        title="Open to log details"
-        aria-label="Open planned workout to log details"
-        class="inline-flex items-center gap-1 shrink-0 text-[11px] text-[#3B6E84] font-semibold bg-[#F1F7FA] border border-[#B8D5E0] rounded-full px-2 py-[1px] whitespace-nowrap transition-colors hover:bg-[#e6f0f5] hover:border-[#4B88A2]"
+        class="inline-flex items-center shrink-0 text-[#3B6E84] bg-[#F1F7FA] border border-[#B8D5E0] rounded-full px-2 py-[1px]"
+        title="Planned"
+        aria-label="Planned"
       >
-        <svg class="w-[11px] h-[11px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="4" width="18" height="17" rx="2" />
-          <path d="M8 2v4" />
-          <path d="M16 2v4" />
-          <path d="M3 10h18" />
-        </svg>
-        Planned
-      </button>
+        <UIcon name="i-heroicons-calendar" class="size-[11px]" />
+      </span>
       <!-- Standalone "mark as completed" tick — opens the completed-workout
-           picker directly (the Planned pill above is the build hand-off). -->
+           picker directly . -->
       <button
         v-if="isPlannedDay"
         title="Mark as completed"
@@ -511,53 +486,15 @@ function confirmDelete() {
           </svg>
           {{ day.workout?.powerBests?.length }}
         </span>
-        <!-- Planned pill — sits left of the TSS pill so TSS aligns with logged rows. The only action on a planned row. Buildable plans open
-             the Manual / Auto build choice; outdoor plans (no builder) route
-             straight to the completed-workout picker. -->
-        <template v-if="isPlannedDay">
-          <button
-            v-if="isPlannedOutdoor"
-            title="Open to log details"
-            aria-label="Open planned workout to log details"
-            class="inline-flex items-center gap-1.5 shrink-0 text-xs text-[#3B6E84] font-semibold bg-[#F1F7FA] border border-[#B8D5E0] rounded-full px-2.5 py-0.5 whitespace-nowrap cursor-pointer transition-colors hover:bg-[#e6f0f5] hover:border-[#4B88A2]"
-            @click="emit('mark-completed')"
-          >
-            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="4" width="18" height="17" rx="2" />
-              <path d="M8 2v4" />
-              <path d="M16 2v4" />
-              <path d="M3 10h18" />
-            </svg>
-            Planned
-          </button>
-          <BikeSpinner v-else-if="isAutoBuilding" :size="20" />
-          <div v-else-if="showBuildChoice" class="flex items-center gap-2">
-            <button class="text-xs text-[#3B6E84] hover:text-[#4B88A2] font-semibold" @click="chooseFromScratch">
-              Manual
-            </button>
-            <button class="text-xs text-[#3B6E84] hover:text-[#4B88A2] font-semibold" @click="chooseAutoBuild">
-              Auto
-            </button>
-            <button class="text-xs text-stone-300 hover:text-stone-500" @click="showBuildChoice = false">
-              Cancel
-            </button>
-          </div>
-          <button
-            v-else
-            title="Open to log details"
-            aria-label="Open planned workout to log details"
-            class="inline-flex items-center gap-1.5 shrink-0 text-xs text-[#3B6E84] font-semibold bg-[#F1F7FA] border border-[#B8D5E0] rounded-full px-2.5 py-0.5 whitespace-nowrap cursor-pointer transition-colors hover:bg-[#e6f0f5] hover:border-[#4B88A2]"
-            @click="showBuildChoice = true"
-          >
-            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="4" width="18" height="17" rx="2" />
-              <path d="M8 2v4" />
-              <path d="M16 2v4" />
-              <path d="M3 10h18" />
-            </svg>
-            Planned
-          </button>
-        </template>
+        <!-- Planned marker — icon only, no action. Sits left of the TSS pill so TSS aligns with logged rows. -->
+        <span
+          v-if="isPlannedDay"
+          class="inline-flex items-center shrink-0 text-[#3B6E84] bg-[#F1F7FA] border border-[#B8D5E0] rounded-full px-2.5 py-0.5"
+          title="Planned"
+          aria-label="Planned"
+        >
+          <UIcon name="i-heroicons-calendar" class="size-4" />
+        </span>
         <span
           v-if="isPlannedDay ? plannedPlan?.tss : day.workout?.tss"
           class="inline-flex items-center gap-1 shrink-0 text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap tabular-nums"
@@ -583,7 +520,7 @@ function confirmDelete() {
 
 
         <!-- Standalone "mark as completed" tick — opens the completed-workout
-             picker directly (the Planned pill is the build hand-off). Dimmed by
+             picker directly . Dimmed by
              default, not hover-gated, so it's reachable on touch. -->
         <button
           v-if="isPlannedDay"
