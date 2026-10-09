@@ -29,6 +29,13 @@ import { generateCoachWorkout, generateCoachFuellingGuide, type AnthropicSystemB
 
 const FALLBACK_WEIGHT_KG = 68
 
+/** Applies to every paragraph of the fuelling guide — keep it specific to this session. */
+const FUELLING_GUIDANCE
+  = ' Keep every paragraph specific to this session: give the total carbs for its duration and intensity, the '
+    + 'source (e.g. drink mix or gel with water), and when to take them relative to the key efforts. Do not '
+    + 'state generic per-hour carb rates, fluid volumes (ml/h), electrolyte or sodium advice, or general '
+    + 'nutrition principles.'
+
 function isValidDateParam(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
@@ -81,20 +88,22 @@ export default defineEventHandler(async (event) => {
   const taskText = fuellingOnly
     ? (plannedSessionText
         ? `${plannedSessionText}\n\nProduce only a fuelling guide for this specific session (use the rider's weight `
-          + 'for nutrition/hydration calculations) — do not build the workout structure.'
+          + 'for carb calculations) — do not build the workout structure.'
         : 'Using the training plan above, produce only a fuelling guide for the day\'s session (use the rider\'s '
-          + 'weight for nutrition/hydration calculations) — do not build the workout structure.')
+          + 'weight for carb calculations) — do not build the workout structure.')
       + ' Format the fuelling guide as three short paragraphs — pre-ride, during-ride, post-ride — each on its own '
       + 'line, separated by blank lines.'
+      + FUELLING_GUIDANCE
     : (plannedSessionText
         ? `${plannedSessionText}\n\nBuild this exact session as structured blocks — the name and zone/type above `
           + 'take precedence over the general plan document if they ever seem to disagree. Match the interval '
           + 'structure implied by the name (e.g. "3x12min" means three 12-minute work intervals) and the target '
           + 'TSS/duration as closely as possible. '
         : 'Using the training plan above, propose the day\'s workout as structured blocks. ')
-      + 'Also produce a fuelling guide (use the rider\'s weight for nutrition/hydration calculations). '
+      + 'Also produce a fuelling guide (use the rider\'s weight for carb calculations). '
       + 'Format the fuelling guide as three short paragraphs — pre-ride, during-ride, post-ride — each on its '
       + 'own line, separated by blank lines.'
+      + FUELLING_GUIDANCE
 
   const systemBlocks: AnthropicSystemBlock[] = [
     { type: 'text', text: row.trainingPlan, cache_control: { type: 'ephemeral' } },

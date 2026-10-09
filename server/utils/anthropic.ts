@@ -92,7 +92,7 @@ export const CoachWorkoutSchema = z.object({
   name: z.string().describe('short workout title, e.g. "3x10min Sweet Spot"'),
   blocks: z.array(z.discriminatedUnion('type', [RampBlockSchema, SteadyBlockSchema, IntervalBlockSchema]))
     .describe('ordered list of workout blocks — warmup first, cooldown last'),
-  fuellingGuide: z.string().describe('pre-ride, during-ride, and post-ride fuelling/hydration guidance for this specific workout, as one short paragraph separated by blank lines (one per phase, each starting with a "Pre-ride:"/"During:"/"Post-ride:" label)'),
+  fuellingGuide: z.string().describe('pre-ride, during-ride, and post-ride fuelling guidance specific to this workout (session carb totals and timing; no generic hourly rates, fluid volumes or electrolyte advice), as one short paragraph separated by blank lines (one per phase, each starting with a "Pre-ride:"/"During:"/"Post-ride:" label)'),
 })
 
 export type CoachWorkout = z.infer<typeof CoachWorkoutSchema>
@@ -101,7 +101,7 @@ export type CoachWorkout = z.infer<typeof CoachWorkoutSchema>
  *  only" row action, which doesn't need (and shouldn't pay the token cost of)
  *  a full block structure. */
 export const FuellingGuideSchema = z.object({
-  fuellingGuide: z.string().describe('pre-ride, during-ride, and post-ride fuelling/hydration guidance for this specific workout, as one short paragraph separated by blank lines (one per phase, each starting with a "Pre-ride:"/"During:"/"Post-ride:" label)'),
+  fuellingGuide: z.string().describe('pre-ride, during-ride, and post-ride fuelling guidance specific to this workout (session carb totals and timing; no generic hourly rates, fluid volumes or electrolyte advice), as one short paragraph separated by blank lines (one per phase, each starting with a "Pre-ride:"/"During:"/"Post-ride:" label)'),
 })
 
 export type FuellingGuide = z.infer<typeof FuellingGuideSchema>
@@ -172,7 +172,7 @@ const COACH_WORKOUT_JSON_SCHEMA = {
     },
     fuellingGuide: {
       type: 'string',
-      description: 'pre-ride, during-ride, and post-ride fuelling/hydration guidance for this specific workout, as one short paragraph separated by blank lines (one per phase, each starting with a "Pre-ride:"/"During:"/"Post-ride:" label)',
+      description: 'pre-ride, during-ride, and post-ride fuelling guidance specific to this workout (session carb totals and timing; no generic hourly rates, fluid volumes or electrolyte advice), as one short paragraph separated by blank lines (one per phase, each starting with a "Pre-ride:"/"During:"/"Post-ride:" label)',
     },
   },
 } as const
@@ -184,7 +184,7 @@ const FUELLING_GUIDE_JSON_SCHEMA = {
   properties: {
     fuellingGuide: {
       type: 'string',
-      description: 'pre-ride, during-ride, and post-ride fuelling/hydration guidance for this specific workout, as one short paragraph separated by blank lines (one per phase, each starting with a "Pre-ride:"/"During:"/"Post-ride:" label)',
+      description: 'pre-ride, during-ride, and post-ride fuelling guidance specific to this workout (session carb totals and timing; no generic hourly rates, fluid volumes or electrolyte advice), as one short paragraph separated by blank lines (one per phase, each starting with a "Pre-ride:"/"During:"/"Post-ride:" label)',
     },
   },
 } as const
