@@ -205,48 +205,89 @@ function typeMenuItems(date: string) {
   }))
 }
 
-// ── Swap with day above ──────────────────────────────────────────────────────
-// Swaps the workout content (name/type/tss/duration/notes) with the previous row,
-// keeping each row's own date fixed. Projections are recomputed via savePlan.
+// ── Drag to reorder within a week ────────────────────────────────────────────
+// Dragging a row's handle onto another row of the same week moves that workout
+// to the target date; the rows in between shift by one to fill the gap. Past
+// (logged) days are never a source or a target, and keep their own content.
+// Each row's date stays fixed — only the content (name/type/tss/duration/notes)
+// moves. Projections are recomputed via savePlan.
 
-function canSwapUp(date: string) {
-  const idx = planning.plans.findIndex(d => d.date === date)
-  if (idx <= 0) return false
-  return !planning.plans[idx]!.isPast && !planning.plans[idx - 1]!.isPast
+const dragDate = ref<string | null>(null)
+const dragOverDate = ref<string | null>(null)
+
+function weekOf(date: string) {
+  return weeks.value.find(w => w.days.some(d => d.date === date))
 }
 
-async function swapWithAbove(date: string) {
-  const idx = planning.plans.findIndex(d => d.date === date)
-  if (idx <= 0) return
-  const day = planning.plans[idx]!
-  const aboveDay = planning.plans[idx - 1]!
-  if (day.isPast || aboveDay.isPast) return
+function canDropOn(target: string) {
+  const src = dragDate.value
+  if (!src || src === target) return false
+  const week = weekOf(src)
+  const a = week?.days.find(d => d.date === src)
+  const b = week?.days.find(d => d.date === target)
+  return !!a && !!b && !a.isPast && !b.isPast
+}
 
-  const current = getDraft(date)
-  const above = getDraft(aboveDay.date)
-  const temp = { ...current }
-  current.name = above.name
-  current.type = above.type
-  current.tss = above.tss
-  current.durationMinutes = above.durationMinutes
-  current.notes = above.notes
-  above.name = temp.name
-  above.type = temp.type
-  above.tss = temp.tss
-  above.durationMinutes = temp.durationMinutes
-  above.notes = temp.notes
+function onDragStart(e: DragEvent, date: string) {
+  dragDate.value = date
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', date)
+    const row = (e.currentTarget as HTMLElement).closest('[data-plan-row]')
+    if (row) e.dataTransfer.setDragImage(row, 16, 16)
+  }
+}
 
-  saving[date] = true
-  saving[aboveDay.date] = true
+function onDragOver(e: DragEvent, date: string) {
+  if (!canDropOn(date)) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  dragOverDate.value = date
+}
+
+function onDragEnd() {
+  dragDate.value = null
+  dragOverDate.value = null
+}
+
+async function onDrop(e: DragEvent, target: string) {
+  e.preventDefault()
+  const src = dragDate.value
+  const allowed = canDropOn(target)
+  onDragEnd()
+  if (!src || !allowed) return
+  await moveWorkout(src, target)
+}
+
+async function moveWorkout(from: string, to: string) {
+  const week = weekOf(from)
+  if (!week) return
+  const dates = week.days.filter(d => !d.isPast).map(d => d.date)
+  const fromIdx = dates.indexOf(from)
+  const toIdx = dates.indexOf(to)
+  if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return
+
+  const contents = dates.map(d => ({ ...getDraft(d) }))
+  contents.splice(toIdx, 0, contents.splice(fromIdx, 1)[0]!)
+
+  const changed: string[] = []
+  dates.forEach((date, i) => {
+    const draft = getDraft(date)
+    const next = contents[i]!
+    if (
+      draft.name === next.name && draft.type === next.type && draft.tss === next.tss
+      && draft.durationMinutes === next.durationMinutes && draft.notes === next.notes
+    ) return
+    Object.assign(draft, next)
+    changed.push(date)
+  })
+
+  changed.forEach(d => saving[d] = true)
   try {
-    await Promise.all([
-      planning.savePlan(date, { ...current }),
-      planning.savePlan(aboveDay.date, { ...above }),
-    ])
+    await Promise.all(changed.map(d => planning.savePlan(d, { ...getDraft(d) })))
   }
   finally {
-    saving[date] = false
-    saving[aboveDay.date] = false
+    changed.forEach(d => saving[d] = false)
   }
 }
 
@@ -508,10 +549,16 @@ async function clearNote() {
           <div
             v-for="day in week.days"
             :key="day.date"
+            data-plan-row
             :class="[
               'group flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2',
               day.isPast ? 'opacity-50' : '',
+              dragDate === day.date ? 'opacity-40' : '',
+              dragOverDate === day.date ? 'bg-orange-50 shadow-[inset_0_0_0_1.5px_var(--ui-primary)]' : '',
             ]"
+            @dragover="onDragOver($event, day.date)"
+            @dragleave="dragOverDate === day.date && (dragOverDate = null)"
+            @drop="onDrop($event, day.date)"
           >
             <!-- Date label -->
             <span class="w-[52px] sm:w-16 shrink-0 text-sm text-stone-500 tabular whitespace-nowrap">
@@ -575,16 +622,17 @@ async function clearNote() {
               @keydown.enter="($event.target as HTMLInputElement).blur()"
             >
 
-            <!-- Swap with day above -->
-            <button
-              v-if="canSwapUp(day.date)"
-              type="button"
-              class="hidden sm:flex shrink-0 w-5 h-5 items-center justify-center rounded text-stone-300 opacity-0 group-hover:opacity-100 hover:text-stone-500 hover:bg-stone-50 transition-colors cursor-pointer"
-              title="Swap with day above"
-              @click="swapWithAbove(day.date)"
+            <!-- Drag handle — drag onto another future day in the same week -->
+            <span
+              v-if="!day.isPast"
+              draggable="true"
+              class="hidden sm:flex shrink-0 w-5 h-5 items-center justify-center rounded text-stone-300 opacity-0 group-hover:opacity-100 hover:text-stone-500 hover:bg-stone-50 transition-colors cursor-grab active:cursor-grabbing"
+              title="Drag to move to another day this week"
+              @dragstart="onDragStart($event, day.date)"
+              @dragend="onDragEnd"
             >
               <UIcon name="i-heroicons-arrows-up-down" class="w-3.5 h-3.5" />
-            </button>
+            </span>
             <div v-else class="hidden sm:block w-5 shrink-0" />
 
             <!-- Note (hover-revealed when empty, persistently visible once a note exists) -->
