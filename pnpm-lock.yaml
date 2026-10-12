@@ -66,8 +66,8 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
       zwift-data:
-        specifier: ^1.50.0
-        version: 1.50.0
+        specifier: ^2.1.0
+        version: 2.1.0
     devDependencies:
       '@adonisjs/hash':
         specifier: ^10.1.1
@@ -4949,8 +4949,8 @@ packages:
   zod@4.6.5:
     resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
-  zwift-data@1.50.0:
-    resolution: {integrity: sha512-0f1akqQQo3h8e1JkVUSfsHr03OfH/D8OkT161oy0n/grSsn4EQn7W6PV27ydxT4Gd2h26hgUJr9V0TI85sqmJg==}
+  zwift-data@2.1.0:
+    resolution: {integrity: sha512-Yuzwk+xEuys7iuuhL8Shv+rO0Y/ZxrqRTZI7hwHguqYwV12QmZi/a4zZrHwPEntRP/n2ItL/gFqCRJY04SVsyg==}
 
 snapshots:
 
@@ -10229,4 +10229,4 @@ snapshots:
 
   zod@4.6.5: {}
 
-  zwift-data@1.50.0: {}
+  zwift-data@2.1.0: {}
