@@ -254,11 +254,10 @@ function typeMenuItems(date: string) {
 }
 
 // ── Drag to reorder within a week ────────────────────────────────────────────
-// Dragging a row's handle onto another row of the same week moves that workout
-// to the target date; the rows in between shift by one to fill the gap. Past
-// (logged) days are never a source or a target, and keep their own content.
-// Each row's date stays fixed — only the content (name/type/tss/duration/notes)
-// moves. Projections are recomputed via savePlan.
+// Dragging a row's handle onto another row of the same week swaps the two
+// workouts; every other row stays put. Past (logged) days are never a source
+// or a target. Each row's date stays fixed — only the content
+// (name/type/tss/duration/notes) moves. Projections are recomputed via savePlan.
 
 const dragDate = ref<string | null>(null)
 const dragOverDate = ref<string | null>(null)
@@ -304,10 +303,10 @@ async function onDrop(e: DragEvent, target: string) {
   const allowed = canDropOn(target)
   onDragEnd()
   if (!src || !allowed) return
-  await moveWorkout(src, target)
+  await swapWorkouts(src, target)
 }
 
-async function moveWorkout(from: string, to: string) {
+async function swapWorkouts(from: string, to: string) {
   const week = weekOf(from)
   if (!week) return
   const dates = week.days.filter(d => !d.isPast).map(d => d.date)
@@ -316,7 +315,9 @@ async function moveWorkout(from: string, to: string) {
   if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return
 
   const contents = dates.map(d => ({ ...getDraft(d) }))
-  contents.splice(toIdx, 0, contents.splice(fromIdx, 1)[0]!)
+  const moved = contents[fromIdx]!
+  contents[fromIdx] = contents[toIdx]!
+  contents[toIdx] = moved
 
   const changed: string[] = []
   dates.forEach((date, i) => {
@@ -712,7 +713,7 @@ async function clearNote() {
               v-if="!day.isPast"
               draggable="true"
               class="hidden sm:flex shrink-0 w-5 h-5 items-center justify-center rounded text-stone-300 opacity-0 group-hover:opacity-100 hover:text-stone-500 hover:bg-stone-50 transition-colors cursor-grab active:cursor-grabbing"
-              title="Drag to move to another day this week"
+              title="Drag onto another day this week to swap"
               @dragstart="onDragStart($event, day.date)"
               @dragend="onDragEnd"
             >
