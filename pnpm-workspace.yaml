@@ -20,6 +20,7 @@ minimumReleaseAgeExclude:
   - nanoid
 
 overrides:
+  '@nuxt/devtools': '-'
   shell-quote: '^1.11.0'
   prosemirror-view: '^1.42.3'
   source-map-js: '^1.2.2'
