@@ -527,6 +527,108 @@ export const segmentEfforts = pgTable(
 )
 
 // ---------------------------------------------------------------------------
+// zwift_workouts / zwift_workout_drafts
+//
+// Server-side mirror of the user's local Zwift `.zwo` workout folder, pushed
+// by the local sync daemon (scripts/zwift-sync.ts) through the secret-authed
+// POST /api/zwift/sync. The local folder is the single source of truth:
+// `zwift_workouts` is written ONLY by that sync. Edits made in the web UI go
+// to `zwift_workout_drafts` and reach the real file only by the user
+// downloading the .zwo and saving it back into the folder (the daemon then
+// syncs it, which clears the draft — see zwift_workouts' modelHash).
+// ---------------------------------------------------------------------------
+
+export const zwiftWorkouts = pgTable(
+  'zwift_workouts',
+  {
+    id: serial('id').primaryKey(),
+
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+
+    /**
+     * Path relative to the Zwift Workouts root, '/'-separated (Zwift nests
+     * files under a numeric user-id folder). The identity key — never used
+     * for server filesystem access.
+     */
+    path: text('path').notNull(),
+
+    /** `<name>` from the file, falling back to the path. */
+    name: text('name').notNull(),
+
+    /** The raw .zwo document (bounded to 256 KB at ingest). Untrusted data. */
+    xml: text('xml').notNull(),
+
+    /** sha256 of `xml` (utf-8), computed server-side. Daemon reconcile diffs on this. */
+    contentHash: text('content_hash').notNull(),
+
+    /**
+     * sha256 of the formatting-independent canonical form (meta + blocks).
+     * Equal to a draft's modelHash ⇒ the draft has been saved back to disk.
+     */
+    modelHash: text('model_hash').notNull(),
+
+    durationSec: integer('duration_sec').notNull(),
+
+    /** Estimated TSS (needs no FTP — power values in a .zwo are %FTP). */
+    tss: integer('tss').notNull(),
+
+    /** `zone:<Name>` tag value, if the file carries one. */
+    zone: text('zone'),
+
+    /** False when the builder can't faithfully represent the file (preview + download only). */
+    editable: boolean('editable').notNull().default(true),
+
+    /** Why the file is not editable (empty when it is). */
+    unsupported: jsonb('unsupported').$type<string[]>().notNull().default([]),
+
+    /** File mtime reported by the daemon. Informational. */
+    fileMtime: timestamp('file_mtime', { withTimezone: true }),
+
+    /** Soft delete: set when the file disappears from disk, cleared if it comes back. */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('zwift_workouts_user_path_idx').on(table.userId, table.path),
+    index('zwift_workouts_user_deleted_idx').on(table.userId, table.deletedAt),
+  ],
+)
+
+export const zwiftWorkoutDrafts = pgTable(
+  'zwift_workout_drafts',
+  {
+    id: serial('id').primaryKey(),
+
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+
+    workoutId: integer('workout_id')
+      .references(() => zwiftWorkouts.id, { onDelete: 'cascade' })
+      .notNull(),
+
+    /** `zwift_workouts.contentHash` at the moment editing began; ≠ current ⇒ the disk file changed under the draft. */
+    baseHash: text('base_hash').notNull(),
+
+    /** The edited document, as produced by the builder's serializer. */
+    xml: text('xml').notNull(),
+
+    /** Canonical hash of `xml`, compared to zwift_workouts.modelHash. */
+    modelHash: text('model_hash').notNull(),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('zwift_workout_drafts_user_workout_idx').on(table.userId, table.workoutId),
+  ],
+)
+
+// ---------------------------------------------------------------------------
 // Relations (used by Drizzle's relational query API)
 // ---------------------------------------------------------------------------
 
@@ -585,6 +687,8 @@ export type WahooPowerBest = typeof wahooPowerBests.$inferSelect
 export type WahooToken = typeof wahooTokens.$inferSelect
 export type TrackedSegment = typeof trackedSegments.$inferSelect
 export type SegmentEffort = typeof segmentEfforts.$inferSelect
+export type ZwiftWorkout = typeof zwiftWorkouts.$inferSelect
+export type ZwiftWorkoutDraft = typeof zwiftWorkoutDrafts.$inferSelect
 
 /** Insert types (id and createdAt are optional / auto-generated) */
 export type NewUser = typeof users.$inferInsert
@@ -595,3 +699,5 @@ export type NewWahooPowerBest = typeof wahooPowerBests.$inferInsert
 export type NewWahooToken = typeof wahooTokens.$inferInsert
 export type NewTrackedSegment = typeof trackedSegments.$inferInsert
 export type NewSegmentEffort = typeof segmentEfforts.$inferInsert
+export type NewZwiftWorkout = typeof zwiftWorkouts.$inferInsert
+export type NewZwiftWorkoutDraft = typeof zwiftWorkoutDrafts.$inferInsert

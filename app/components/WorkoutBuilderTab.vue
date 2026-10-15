@@ -21,8 +21,6 @@ type SteadyBlock = { id: number, type: 'steady', duration: number, power: number
 type IntervalBlock = { id: number, type: 'interval', reps: number, onDuration: number, onPower: number, onCadence: number | null, offDuration: number, offPower: number, offCadence: number | null }
 type Block = RampBlock | SteadyBlock | IntervalBlock
 
-const DEFAULT_CADENCE = 85
-
 interface Segment {
   blockId: number
   duration: number
@@ -563,32 +561,13 @@ function clearWorkout() {
 
 // ── Download (.zwo export) ───────────────────────────────────────────────
 
-function escapeXml(s: string) {
-  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
 function download() {
-  let xml = `<workout_file>\n  <author>Sprocket</author>\n  <name>${escapeXml(title.value)}</name>\n  <description></description>\n  <sportType>bike</sportType>\n  <workout>\n`
-  for (const b of blocks.value) {
-    if (b.type === 'warmup') {
-      xml += `    <Warmup Duration="${b.duration}" PowerLow="${b.powerStart}" PowerHigh="${b.powerEnd}"${b.cadence ? ` Cadence="${b.cadence}"` : ''}/>\n`
-    }
-    else if (b.type === 'cooldown') {
-      xml += `    <Cooldown Duration="${b.duration}" PowerLow="${b.powerStart}" PowerHigh="${b.powerEnd}"${b.cadence ? ` Cadence="${b.cadence}"` : ''}/>\n`
-    }
-    else if (b.type === 'steady') {
-      xml += `    <SteadyState Duration="${b.duration}" Power="${b.power}"${b.cadence ? ` Cadence="${b.cadence}"` : ''}/>\n`
-    }
-    else if (b.type === 'interval') {
-      // Zwift renders a missing Cadence/CadenceResting as 0rpm rather than "unconstrained"
-      // when the other one is set, so if either side has a cadence, both must be emitted.
-      const hasCadence = b.onCadence || b.offCadence
-      const onCadence = hasCadence ? (b.onCadence || DEFAULT_CADENCE) : null
-      const offCadence = hasCadence ? (b.offCadence || DEFAULT_CADENCE) : null
-      xml += `    <IntervalsT Repeat="${b.reps}" OnDuration="${b.onDuration}" OffDuration="${b.offDuration}" OnPower="${b.onPower}" OffPower="${b.offPower}"${onCadence ? ` Cadence="${onCadence}"` : ''}${offCadence ? ` CadenceResting="${offCadence}"` : ''}/>\n`
-    }
-  }
-  xml += '  </workout>\n</workout_file>'
+  // Serialization lives in shared/utils/zwo.ts so the builder, the library
+  // sync and the CLI scripts all write/read .zwo identically.
+  const xml = serializeZwo(
+    { name: title.value, author: '', description: '', sportType: 'bike', tags: [], extraMeta: {} },
+    blocks.value,
+  )
 
   const blob = new Blob([xml], { type: 'application/xml' })
   const url = URL.createObjectURL(blob)

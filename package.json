@@ -19,6 +19,8 @@
         "db:studio": "drizzle-kit studio",
         "start": "node .output/server/index.mjs",
         "reset-password": "pnpm dlx dotenv-cli -e .env -- node --experimental-strip-types scripts/reset-password.ts",
+        "test": "node --experimental-strip-types --test shared/utils/zwo.test.ts",
+        "zwift-sync": "node --experimental-strip-types scripts/zwift-sync.ts",
         "zwift-tss": "node --experimental-strip-types scripts/zwift-workout-tss.ts",
         "workout-search": "node --experimental-strip-types scripts/workout-search.ts"
     },

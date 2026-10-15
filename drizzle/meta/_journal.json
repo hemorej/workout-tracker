@@ -120,6 +120,13 @@
       "when": 1788631451350,
       "tag": "0016_wooden_nicolaos",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792080266361,
+      "tag": "0017_equal_living_tribunal",
+      "breakpoints": true
     }
   ]
 }

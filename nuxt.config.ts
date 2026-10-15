@@ -75,6 +75,7 @@ export default defineNuxtConfig({
      *   NUXT_WEBHOOK_USER_EMAIL → runtimeConfig.webhookUserEmail
      *   ANTHROPIC_API_KEY       → runtimeConfig.anthropicApiKey
      *   NUXT_SEGMENTS_SYNC_TOKEN → runtimeConfig.segmentsSyncToken
+     *   NUXT_ZWIFT_SYNC_TOKEN   → runtimeConfig.zwiftSyncToken
      */
     runtimeConfig: {
         databaseUrl: process.env.DATABASE_URL,
@@ -95,6 +96,12 @@ export default defineNuxtConfig({
         // nightly tracked-segments safety net (hit by a Forge scheduled job).
         // Generate with: openssl rand -hex 32
         segmentsSyncToken: process.env.NUXT_SEGMENTS_SYNC_TOKEN,
+
+        // Shared secret authenticating POST /api/zwift/sync and
+        // GET /api/zwift/sync/manifest — the local Zwift-folder sync daemon
+        // (scripts/zwift-sync.ts) sends it as a Bearer token. Unset ⇒ both
+        // endpoints always 401. Generate with: openssl rand -hex 32
+        zwiftSyncToken: process.env.NUXT_ZWIFT_SYNC_TOKEN,
 
         // Wahoo Cloud API access — single-user, refresh token acquired via a
         // one-time manual OAuth exchange (see CLAUDE.md). No in-app OAuth flow.

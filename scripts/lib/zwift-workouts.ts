@@ -3,11 +3,9 @@
  * scripts/zwift-workout-tss.ts (standalone CLI table) and the local-library
  * provider in scripts/workout-search.ts.
  *
- * TSS estimate matches Zwift/Coggan's normalized-power algorithm: a 30s
- * rolling average of the 1Hz power trace, raised to the 4th power, averaged,
- * then 4th-rooted. Power values in .zwo files are already fractions of FTP,
- * so no FTP lookup is needed. FreeRide segments have no target power and
- * contribute 0 TSS but still count toward duration.
+ * Parsing and the TSS estimate live in shared/utils/zwo.ts (also used by the
+ * server's sync endpoint and the Workout Builder), so a file is read the same
+ * way everywhere. This module only adds the folder walk + on-disk cache.
  *
  * Results are cached in .zwift-tss-cache.json (in the scanned folder) keyed
  * by a content hash of each file, so unchanged workouts are only parsed once.
@@ -23,7 +21,8 @@
 import { createHash } from 'node:crypto'
 import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { ZONES, type ZoneName } from './zones.ts'
+import { parseZwo, zoneFromTags } from '../../shared/utils/zwo.ts'
+import type { ZoneName } from './zones.ts'
 
 interface CacheEntry {
   hash: string
@@ -62,110 +61,9 @@ function hashContent(content: string): string {
   return createHash('sha256').update(content).digest('hex')
 }
 
-function extractName(xml: string): string | null {
-  const match = xml.match(/<name>([\s\S]*?)<\/name>/)
-  return match ? match[1]!.trim() : null
-}
-
-function unescapeXml(s: string): string {
-  return s
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, '\'')
-}
-
-function attr(tagXml: string, name: string): number | null {
-  const match = tagXml.match(new RegExp(`${name}="([^"]*)"`))
-  return match ? Number(match[1]) : null
-}
-
-interface Segment { duration: number, powerStart: number, powerEnd: number }
-
-function parseSegments(xml: string): Segment[] {
-  const segments: Segment[] = []
-  const workoutMatch = xml.match(/<workout>([\s\S]*?)<\/workout>/)
-  if (!workoutMatch) return segments
-  const body = workoutMatch[1]!
-
-  const tagRegex = /<(Warmup|Cooldown|SteadyState|Ramp|IntervalsT|FreeRide)\b([^>]*)\/?>/g
-  let match: RegExpExecArray | null
-  while ((match = tagRegex.exec(body)) !== null) {
-    const [, tagName, rawAttrs] = match
-    const tagXml = `<${tagName}${rawAttrs}>`
-    const duration = attr(tagXml, 'Duration') ?? 0
-
-    if (tagName === 'Warmup' || tagName === 'Cooldown' || tagName === 'Ramp') {
-      const low = attr(tagXml, 'PowerLow') ?? 0
-      const high = attr(tagXml, 'PowerHigh') ?? 0
-      segments.push({ duration, powerStart: low, powerEnd: high })
-    }
-    else if (tagName === 'SteadyState') {
-      const power = attr(tagXml, 'Power') ?? 0
-      segments.push({ duration, powerStart: power, powerEnd: power })
-    }
-    else if (tagName === 'FreeRide') {
-      segments.push({ duration, powerStart: 0, powerEnd: 0 })
-    }
-    else if (tagName === 'IntervalsT') {
-      const reps = attr(tagXml, 'Repeat') ?? 0
-      const onDuration = attr(tagXml, 'OnDuration') ?? 0
-      const offDuration = attr(tagXml, 'OffDuration') ?? 0
-      const onPower = attr(tagXml, 'OnPower') ?? 0
-      const offPower = attr(tagXml, 'OffPower') ?? 0
-      for (let i = 0; i < reps; i++) {
-        segments.push({ duration: onDuration, powerStart: onPower, powerEnd: onPower })
-        segments.push({ duration: offDuration, powerStart: offPower, powerEnd: offPower })
-      }
-    }
-  }
-  return segments
-}
-
-// Builds a 1Hz power trace (as a fraction of FTP) from the segment list,
-// linearly interpolating ramps second by second.
-function buildPowerTrace(segments: Segment[]): number[] {
-  const trace: number[] = []
-  for (const seg of segments) {
-    const wholeSecs = Math.round(seg.duration)
-    for (let i = 0; i < wholeSecs; i++) {
-      const frac = wholeSecs <= 1 ? 0 : i / (wholeSecs - 1)
-      trace.push(seg.powerStart + (seg.powerEnd - seg.powerStart) * frac)
-    }
-  }
-  return trace
-}
-
-function computeTss(segments: Segment[]): number {
-  const trace = buildPowerTrace(segments)
-  if (trace.length === 0) return 0
-
-  const window = 30
-  let windowSum = 0
-  let fourthPowerSum = 0
-  for (let i = 0; i < trace.length; i++) {
-    windowSum += trace[i]!
-    if (i >= window) windowSum -= trace[i - window]!
-    const n = Math.min(i + 1, window)
-    const rollingAvg = windowSum / n
-    fourthPowerSum += rollingAvg ** 4
-  }
-
-  const np = (fourthPowerSum / trace.length) ** 0.25
-  const durationHr = trace.length / 3600
-  return Math.round(durationHr * np ** 2 * 100)
-}
-
-function parseWorkoutName(xml: string, fallback: string): string {
-  const name = extractName(xml)
-  return name ? unescapeXml(name) : fallback
-}
-
 export function parseZoneTag(xml: string): ZoneName | null {
-  const match = xml.match(/<tag name="zone:([^"]*)"\/>/)
-  const value = match?.[1]
-  return value && (ZONES as readonly string[]).includes(value) ? value as ZoneName : null
+  const parsed = parseZwo(xml)
+  return parsed.ok ? zoneFromTags(parsed.workout.meta.tags) : null
 }
 
 export interface ZwiftWorkoutResult {
@@ -196,9 +94,14 @@ export async function scanZwiftWorkouts(root: string): Promise<ScanZwiftWorkouts
     const hash = hashContent(content)
     const key = relative(root, path)
 
+    const parsed = parseZwo(content)
+    if (!parsed.ok) {
+      console.error(`Skipping ${key}: ${parsed.error}`)
+      continue
+    }
     // Zone tag is cheap to re-read every time, so it's kept out of the TSS
     // cache entry rather than duplicated there.
-    const zone = parseZoneTag(content)
+    const zone = zoneFromTags(parsed.workout.meta.tags)
 
     const cached = cache[key]
     if (cached && cached.hash === hash) {
@@ -208,10 +111,8 @@ export async function scanZwiftWorkouts(root: string): Promise<ScanZwiftWorkouts
       continue
     }
 
-    const segments = parseSegments(content)
-    const durationSec = segments.reduce((s, x) => s + x.duration, 0)
-    const tss = computeTss(segments)
-    const name = parseWorkoutName(content, key)
+    const { durationSec, tss } = parsed.workout
+    const name = parsed.workout.meta.name || key
 
     const entry: CacheEntry = { hash, name, durationSec, tss }
     nextCache[key] = entry
