@@ -2,8 +2,8 @@
  * PUT /api/users/me
  *
  * Updates the authenticated user's weight and training plan (see
- * server/db/schema.ts) — previously only editable via `pnpm db:studio`/raw
- * SQL. The account row always already exists (accounts are created directly
+ * server/db/schema.ts) — previously only editable via raw SQL. The account
+ * row always already exists (accounts are created directly
  * in the DB, see CLAUDE.md), so this is a plain update, never an insert.
  *
  * Body (JSON):

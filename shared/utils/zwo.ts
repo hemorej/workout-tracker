@@ -26,8 +26,7 @@
  * `flattenTextEvents` / `attachTextEvents` below.
  *
  * Non-modelled metadata the builder doesn't touch — description, author,
- * `<tags>` (the `zone:*` tag scripts/workout-search.ts filters on lives
- * here), and any other simple top-level text elements — round-trips via
+ * `<tags>` (including the `zone:*` tag the library filters on), and any other simple top-level text elements — round-trips via
  * `ZwoMeta`.
  */
 

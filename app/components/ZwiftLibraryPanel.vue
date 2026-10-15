@@ -3,10 +3,8 @@
  * Workout library slide-over (Workout builder tab).
  *
  * Lists the mirrored Zwift `.zwo` files (GET /api/zwift/library), filters them
- * with the same criteria as scripts/workout-search.ts (text, duration range,
- * TSS range, zone), previews one as a timeline and hands it to the builder via
- * the zwiftLibrary store. The zone is the file's `zone:*` tag — the definition
- * workout-search.ts uses — so untagged files have no zone and drop out when a
+ * by text, duration range, TSS range and zone, previews one as a timeline and hands it to the builder via
+ * the zwiftLibrary store. The zone is the file's `zone:*` tag, so untagged files have no zone and drop out when a
  * zone filter is active.
  */
 

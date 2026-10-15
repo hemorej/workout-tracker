@@ -16,7 +16,7 @@
  * Config (environment):
  *   SPROCKET_URL         — e.g. https://sprocket.jerome-arfouche.ca (required)
  *   ZWIFT_SYNC_TOKEN     — must equal the server's NUXT_ZWIFT_SYNC_TOKEN (required)
- *   ZWIFT_WORKOUTS_DIR   — default ~/Documents/Zwift/Workouts (same var as workout-search.ts)
+ *   ZWIFT_WORKOUTS_DIR   — default ~/Documents/Zwift/Workouts
  *   RECONCILE_MINUTES    — periodic full-reconcile interval, default 10
  *
  * Why a periodic reconcile on top of fs.watch: file events are lossy (editor
@@ -84,7 +84,7 @@ const sha256Hex = (s: string) => createHash('sha256').update(s, 'utf8').digest('
 function toSyncPath(absOrRel: string): string | null {
   const rel = absOrRel.startsWith(ROOT) ? absOrRel.slice(ROOT.length).replace(/^[\\/]+/, '') : absOrRel
   const parts = rel.split(sep)
-  if (parts.some(p => p.startsWith('.'))) return null // .zwift-tss-cache.json, .DS_Store, editor temp files…
+  if (parts.some(p => p.startsWith('.'))) return null // .DS_Store, editor temp files…
   return normalizeZwoPath(parts.join('/'))
 }
 

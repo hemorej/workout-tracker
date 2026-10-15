@@ -93,7 +93,7 @@ sprocket/
 ├── shared/types/session.d.ts   ← UserSession type augmentation for nuxt-auth-utils
 ├── scripts/
 │   ├── reset-password.ts       ← CLI utility to reset a user's password (AdonisJS Scrypt)
-│   ├── zwift-workout-tss.ts / workout-search.ts ← ad-hoc CLI helpers
+│   ├── zwift-sync.ts           ← local daemon: Zwift Workouts folder → server
 │   └── backfill-strava-*.ts    ← spent one-off historical backfills, kept for reference
 │
 ├── drizzle/                    ← Auto-generated migration SQL files
@@ -432,11 +432,9 @@ pnpm reset-password
 ```bash
 pnpm dev             # Start dev server with hot reload (also starts PostgreSQL)
 pnpm build           # Build for production
-pnpm preview         # Preview production build locally
 
 pnpm db:generate     # Generate migration files after schema changes
 pnpm db:migrate      # Apply pending migrations
-pnpm db:studio       # Open Drizzle Studio (visual DB browser at localhost:4983)
 pnpm typecheck       # Type-check the whole app (nuxt typecheck / vue-tsc)
 pnpm reset-password  # Reset a user's password (edit EMAIL/NEW_PASSWORD in the script first)
 ```

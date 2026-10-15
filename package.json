@@ -12,17 +12,13 @@
         "dev": "brew services start postgresql@18; nuxt dev",
         "stop": "brew services stop postgresql@18",
         "generate": "nuxt generate",
-        "preview": "nuxt preview",
         "postinstall": "nuxt prepare",
         "db:generate": "drizzle-kit generate",
         "db:migrate": "drizzle-kit migrate",
-        "db:studio": "drizzle-kit studio",
         "start": "node .output/server/index.mjs",
         "reset-password": "pnpm dlx dotenv-cli -e .env -- node --experimental-strip-types scripts/reset-password.ts",
         "test": "node --experimental-strip-types --test shared/utils/zwo.test.ts",
-        "zwift-sync": "node --experimental-strip-types scripts/zwift-sync.ts",
-        "zwift-tss": "node --experimental-strip-types scripts/zwift-workout-tss.ts",
-        "workout-search": "node --experimental-strip-types scripts/workout-search.ts"
+        "zwift-sync": "node --experimental-strip-types scripts/zwift-sync.ts"
     },
     "dependencies": {
         "@fontsource-variable/archivo": "^5.3.0",

@@ -7,7 +7,6 @@ import { defineConfig } from 'drizzle-kit'
  * Commands:
  *   pnpm db:generate  — generates SQL migration files from schema changes
  *   pnpm db:migrate   — applies pending migrations to the database
- *   pnpm db:studio    — opens Drizzle Studio (visual DB browser)
  */
 export default defineConfig({
   // Path to schema file(s) — Drizzle reads these to diff against the DB
