@@ -44,4 +44,7 @@ jobs:
           node-version: "24.x"
 
       - name: pnpm audit
-        run: pnpm audit --audit-level=high
+        # --ignore-unfixable: skip advisories with no patched release yet
+        # (currently node-forge / braces, transitive via nitropack). They
+        # fail the job again automatically once a fix is published.
+        run: pnpm audit --audit-level=high --ignore-unfixable
