@@ -64,6 +64,9 @@
 /* ── Base ──────────────────────────────────────────────────────────────── */
 
 html {
+  /* App has no dark mode — keep native controls (number spinners,
+     scrollbars, date pickers) light even when the OS/browser is dark */
+  color-scheme: light;
   /* Smooth font rendering on macOS / retina */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
