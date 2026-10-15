@@ -11,6 +11,15 @@ export default defineNuxtConfig({
     },
 
     /**
+     * The app has no dark mode — pin color mode to light so Nuxt UI doesn't
+     * follow the OS preference (adds `.dark` to <html>, flipping native controls).
+     */
+    colorMode: {
+        preference: 'light',
+        fallback: 'light',
+    },
+
+    /**
      * Registered modules.
      * - @nuxt/ui: component library (UButton, UModal, UTable, UForm, etc.)
      * - nuxt-auth-utils: lightweight cookie-based session management

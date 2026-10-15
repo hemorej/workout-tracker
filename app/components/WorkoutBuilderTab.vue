@@ -649,7 +649,7 @@ function download() {
             v-model.number="ftp"
             type="number"
             class="tabular text-center outline-none"
-            style="width: 54px; font: 700 18px 'Hanken Grotesk'; color: #1c1917; border: none; background: transparent;"
+            style="width: 54px; font: 700 18px 'Hanken Grotesk'; color: #1c1917; border: none; background: transparent; color-scheme: light;"
           >
         </div>
       </div>
