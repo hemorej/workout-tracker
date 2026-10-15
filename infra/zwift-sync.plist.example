@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd user agent for scripts/zwift-sync.ts — starts at login, restarts on crash.
+
+  Install:
+    1. Copy to ~/Library/LaunchAgents/ca.jerome-arfouche.sprocket-zwift-sync.plist
+    2. Fix the three paths below (node, the repo checkout, and the log dir exists)
+       and put the real token in. `chmod 600` the file — it holds a secret.
+    3. launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ca.jerome-arfouche.sprocket-zwift-sync.plist
+
+  Reload after editing:
+    launchctl bootout gui/$(id -u)/ca.jerome-arfouche.sprocket-zwift-sync
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ca.jerome-arfouche.sprocket-zwift-sync.plist
+  Logs: ~/Library/Logs/sprocket-zwift-sync.log
+
+  The token must equal NUXT_ZWIFT_SYNC_TOKEN on the server. To rotate it: update
+  the server .env (+ restart), update it here, then bootout/bootstrap as above.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ca.jerome-arfouche.sprocket-zwift-sync</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <!-- Absolute path to node ≥ 24 (`which node`); launchd has no shell PATH. -->
+    <string>/opt/homebrew/bin/node</string>
+    <string>--experimental-strip-types</string>
+    <string>/Users/jerome/Code/sprocket/scripts/zwift-sync.ts</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>SPROCKET_URL</key>
+    <string>https://sprocket.jerome-arfouche.ca</string>
+    <key>ZWIFT_SYNC_TOKEN</key>
+    <string>REPLACE_WITH_openssl_rand_hex_32</string>
+    <!-- Optional: <key>ZWIFT_WORKOUTS_DIR</key><string>/Users/jerome/Documents/Zwift/Workouts</string> -->
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <!-- Don't respawn-spin if it exits immediately (e.g. folder missing). -->
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/jerome/Library/Logs/sprocket-zwift-sync.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/jerome/Library/Logs/sprocket-zwift-sync.log</string>
+</dict>
+</plist>

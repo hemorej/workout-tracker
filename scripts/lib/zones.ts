@@ -5,6 +5,7 @@
  * one of these zones so workout-search.ts's local provider can filter on it).
  */
 
-// Ordered low-to-high by roughly how much power each zone targets, not alphabetically.
-export const ZONES = ['ActiveRecovery', 'Endurance', 'Tempo', 'SweetSpot', 'Threshold', 'VO2Max', 'Anaerobic', 'Sprint'] as const
-export type ZoneName = typeof ZONES[number]
+// The list itself lives in shared/utils/zwo.ts (the sync endpoint derives a
+// workout's zone from the same `zone:*` tags) — re-exported here under the
+// names the scripts already use.
+export { ZWO_ZONE_NAMES as ZONES, type ZwoZoneName as ZoneName } from '../../shared/utils/zwo.ts'
