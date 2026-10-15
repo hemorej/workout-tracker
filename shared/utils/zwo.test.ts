@@ -11,6 +11,9 @@ import {
   zwoCanonicalString,
   normalizeZwoPath,
   zoneFromTags,
+  flattenTextEvents,
+  attachTextEvents,
+  FREERIDE_IF,
   ZWO_LIMITS,
   type ZwoWorkout,
 } from './zwo.ts'
@@ -146,4 +149,28 @@ test('path validation', () => {
     assert.equal(normalizeZwoPath(p), null, String(p))
   }
   assert.equal(normalizeZwoPath(`${'a'.repeat(300)}.zwo`), null)
+})
+
+test('text events flatten to absolute time and re-attach to the containing block', () => {
+  const w = parseOk(SAMPLE)
+  const { blocks, events } = flattenTextEvents(w.blocks)
+  assert.ok(blocks.every(b => b.textEvents === undefined))
+  // interval starts after warmup (600) + steady (300)
+  assert.deepEqual(events.map(e => [e.at, e.text]), [[900, 'Go & hold it']])
+
+  const moved = attachTextEvents(blocks, [{ at: 1000, text: 'Later', attrs: { duration: '5' } }])
+  const interval = moved[2]!
+  assert.equal(interval.textEvents?.[0]?.attrs.timeoffset, '100')
+  assert.equal(interval.textEvents?.[0]?.attrs.message, 'Later')
+  assert.equal(interval.textEvents?.[0]?.attrs.duration, '5')
+
+  // past the end → last block; no blocks → dropped
+  const tail = attachTextEvents(blocks, [{ at: 99999, text: 'End', attrs: {} }])
+  assert.equal(tail[tail.length - 1]!.textEvents?.length, 1)
+  assert.deepEqual(attachTextEvents([], [{ at: 5, text: 'x', attrs: {} }]), [])
+})
+
+test('FreeRide counts toward TSS at the assumed intensity', () => {
+  const free = parseOk('<workout_file><workout><FreeRide Duration="3600"/></workout></workout_file>')
+  assert.equal(free.tss, Math.round(FREERIDE_IF ** 2 * 100))
 })

@@ -7,26 +7,27 @@
  * live Duration/TSS totals, edit blocks inline via a stepper popover, and
  * export the result as a Zwift `.zwo` file.
  *
- * Single source of truth is local component state — nothing here is
- * persisted or shared with other tabs (see design_handoff_workout_builder/README.md).
+ * Single source of truth is local component state. Two things cross the
+ * component boundary: the AI-coach hand-off (`coach` store) and the Zwift
+ * library (`zwiftLibrary` store + panel), which can open a mirrored `.zwo` for
+ * editing — saved as a server-side *draft*, never written back to the file.
  */
 
 import { useCoachStore } from '~/stores/coach'
 import { usePlanningStore } from '~/stores/planning'
+import { useZwiftLibraryStore, type LibraryPendingOpen, type LibraryVersion } from '~/stores/zwiftLibrary'
+import type { ZwoBlock, ZwoMeta } from '#shared/utils/zwo'
 
 // ── Data model ───────────────────────────────────────────────────────────
 
 type RampBlock = { id: number, type: 'warmup' | 'cooldown', duration: number, powerStart: number, powerEnd: number, cadence: number | null }
 type SteadyBlock = { id: number, type: 'steady', duration: number, power: number, cadence: number | null }
 type IntervalBlock = { id: number, type: 'interval', reps: number, onDuration: number, onPower: number, onCadence: number | null, offDuration: number, offPower: number, offCadence: number | null }
-type Block = RampBlock | SteadyBlock | IntervalBlock
+type FreeRideBlock = { id: number, type: 'freeride', duration: number, flatRoad: boolean, ftpTest: boolean }
+type Block = RampBlock | SteadyBlock | IntervalBlock | FreeRideBlock
 
-interface Segment {
-  blockId: number
-  duration: number
-  powerStart: number
-  powerEnd: number
-}
+/** A text cue on the absolute timeline (seconds from workout start). */
+interface TextEvent { id: number, at: number, text: string, attrs: Record<string, string> }
 
 // ── Zone config ──────────────────────────────────────────────────────────
 
@@ -39,9 +40,13 @@ const ZONES = [
   { label: 'Z6', name: 'Anaerobic', range: '120%+ FTP', max: Infinity, color: '#F87171', midpoint: 1.3 },
 ]
 
-function zoneFor(pct: number) {
-  return ZONES.find(z => pct <= z.max) ?? ZONES[ZONES.length - 1]!
-}
+// Toolbar chips: Z1–Z6 plus Sweet spot (88–94% FTP, steady at the midpoint)
+// between Z4 and Z5.
+const ZONE_CHIPS = [
+  ...ZONES.slice(0, 4).map(z => ({ key: z.label, label: z.label, color: z.color, power: z.midpoint, title: `${z.label} · ${z.name} · ${z.range}` })),
+  { key: 'SS', label: 'SS', color: '#FBBF24', power: 0.91, title: 'Sweet spot · 88–94% FTP' },
+  ...ZONES.slice(4).map(z => ({ key: z.label, label: z.label, color: z.color, power: z.midpoint, title: `${z.label} · ${z.name} · ${z.range}` })),
+]
 
 // ── State ────────────────────────────────────────────────────────────────
 
@@ -168,79 +173,36 @@ function cadenceLabel(cadence: number | null) {
 
 // ── Segments (derived) ───────────────────────────────────────────────────
 // Every block type reduces to one or more ramp segments — a flat top is
-// just a ramp whose start/end power are equal, so a single clip-path
-// formula covers warmup/cooldown/steady/interval alike.
+// just a ramp whose start/end power are equal. The reduction itself lives in
+// shared/utils/zwo.ts (zwoSegments) so the library thumbnails, the server's
+// TSS estimate and this chart can't disagree.
 
-function buildSegments(source: Block[]): Segment[] {
-  const segs: Segment[] = []
-  for (const b of source) {
-    if (b.type === 'warmup' || b.type === 'cooldown') {
-      segs.push({ blockId: b.id, duration: b.duration, powerStart: b.powerStart, powerEnd: b.powerEnd })
-    }
-    else if (b.type === 'steady') {
-      segs.push({ blockId: b.id, duration: b.duration, powerStart: b.power, powerEnd: b.power })
-    }
-    else if (b.type === 'interval') {
-      for (let i = 0; i < b.reps; i++) {
-        segs.push({ blockId: b.id, duration: b.onDuration, powerStart: b.onPower, powerEnd: b.onPower })
-        segs.push({ blockId: b.id, duration: b.offDuration, powerStart: b.offPower, powerEnd: b.offPower })
-      }
-    }
-  }
-  return segs
-}
+const segments = computed(() =>
+  zwoSegments(blocks.value).map(s => ({
+    blockId: blocks.value[s.blockIndex]!.id,
+    duration: s.duration,
+    powerStart: s.powerStart,
+    powerEnd: s.powerEnd,
+    free: s.free,
+  })),
+)
 
-const segments = computed(() => buildSegments(blocks.value))
+const timelineSegs = computed(() =>
+  segments.value.map(s => ({
+    d: s.duration,
+    a: s.powerStart,
+    b: s.powerEnd,
+    t: s.free ? 'f' as const : 's' as const,
+    blockId: s.blockId,
+  })),
+)
 
 const totalDuration = computed(() => segments.value.reduce((s, x) => s + x.duration, 0))
 const totalDurationLabel = computed(() => fmtClock(totalDuration.value))
 
-// Real Normalized Power, not a per-segment RMS approximation — a duration-
-// weighted mean of instantaneous power² is exact for flat blocks but badly
-// underestimates high/low interval workouts, since it lacks NP's 30s
-// smoothing + 4th-power weighting that disproportionately counts sustained
-// hard efforts over recovery valleys. So: materialize a 1Hz power stream
-// (fraction of FTP, ramps interpolated), take a trailing 30s rolling
-// average, mean the 4th power of that, then 4th-root — matching how
-// Zwift/TrainingPeaks derive NP from a real power stream.
-const NP_WINDOW_SEC = 30
-
-const totalTSS = computed(() => {
-  const totalSec = Math.round(totalDuration.value)
-  if (totalSec <= 0) return 0
-
-  const series = new Float64Array(totalSec)
-  let cursor = 0
-  for (const seg of segments.value) {
-    const dur = Math.round(seg.duration)
-    for (let i = 0; i < dur && cursor + i < totalSec; i++) {
-      const t = dur > 0 ? i / dur : 0
-      series[cursor + i] = seg.powerStart + (seg.powerEnd - seg.powerStart) * t
-    }
-    cursor += dur
-  }
-
-  let windowSum = 0
-  let quarticSum = 0
-  let sampleCount = 0
-  for (let i = 0; i < totalSec; i++) {
-    windowSum += series[i] ?? 0
-    if (i >= NP_WINDOW_SEC) windowSum -= series[i - NP_WINDOW_SEC] ?? 0
-    if (i >= NP_WINDOW_SEC - 1) {
-      const rollingAvg = windowSum / NP_WINDOW_SEC
-      quarticSum += rollingAvg ** 4
-      sampleCount++
-    }
-  }
-
-  // Workouts shorter than the smoothing window have no defined NP — fall
-  // back to a plain average of instantaneous power.
-  const intensity = sampleCount > 0
-    ? (quarticSum / sampleCount) ** 0.25
-    : series.reduce((s, p) => s + p, 0) / totalSec
-
-  return Math.round((totalSec / 3600) * intensity * intensity * 100)
-})
+// Same Coggan-NP estimate the library list shows for this file (FreeRide is
+// assumed at FREERIDE_IF of FTP), so a workout's TSS reads the same in both.
+const totalTSS = computed(() => estimateTss(blocks.value))
 
 // ── Chart geometry ───────────────────────────────────────────────────────
 
@@ -298,8 +260,8 @@ onBeforeUnmount(() => {
 })
 
 const chartAreaMinHeight = computed(() => {
-  const rulerHeight = 28
-  const baseHeight = chartHeight + rulerHeight
+  const rulerHeight = ruler.height + ruler.marginTop
+  const baseHeight = chartHeight + rulerHeight + (events.value.length ? EVENT_ROW_HEIGHT : 0)
   if (!selectedBlock.value) return baseHeight
   return Math.max(baseHeight, POPOVER_TOP + popoverHeight.value + 16)
 })
@@ -313,52 +275,10 @@ const durForScale = computed(() => Math.max(totalDuration.value, 600))
 const pxPerSecond = computed(() => Math.max(visibleWidth.value / durForScale.value, 0.15))
 const chartWidth = computed(() => Math.max(visibleWidth.value, durForScale.value * pxPerSecond.value))
 
-interface Bar {
-  key: string
-  blockId: number
-  left: number
-  width: number
-  color: string
-  clipPath: string
-  opacity: number
-}
+const ruler = { height: 22, marginTop: 6 }
+const EVENT_ROW_HEIGHT = 22
 
-const bars = computed<Bar[]>(() => {
-  let cursor = 0
-  const result: Bar[] = []
-  segments.value.forEach((x, i) => {
-    const left = cursor * pxPerSecond.value
-    const width = Math.max(1, x.duration * pxPerSecond.value - 1.5)
-    const hs = (x.powerStart / scaleMax.value) * 100
-    const he = (x.powerEnd / scaleMax.value) * 100
-    const clipPath = `polygon(0% ${100 - hs}%, 100% ${100 - he}%, 100% 100%, 0% 100%)`
-    const zone = zoneFor((x.powerStart + x.powerEnd) / 2)
-    const selected = selectedId.value === x.blockId
-    const dim = selectedId.value != null && !selected
-    result.push({
-      key: `bar${i}`,
-      blockId: x.blockId,
-      left,
-      width,
-      color: zone.color,
-      clipPath,
-      opacity: dim ? 0.3 : 1,
-    })
-    cursor += x.duration
-  })
-  return result
-})
-
-const ticks = computed(() => {
-  const dur = durForScale.value
-  const step = dur <= 300 ? 30 : dur <= 900 ? 60 : dur <= 2400 ? 120 : 300
-  const result: { key: string, left: number, label: string }[] = []
-  for (let t = 0; t <= dur + 1; t += step) {
-    result.push({ key: `t${t}`, left: t * pxPerSecond.value, label: fmtClock(t) })
-  }
-  return result
-})
-
+// Y-axis zone labels sit at each zone's upper boundary.
 const axisZones = computed(() => {
   return ZONES
     .map(z => ({
@@ -368,8 +288,8 @@ const axisZones = computed(() => {
     .filter(z => z.top >= 0 && z.top <= chartHeight)
 })
 
-function onBarClick(blockId: number) {
-  selectedId.value = selectedId.value === blockId ? null : blockId
+function selectBlock(blockId: number | null) {
+  selectedId.value = blockId
 }
 
 function clearSelection() {
@@ -383,10 +303,17 @@ const selectedBlock = computed(() => blocks.value.find(b => b.id === selectedId.
 const popoverLeft = computed(() => {
   const id = selectedId.value
   if (id == null) return 0
-  const myBars = bars.value.filter(b => b.blockId === id)
-  if (!myBars.length) return 0
-  const minLeft = Math.min(...myBars.map(b => b.left))
-  const maxRight = Math.max(...myBars.map(b => b.left + b.width))
+  let cursor = 0
+  let minLeft = Infinity
+  let maxRight = -Infinity
+  for (const seg of segments.value) {
+    if (seg.blockId === id) {
+      minLeft = Math.min(minLeft, cursor * pxPerSecond.value)
+      maxRight = Math.max(maxRight, (cursor + seg.duration) * pxPerSecond.value)
+    }
+    cursor += seg.duration
+  }
+  if (!Number.isFinite(minLeft)) return 0
   const center = (minLeft + maxRight) / 2
   return Math.max(0, Math.min(center - POPOVER_WIDTH / 2, visibleWidth.value - POPOVER_WIDTH))
 })
@@ -549,55 +476,273 @@ function addSteady(pct: number) {
   selectedId.value = block.id
 }
 
-// Sweet spot = 88–94% FTP; add a single steady block at the midpoint.
-function addSweetSpot() {
-  addSteady(0.91)
+function addFreeRide() {
+  const block: Block = { id: nextId.value, type: 'freeride', duration: 300, flatRoad: false, ftpTest: false }
+  blocks.value = [...blocks.value, block]
+  nextId.value += 1
+  selectedId.value = block.id
 }
 
 function clearWorkout() {
   blocks.value = []
+  events.value = []
   selectedId.value = null
+}
+
+// ── Text events ──────────────────────────────────────────────────────────
+// Cues drawn as a dashed pin + label on the chart. Stored in absolute seconds;
+// shared/utils/zwo.ts converts to/from per-block `timeoffset`s on load/save.
+
+const events = ref<TextEvent[]>([])
+const nextEventId = ref(1)
+
+const timelineEvents = computed(() => events.value.map(e => ({ at: e.at, text: e.text })))
+
+/** Start (seconds) of the selected block, else the workout start. */
+function selectedBlockStart() {
+  const id = selectedId.value
+  if (id == null) return 0
+  let cursor = 0
+  for (const seg of segments.value) {
+    if (seg.blockId === id) return cursor
+    cursor += seg.duration
+  }
+  return 0
+}
+
+function addTextEvent() {
+  if (!blocks.value.length) return
+  events.value = [...events.value, { id: nextEventId.value, at: selectedBlockStart(), text: 'New cue', attrs: {} }]
+  nextEventId.value += 1
+}
+
+function removeTextEvent(id: number) {
+  events.value = events.value.filter(e => e.id !== id)
+}
+
+function clearTextEvents() {
+  events.value = []
+}
+
+function eventTimeLabel(at: number) {
+  return fmtClock(at)
+}
+
+// Accepts "m:ss", "h:mm:ss" or plain seconds.
+function onEventTimeCommit(ev: TextEvent, raw: string) {
+  const parts = raw.trim().split(':').map(Number)
+  if (!parts.length || parts.some(n => !Number.isFinite(n) || n < 0)) return
+  const seconds = parts.reduce((acc, n) => acc * 60 + n, 0)
+  ev.at = Math.min(Math.round(seconds), Math.max(0, Math.round(totalDuration.value)))
+  events.value = [...events.value].sort((a, b) => a.at - b.at)
+}
+
+// ── Library file editing ─────────────────────────────────────────────────
+// Opened from the library panel via the zwiftLibrary store. The builder edits
+// a local copy; "Save draft" PUTs it as the workout's draft and Download writes
+// a .zwo named exactly like the original so it can be saved over it. Nothing
+// here ever writes the mirrored file.
+
+interface Editing { workoutId: number, path: string, baseHash: string }
+
+const library = useZwiftLibraryStore()
+const libraryOpen = ref(false)
+const editing = ref<Editing | null>(null)
+const libraryMeta = ref<ZwoMeta | null>(null)
+const diskVersion = ref<LibraryVersion | null>(null)
+const hasDraft = ref(false)
+const stale = ref(false)
+const baselineSig = ref('')
+
+const editSig = computed(() => JSON.stringify({ t: title.value, b: blocks.value, e: events.value }))
+const dirty = computed(() => !!editing.value && editSig.value !== baselineSig.value)
+
+const editingFileName = computed(() => editing.value?.path.split('/').pop() ?? '')
+
+function stripId(b: Block): ZwoBlock {
+  const { id: _id, ...rest } = b
+  return rest as ZwoBlock
+}
+
+function loadVersion(v: { meta: ZwoMeta, blocks: ZwoBlock[], events: { at: number, text: string, attrs: Record<string, string> }[] }) {
+  libraryMeta.value = v.meta
+  title.value = v.meta.name
+  blocks.value = v.blocks.map(b => ({ ...b, id: nextId.value++ }) as Block)
+  events.value = v.events.map(e => ({ ...e, id: nextEventId.value++ }))
+  selectedId.value = null
+  hmsDraft.value = null
+  powerDraft.value = null
+  baselineSig.value = editSig.value
+}
+
+function applyOpen(open: LibraryPendingOpen) {
+  loadVersion(open)
+  editing.value = { workoutId: open.workoutId, path: open.path, baseHash: open.baseHash }
+  diskVersion.value = open.disk
+  hasDraft.value = open.hasDraft
+  stale.value = open.stale
+  baselineSig.value = editSig.value
+}
+
+function applyPendingOpen() {
+  const open = library.consumePendingOpen()
+  if (open) applyOpen(open)
+}
+
+function onLibraryOpen() {
+  libraryOpen.value = false
+  applyPendingOpen()
+}
+
+onMounted(applyPendingOpen)
+
+const isSavingDraft = ref(false)
+const confirmingRevert = ref(false)
+let confirmTimer: ReturnType<typeof setTimeout> | undefined
+
+function buildXml() {
+  const meta: ZwoMeta = libraryMeta.value
+    ? { ...libraryMeta.value, name: title.value }
+    : { name: title.value, author: '', description: '', sportType: 'bike', tags: [], extraMeta: {} }
+  const withEvents = attachTextEvents(blocks.value.map(stripId), events.value.map(({ at, text, attrs }) => ({ at, text, attrs })))
+  return serializeZwo(meta, withEvents)
+}
+
+async function saveDraft() {
+  const ed = editing.value
+  if (!ed || stale.value || isSavingDraft.value) return
+  isSavingDraft.value = true
+  try {
+    const res = await $fetch<{ baseHash: string }>('/api/zwift/drafts', {
+      method: 'PUT',
+      body: { workoutId: ed.workoutId, baseHash: ed.baseHash, xml: buildXml() },
+    })
+    ed.baseHash = res.baseHash
+    hasDraft.value = true
+    baselineSig.value = editSig.value
+    toast.add({ title: 'Draft saved', color: 'success' })
+  }
+  catch (e) {
+    const status = (e as { statusCode?: number, status?: number }).statusCode ?? (e as { status?: number }).status
+    toast.add({
+      title: status === 409 ? 'The file on disk changed — reopen it from the library' : 'Could not save draft',
+      color: 'error',
+    })
+  }
+  finally {
+    isSavingDraft.value = false
+  }
+}
+
+async function revertToDisk() {
+  const ed = editing.value
+  if (!ed || !diskVersion.value || stale.value) return
+  if (!confirmingRevert.value && (dirty.value || hasDraft.value)) {
+    confirmingRevert.value = true
+    clearTimeout(confirmTimer)
+    confirmTimer = setTimeout(() => { confirmingRevert.value = false }, 4000)
+    return
+  }
+  confirmingRevert.value = false
+  clearTimeout(confirmTimer)
+  try {
+    if (hasDraft.value) await $fetch(`/api/zwift/drafts/${ed.workoutId}`, { method: 'DELETE' })
+    loadVersion(diskVersion.value)
+    hasDraft.value = false
+    toast.add({ title: 'Reverted to the version on disk', color: 'success' })
+  }
+  catch {
+    toast.add({ title: 'Could not revert', color: 'error' })
+  }
+}
+
+onBeforeUnmount(() => clearTimeout(confirmTimer))
+
+// Stale draft resolution — nothing is overwritten until the user picks one.
+async function keepMyEdit() {
+  const ed = editing.value
+  if (!ed) return
+  try {
+    const res = await $fetch<{ baseHash: string }>(`/api/zwift/drafts/${ed.workoutId}/rebase`, { method: 'POST' })
+    ed.baseHash = res.baseHash
+    stale.value = false
+    toast.add({ title: 'Draft re-based onto the current file on disk', color: 'success' })
+  }
+  catch {
+    toast.add({ title: 'Could not re-base the draft', color: 'error' })
+  }
+}
+
+async function discardMyEdit() {
+  const ed = editing.value
+  if (!ed || !diskVersion.value) return
+  try {
+    await $fetch(`/api/zwift/drafts/${ed.workoutId}`, { method: 'DELETE' })
+    loadVersion(diskVersion.value)
+    hasDraft.value = false
+    stale.value = false
+    toast.add({ title: 'Draft discarded. Showing the file on disk', color: 'success' })
+  }
+  catch {
+    toast.add({ title: 'Could not discard the draft', color: 'error' })
+  }
 }
 
 // ── Download (.zwo export) ───────────────────────────────────────────────
 
 function download() {
+  if (stale.value) return
   // Serialization lives in shared/utils/zwo.ts so the builder, the library
   // sync and the CLI scripts all write/read .zwo identically.
-  const xml = serializeZwo(
-    { name: title.value, author: '', description: '', sportType: 'bike', tags: [], extraMeta: {} },
-    blocks.value,
-  )
+  const xml = buildXml()
+  const fileName = editing.value
+    ? editingFileName.value
+    : `${(title.value || 'workout').replace(/[^a-z0-9]+/gi, '_')}.zwo`
 
   const blob = new Blob([xml], { type: 'application/xml' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${(title.value || 'workout').replace(/[^a-z0-9]+/gi, '_')}.zwo`
+  a.download = fileName
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(url), 2000)
+
+  if (editing.value) {
+    toast.add({ title: `Downloaded ${fileName}. Save it over the original in Zwift/Workouts.`, color: 'success' })
+  }
 }
 </script>
 
 <template>
   <div class="space-y-6" style="font-family: 'Hanken Grotesk', sans-serif;">
-    <!-- ── Row 1: name, stat cards ──────────────────────────────────────── -->
+    <!-- ── Row 1: name + library, stat cards ───────────────────────────── -->
     <!-- Narrower than the timeline card below — stays put while the timeline widens. -->
     <div class="max-w-3xl mx-auto flex items-end gap-4 flex-wrap">
-      <!-- Workout name -->
-      <div class="flex-none" style="width: 280px;">
-        <label class="block mb-[7px]" style="font: 600 12px 'Hanken Grotesk'; color: #78716c; letter-spacing: .04em; text-transform: uppercase;">
-          Workout name
-        </label>
-        <input
-          v-model="title"
-          type="text"
-          placeholder="Name this workout"
-          class="w-full outline-none"
-          style="font: 600 15px 'Hanken Grotesk'; color: #1c1917; border: 1.5px solid #e7e5e4; border-radius: 10px; padding: 12px 14px; background: #fff;"
+      <!-- Workout name + library entry -->
+      <div class="flex items-end gap-3 flex-none">
+        <div class="flex-none" style="width: 280px;">
+          <label class="block mb-[7px]" style="font: 600 12px 'Hanken Grotesk'; color: #78716c; letter-spacing: .04em; text-transform: uppercase;">
+            Workout name
+          </label>
+          <input
+            v-model="title"
+            type="text"
+            placeholder="Name this workout"
+            class="w-full outline-none"
+            style="font: 600 15px 'Hanken Grotesk'; color: #1c1917; border: 1.5px solid #e7e5e4; border-radius: 10px; padding: 12px 14px; background: #fff;"
+          >
+        </div>
+        <button
+          class="library-pill inline-flex items-center cursor-pointer"
+          :class="{ 'library-pill-active': libraryOpen }"
+          style="height: 34px; gap: 7px; padding: 0 14px 0 11px; margin-bottom: 7px; border-radius: 9999px; font: 600 13px 'Hanken Grotesk';"
+          @click="libraryOpen = true"
         >
+          <UIcon name="i-heroicons-book-open" style="width: 16px; height: 16px;" />
+          Library
+        </button>
       </div>
 
       <div class="flex-1" />
@@ -627,72 +772,110 @@ function download() {
           <input
             v-model.number="ftp"
             type="number"
+            min="1"
             class="tabular text-center outline-none"
-            style="width: 54px; font: 700 18px 'Hanken Grotesk'; color: #1c1917; border: none; background: transparent; color-scheme: light;"
+            style="width: 62px; font: 700 18px 'Hanken Grotesk'; color: #1c1917; border: none; background: transparent; color-scheme: light;"
           >
         </div>
       </div>
     </div>
 
     <!-- ── Timeline card ────────────────────────────────────────────────── -->
-    <div class="bg-white relative" style="border: 1px solid #f0eeec; border-radius: 14px; padding: 24px 8px 16px 24px;">
-      <div class="flex">
-        <!-- Y-axis -->
-        <div class="relative flex-none" style="width: 34px;" :style="{ height: `${chartHeight}px` }">
-          <div
-            v-for="az in axisZones"
-            :key="az.label"
-            class="absolute"
-            style="font: 600 11px 'Hanken Grotesk'; color: #cbc8c4; transform: translateY(-50%);"
-            :style="{ left: '0px', top: `${az.top}px` }"
-          >
-            {{ az.label }}
+    <div class="bg-white relative overflow-hidden" style="border: 1px solid #f0eeec; border-radius: 14px;">
+      <!-- Editing-a-library-file banner -->
+      <div
+        v-if="editing"
+        class="flex items-center gap-2.5"
+        style="background: #fff7ed; border-bottom: 1px solid #ffedd5; padding: 10px 24px;"
+      >
+        <UIcon name="i-heroicons-pencil-square" class="flex-none" style="width: 16px; height: 16px; color: #ea580c;" />
+        <span class="flex-none" style="font: 600 11px 'Hanken Grotesk'; letter-spacing: .12em; text-transform: uppercase; color: #c2410c;">Editing library file</span>
+        <span class="truncate min-w-0" style="font: 500 13px 'Hanken Grotesk'; color: #78716c;">{{ editing.path }}</span>
+        <span v-if="dirty" class="flex-none" style="font: 600 12px 'Hanken Grotesk'; color: #c2410c; background: #ffedd5; border-radius: 6px; padding: 1px 8px;">edited</span>
+        <button
+          class="revert-btn ml-auto inline-flex items-center flex-none whitespace-nowrap"
+          :class="[{ 'revert-confirm': confirmingRevert }, stale ? 'locked' : 'cursor-pointer']"
+          style="gap: 6px; font: 600 13px 'Hanken Grotesk'; border: none; border-radius: 8px; padding: 5px 10px;"
+          :disabled="stale"
+          @click="revertToDisk"
+        >
+          <UIcon name="i-heroicons-arrow-uturn-left" style="width: 15px; height: 15px;" />
+          {{ confirmingRevert ? 'Confirm' : 'Revert to disk' }}
+        </button>
+      </div>
+
+      <!-- Stale draft: disk changed under the edit and the two differ -->
+      <div
+        v-if="editing && stale"
+        class="flex items-start gap-3"
+        style="background: #fffbeb; border-bottom: 1px solid #fde68a; padding: 16px 24px;"
+      >
+        <UIcon name="i-heroicons-exclamation-triangle" class="flex-none" style="width: 20px; height: 20px; color: #d97706; margin-top: 1px;" />
+        <div class="min-w-0">
+          <p style="font: 600 15px 'Hanken Grotesk'; color: #92400e;">
+            Disk changed since your edit
+          </p>
+          <p class="mt-1" style="font: 400 13px/1.5 'Hanken Grotesk'; color: #78716c;">
+            The file was modified outside Sprocket after you started this draft, and your draft differs from the new version. Nothing is overwritten until you choose.
+          </p>
+          <div class="flex flex-wrap gap-2 mt-3">
+            <button
+              class="cursor-pointer"
+              style="font: 600 13px 'Hanken Grotesk'; color: #fff; background: #ea580c; border: none; border-radius: 8px; padding: 8px 14px;"
+              @click="keepMyEdit"
+            >
+              Keep my edit (re-base)
+            </button>
+            <button
+              class="cursor-pointer"
+              style="font: 600 13px 'Hanken Grotesk'; color: #57534e; background: #fff; border: 1.5px solid #e7e5e4; border-radius: 8px; padding: 7px 14px;"
+              @click="discardMyEdit"
+            >
+              Discard my edit
+            </button>
           </div>
         </div>
+      </div>
 
-        <!-- Chart + popover wrapper -->
-        <div
-          ref="chartScrollEl"
-          class="relative flex-1 min-w-0 no-scrollbar"
-          style="overflow-x: auto;"
-          :style="{ minHeight: `${chartAreaMinHeight}px` }"
-        >
-          <!-- Bars -->
+      <div :style="{ padding: '24px 8px 16px 24px', opacity: editing && stale ? 0.55 : 1 }">
+        <div class="flex">
+          <!-- Y-axis -->
           <div
-            class="relative"
-            style="border-bottom: 2px solid #e7e5e4;"
-            :style="{ width: `${chartWidth}px`, height: `${chartHeight}px` }"
-            @click="clearSelection"
+            class="relative flex-none"
+            style="width: 34px;"
+            :style="{ height: `${chartHeight}px`, marginTop: events.length ? `${EVENT_ROW_HEIGHT}px` : '0px' }"
           >
             <div
-              v-for="bar in bars"
-              :key="bar.key"
-              class="absolute cursor-pointer"
-              style="top: 0; border-radius: 2px 2px 0 0;"
-              :style="{
-                left: `${bar.left}px`,
-                width: `${bar.width}px`,
-                height: `${chartHeight}px`,
-                background: bar.color,
-                clipPath: bar.clipPath,
-                opacity: bar.opacity,
-              }"
-              @click.stop="onBarClick(bar.blockId)"
-            />
-          </div>
-
-          <!-- Time ruler -->
-          <div class="relative" style="height: 22px; margin-top: 6px;" :style="{ width: `${chartWidth}px` }">
-            <div
-              v-for="tick in ticks"
-              :key="tick.key"
-              class="tabular absolute"
-              style="top: 0; font: 400 12px 'Hanken Grotesk'; color: #a8a29e; transform: translateX(-50%);"
-              :style="{ left: `${tick.left}px` }"
+              v-for="az in axisZones"
+              :key="az.label"
+              class="absolute"
+              style="font: 600 11px 'Hanken Grotesk'; color: #cbc8c4; transform: translateY(-50%);"
+              :style="{ left: '0px', top: `${az.top}px` }"
             >
-              {{ tick.label }}
+              {{ az.label }}
             </div>
           </div>
+
+          <!-- Chart + popover wrapper -->
+          <div
+            ref="chartScrollEl"
+            class="relative flex-1 min-w-0 no-scrollbar"
+            style="overflow-x: auto;"
+            :style="{ minHeight: `${chartAreaMinHeight}px` }"
+          >
+            <WorkoutTimeline
+              :segs="timelineSegs"
+              :events="timelineEvents"
+              :total="durForScale"
+              :width="chartWidth"
+              :height="chartHeight"
+              :ftp="ftp"
+              :scale-max="scaleMax"
+              :axis="false"
+              :selected-id="selectedId"
+              interactive
+              @select="selectBlock"
+            />
 
           <!-- Block edit popover -->
           <div
@@ -896,6 +1079,39 @@ function download() {
               </div>
             </template>
 
+            <!-- FreeRide fields -->
+            <template v-else-if="selectedBlock.type === 'freeride'">
+              <div class="flex items-center justify-between">
+                <span style="font: 500 13px 'Hanken Grotesk'; color: #d6d3d1;">Duration</span>
+                <div class="flex items-center gap-2">
+                  <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'duration', -15)">–</button>
+                  <div class="hms-input">
+                    <input
+                      type="number" step="1" min="0" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.duration, selectedBlock.id, 'duration', 'h')"
+                      @input="onHmsInput($event, selectedBlock.id, 'duration', 'h')"
+                      @blur="onHmsCommit(selectedBlock.id, 'duration')"
+                    >
+                    <span class="hms-colon">:</span>
+                    <input
+                      type="number" step="1" min="0" max="59" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.duration, selectedBlock.id, 'duration', 'm')"
+                      @input="onHmsInput($event, selectedBlock.id, 'duration', 'm')"
+                      @blur="onHmsCommit(selectedBlock.id, 'duration')"
+                    >
+                    <span class="hms-colon">:</span>
+                    <input
+                      type="number" step="1" min="0" max="59" class="tabular hms-field"
+                      :value="hmsPart(selectedBlock.duration, selectedBlock.id, 'duration', 's')"
+                      @input="onHmsInput($event, selectedBlock.id, 'duration', 's')"
+                      @blur="onHmsCommit(selectedBlock.id, 'duration')"
+                    >
+                  </div>
+                  <button class="stepper-btn" @click="bumpDuration(selectedBlock.id, 'duration', 15)">+</button>
+                </div>
+              </div>
+            </template>
+
             <!-- Interval fields -->
             <template v-else-if="selectedBlock.type === 'interval'">
               <div class="flex items-center justify-between mb-3 pb-3" style="border-bottom: 1px solid #44403c;">
@@ -1040,112 +1256,173 @@ function download() {
               </div>
             </template>
           </div>
+
+          </div>
+        </div>
+
+        <!-- Text events -->
+        <div v-if="events.length" class="mt-4 pt-3 space-y-2" style="border-top: 1px solid #f0eeec;">
+          <p style="font: 600 11px 'Hanken Grotesk'; letter-spacing: .1em; text-transform: uppercase; color: #a8a29e;">
+            Text events
+          </p>
+          <div v-for="ev in events" :key="ev.id" class="flex items-center gap-2">
+            <input
+              :value="eventTimeLabel(ev.at)"
+              class="tabular text-center outline-none event-field"
+              style="width: 72px;"
+              aria-label="Time"
+              @change="onEventTimeCommit(ev, ($event.target as HTMLInputElement).value)"
+            >
+            <input
+              v-model="ev.text"
+              type="text"
+              class="outline-none event-field flex-1 min-w-0"
+              aria-label="Message"
+            >
+            <button
+              title="Remove text event"
+              class="cursor-pointer event-remove"
+              style="background: none; border: none; color: #a8a29e;"
+              @click="removeTextEvent(ev.id)"
+            >
+              <UIcon name="i-heroicons-x-mark" class="block" style="width: 16px; height: 16px;" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- ── Toolbar + download — same narrow width as row 1, same row ──── -->
-    <!-- Download is icon-only so the row fits without wrapping or scrolling;
-         its right edge lines up with the FTP stat card above. -->
-    <div class="max-w-3xl mx-auto flex items-center gap-3" style="padding-bottom: 44px;">
-      <div class="flex flex-wrap items-center gap-2 min-w-0">
-        <button
-          title="Warm up"
-          class="inline-flex items-center justify-center cursor-pointer shrink-0"
-          style="width: 38px; height: 34px; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px;"
-          @click="addBlock('warmup')"
-        >
-          <svg viewBox="0 0 20 14" width="18" height="13" fill="none" stroke="#34D399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12 L19 2" /></svg>
-        </button>
-        <button
-          title="Cool down"
-          class="inline-flex items-center justify-center cursor-pointer shrink-0"
-          style="width: 38px; height: 34px; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px;"
-          @click="addBlock('cooldown')"
-        >
-          <svg viewBox="0 0 20 14" width="18" height="13" fill="none" stroke="#9AA5B1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 2 L19 12" /></svg>
-        </button>
-        <button
-          title="Interval"
-          class="inline-flex items-center justify-center cursor-pointer shrink-0"
-          style="width: 38px; height: 34px; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px;"
-          @click="addBlock('interval')"
-        >
-          <svg viewBox="0 0 24 14" width="20" height="13" fill="none">
-            <rect x="0.5" y="1" width="4" height="13" rx="1" fill="#FB923C" />
-            <rect x="6.5" y="8" width="4" height="6" rx="1" fill="#9AA5B1" />
-            <rect x="13" y="1" width="4" height="13" rx="1" fill="#FB923C" />
-            <rect x="19" y="8" width="4" height="6" rx="1" fill="#9AA5B1" />
-          </svg>
-        </button>
+    <!-- ── Toolbar (left) + actions (right) ─────────────────────────────── -->
+    <div class="max-w-3xl mx-auto flex items-start justify-between gap-8" style="padding-bottom: 44px;">
+      <div class="flex flex-col gap-2.5 min-w-0" style="width: max-content; max-width: 100%;">
+        <!-- Row 1: block adders, FreeRide, text events, clear -->
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <button
+            title="Warm up"
+            class="tool-chip"
+            style="width: 38px;"
+            @click="addBlock('warmup')"
+          >
+            <svg viewBox="0 0 20 14" width="18" height="13" fill="none" stroke="#34D399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12 L19 2" /></svg>
+          </button>
+          <button
+            title="Cool down"
+            class="tool-chip"
+            style="width: 38px;"
+            @click="addBlock('cooldown')"
+          >
+            <svg viewBox="0 0 20 14" width="18" height="13" fill="none" stroke="#9AA5B1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 2 L19 12" /></svg>
+          </button>
+          <button
+            title="Interval"
+            class="tool-chip"
+            style="width: 38px;"
+            @click="addBlock('interval')"
+          >
+            <svg viewBox="0 0 24 14" width="20" height="13" fill="none">
+              <rect x="0.5" y="1" width="4" height="13" rx="1" fill="#FB923C" />
+              <rect x="6.5" y="8" width="4" height="6" rx="1" fill="#9AA5B1" />
+              <rect x="13" y="1" width="4" height="13" rx="1" fill="#FB923C" />
+              <rect x="19" y="8" width="4" height="6" rx="1" fill="#9AA5B1" />
+            </svg>
+          </button>
 
-        <div style="width: 1px; height: 22px; background: #e7e5e4; margin: 0 4px;" />
+          <div style="width: 1px; height: 22px; background: #e7e5e4; margin: 0 2px;" />
 
-        <template v-for="z in ZONES" :key="z.label">
-          <div class="relative inline-flex shrink-0">
+          <button
+            title="FreeRide"
+            class="tool-chip"
+            style="width: 38px; color: #9AA5B1;"
+            @click="addFreeRide"
+          >
+            <FreeRideIcon style="width: 20px; height: 13px;" />
+          </button>
+
+          <div class="inline-flex items-center overflow-hidden" style="height: 34px; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px;">
             <button
-              :title="`${z.label} · ${z.name} · ${z.range}`"
-              class="inline-flex items-center cursor-pointer shrink-0"
-              style="gap: 7px; font: 600 13px 'Hanken Grotesk'; color: #57534e; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px; padding: 8px 14px 8px 10px;"
-              @click="addSteady(z.midpoint)"
+              title="Text event"
+              :disabled="blocks.length === 0"
+              class="inline-flex items-center justify-center"
+              :class="blocks.length === 0 ? 'cursor-not-allowed' : 'cursor-pointer'"
+              :style="{ width: '38px', height: '100%', background: 'none', border: 'none', color: '#9AA5B1', opacity: blocks.length === 0 ? 0.4 : 1 }"
+              @click="addTextEvent"
             >
-              <span class="inline-block rounded-full" style="width: 11px; height: 11px;" :style="{ background: z.color }" />
-              {{ z.label }}
+              <TextEventIcon style="width: 20px; height: 13px;" />
             </button>
-
             <button
-              v-if="z.label === 'Z4'"
-              title="Sweet spot · 88–94% FTP"
-              class="absolute inline-flex items-center cursor-pointer whitespace-nowrap"
-              style="top: 100%; left: 0; margin-top: 6px; gap: 7px; font: 600 13px 'Hanken Grotesk'; color: #57534e; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px; padding: 8px 14px 8px 10px;"
-              @click="addSweetSpot"
+              title="Remove all text events"
+              :disabled="events.length === 0"
+              class="clear-events inline-flex items-center"
+              :class="events.length === 0 ? 'cursor-default' : 'cursor-pointer'"
+              :style="{ opacity: events.length === 0 ? 0.4 : 1 }"
+              @click="clearTextEvents"
             >
-              <span class="inline-block rounded-full" style="width: 11px; height: 11px; background: #FBBF24;" />
-              SS
+              <UIcon name="i-heroicons-trash" style="width: 14px; height: 14px;" />
+              <span class="tabular">{{ events.length }}</span>
             </button>
           </div>
-        </template>
 
-        <div style="width: 1px; height: 22px; background: #e7e5e4; margin: 0 4px;" />
+          <div style="width: 1px; height: 22px; background: #e7e5e4; margin: 0 2px;" />
 
-        <button
-          title="Clear workout"
-          class="inline-flex items-center justify-center cursor-pointer shrink-0"
-          style="width: 38px; height: 34px; background: #fff; border: 1px solid #e7e5e4; border-radius: 20px; color: #a8a29e;"
-          @click="clearWorkout"
-        >
-          <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 6 h12" />
-            <path d="M8 6 V4.5 a1 1 0 0 1 1 -1 h2 a1 1 0 0 1 1 1 V6" />
-            <path d="M5.5 6 L6.2 16 a1.2 1.2 0 0 0 1.2 1.1 h5.2 a1.2 1.2 0 0 0 1.2 -1.1 L14.5 6" />
-          </svg>
-        </button>
+          <button
+            title="Clear workout"
+            :disabled="blocks.length === 0 && events.length === 0"
+            class="tool-chip clear-workout"
+            :style="{ width: '38px', color: '#a8a29e', opacity: blocks.length === 0 && events.length === 0 ? 0.4 : 1 }"
+            @click="clearWorkout"
+          >
+            <UIcon name="i-heroicons-trash" style="width: 16px; height: 16px;" />
+          </button>
+        </div>
+
+        <!-- Row 2: zone chips (SS = sweet spot, between Z4 and Z5) -->
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            v-for="c in ZONE_CHIPS"
+            :key="c.key"
+            :title="c.title"
+            class="inline-flex items-center cursor-pointer shrink-0 zone-chip"
+            @click="addSteady(c.power)"
+          >
+            <span class="inline-block rounded-full" style="width: 10px; height: 10px;" :style="{ background: c.color }" />
+            {{ c.label }}
+          </button>
+        </div>
       </div>
 
-      <!-- Download — icon-only, bigger than the toolbar buttons for prominence -->
-      <button
-        title="Download .zwo"
-        aria-label="Download .zwo"
-        :disabled="blocks.length === 0"
-        class="inline-flex items-center justify-center shrink-0 ml-auto"
-        :class="blocks.length === 0 ? 'cursor-not-allowed' : 'cursor-pointer'"
-        :style="{
-          width: '46px',
-          height: '46px',
-          background: '#EA580C',
-          border: 'none',
-          borderRadius: '50%',
-          boxShadow: blocks.length === 0 ? 'none' : '0 3px 10px rgba(234,88,12,.28)',
-          opacity: blocks.length === 0 ? 0.4 : 1,
-        }"
-        @click="download"
-      >
-        <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10 3 V13" />
-          <path d="M6 9 L10 13 L14 9" />
-          <path d="M4 16.5 H16" />
-        </svg>
-      </button>
+      <!-- Actions -->
+      <div class="flex-none flex flex-col gap-2" style="width: 200px;" :class="{ 'locked': editing && stale }">
+        <button
+          title="Download .zwo"
+          :disabled="blocks.length === 0"
+          class="inline-flex items-center justify-center gap-2 w-full"
+          :class="blocks.length === 0 ? 'cursor-not-allowed' : 'cursor-pointer'"
+          :style="{
+            font: `600 14px 'Hanken Grotesk'`, color: '#fff', background: '#EA580C', border: 'none', borderRadius: '10px', padding: '10px 14px',
+            boxShadow: blocks.length === 0 ? 'none' : '0 3px 10px rgba(234,88,12,.28)',
+            opacity: blocks.length === 0 ? 0.4 : 1,
+          }"
+          @click="download"
+        >
+          <UIcon name="i-heroicons-arrow-down-tray" style="width: 18px; height: 18px;" />
+          Download .zwo
+        </button>
+
+        <template v-if="editing">
+          <button
+            :disabled="isSavingDraft"
+            class="inline-flex items-center justify-center gap-2 w-full cursor-pointer"
+            style="font: 600 14px 'Hanken Grotesk'; color: #57534e; background: #fff; border: 1.5px solid #e7e5e4; border-radius: 10px; padding: 9px 14px;"
+            @click="saveDraft"
+          >
+            <UIcon name="i-heroicons-bookmark" style="width: 18px; height: 18px;" />
+            {{ isSavingDraft ? 'Saving…' : 'Save draft' }}
+          </button>
+          <p class="text-right" style="font: 400 12px/1.45 'Hanken Grotesk'; color: #a8a29e;">
+            Downloads as <span style="color: #78716c; font-weight: 500;">{{ editingFileName }}</span>. Save it over the original to update the library.
+          </p>
+        </template>
+      </div>
     </div>
 
     <!-- ── Week reminder + fuelling guide/save — even 50/50 split, divided
@@ -1216,10 +1493,78 @@ function download() {
         </div>
       </div>
     </div>
+    <ZwiftLibraryPanel
+      v-if="libraryOpen"
+      :ftp="ftp"
+      @close="libraryOpen = false"
+      @open="onLibraryOpen"
+    />
   </div>
 </template>
 
 <style scoped>
+.library-pill {
+  color: #57534e;
+  background: #fff;
+  border: 1px solid #e7e5e4;
+}
+.library-pill:hover {
+  color: #ea580c;
+  border-color: #fdba74;
+}
+.library-pill-active {
+  color: #ea580c;
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+.tool-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 34px;
+  background: #fff;
+  border: 1px solid #e7e5e4;
+  border-radius: 20px;
+  cursor: pointer;
+}
+.tool-chip:disabled { cursor: default; }
+.clear-workout:not(:disabled):hover { background: #fff1f2; border-color: #fecdd3; color: #e11d48 !important; }
+.clear-events {
+  height: 100%;
+  gap: 5px;
+  border: none;
+  border-left: 1px solid #e7e5e4;
+  background: #fff;
+  color: #a8a29e;
+  font: 600 12px 'Hanken Grotesk';
+  padding: 0 11px;
+}
+.clear-events:not(:disabled):hover { background: #fff1f2; color: #e11d48; }
+.zone-chip {
+  gap: 7px;
+  height: 28px;
+  font: 600 12px 'Hanken Grotesk';
+  color: #57534e;
+  background: #fff;
+  border: 1px solid #e7e5e4;
+  border-radius: 20px;
+  padding: 0 12px 0 10px;
+}
+.revert-btn { color: #c2410c; background: transparent; }
+.revert-btn:not(:disabled):hover { background: #ffedd5; }
+.revert-confirm { color: #f43f5e; }
+.locked { opacity: 0.4; pointer-events: none; }
+.event-field {
+  font: 500 13px 'Hanken Grotesk';
+  color: #1c1917;
+  border: 1.5px solid #e7e5e4;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #fff;
+}
+.event-field:focus { border-color: #ea580c; }
+.event-remove:hover { color: #e11d48 !important; }
 .stepper-btn {
   width: 22px;
   height: 22px;

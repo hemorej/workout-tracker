@@ -21,9 +21,9 @@
  * re-serialize something we couldn't fully represent.
  *
  * `<textevent>` children are preserved verbatim on the block they belong to
- * (`textEvents`) and re-emitted on serialize. They are *read-only*: no UI
- * edits them, and they travel with their block (offsets are relative to the
- * block start, so they are not re-timed if the block's duration changes).
+ * (`textEvents`) and re-emitted on serialize. Offsets are relative to the
+ * block start; the builder edits them as absolute-time events via
+ * `flattenTextEvents` / `attachTextEvents` below.
  *
  * Non-modelled metadata the builder doesn't touch — description, author,
  * `<tags>` (the `zone:*` tag scripts/workout-search.ts filters on lives
@@ -478,28 +478,41 @@ export function serializeZwo(meta: ZwoMeta, blocks: readonly ZwoBlock[]): string
 
 // ── Duration / TSS ───────────────────────────────────────────────────────
 
-interface Segment { duration: number, powerStart: number, powerEnd: number }
+/** Assumed intensity (fraction of FTP) of a FreeRide block, for TSS only. */
+export const FREERIDE_IF = 0.55
 
-function blocksToSegments(blocks: readonly ZwoBlock[]): Segment[] {
-  const segments: Segment[] = []
-  for (const b of blocks) {
+/**
+ * One drawable/estimable stretch of a workout. `blockIndex` is the index into
+ * the blocks array it came from (an interval yields 2×reps segments sharing
+ * one index). `free` marks FreeRide, which has no target power.
+ */
+export interface ZwoSegment {
+  blockIndex: number
+  duration: number
+  powerStart: number
+  powerEnd: number
+  free: boolean
+}
+
+export function zwoSegments(blocks: readonly ZwoBlock[]): ZwoSegment[] {
+  const segments: ZwoSegment[] = []
+  blocks.forEach((b, blockIndex) => {
     if (b.type === 'warmup' || b.type === 'cooldown') {
-      segments.push({ duration: b.duration, powerStart: b.powerStart, powerEnd: b.powerEnd })
+      segments.push({ blockIndex, duration: b.duration, powerStart: b.powerStart, powerEnd: b.powerEnd, free: false })
     }
     else if (b.type === 'steady') {
-      segments.push({ duration: b.duration, powerStart: b.power, powerEnd: b.power })
+      segments.push({ blockIndex, duration: b.duration, powerStart: b.power, powerEnd: b.power, free: false })
     }
     else if (b.type === 'freeride') {
-      // No target power: contributes duration but 0 TSS.
-      segments.push({ duration: b.duration, powerStart: 0, powerEnd: 0 })
+      segments.push({ blockIndex, duration: b.duration, powerStart: FREERIDE_IF, powerEnd: FREERIDE_IF, free: true })
     }
     else if (b.type === 'interval') {
       for (let i = 0; i < b.reps; i++) {
-        segments.push({ duration: b.onDuration, powerStart: b.onPower, powerEnd: b.onPower })
-        segments.push({ duration: b.offDuration, powerStart: b.offPower, powerEnd: b.offPower })
+        segments.push({ blockIndex, duration: b.onDuration, powerStart: b.onPower, powerEnd: b.onPower, free: false })
+        segments.push({ blockIndex, duration: b.offDuration, powerStart: b.offPower, powerEnd: b.offPower, free: false })
       }
     }
-  }
+  })
   return segments
 }
 
@@ -511,7 +524,7 @@ function blocksToSegments(blocks: readonly ZwoBlock[]): Segment[] {
  */
 export function estimateTss(blocks: readonly ZwoBlock[]): number {
   const trace: number[] = []
-  for (const seg of blocksToSegments(blocks)) {
+  for (const seg of zwoSegments(blocks)) {
     const wholeSecs = Math.round(seg.duration)
     for (let i = 0; i < wholeSecs; i++) {
       const frac = wholeSecs <= 1 ? 0 : i / (wholeSecs - 1)
@@ -532,6 +545,85 @@ export function estimateTss(blocks: readonly ZwoBlock[]): number {
 
   const np = (fourthPowerSum / trace.length) ** 0.25
   return Math.round((trace.length / 3600) * np ** 2 * 100)
+}
+
+// ── Text events (absolute-time view) ─────────────────────────────────────
+
+/**
+ * A text event on the workout's absolute timeline. In the file, a
+ * `<textevent>` hangs off a block with a `timeoffset` relative to that block's
+ * start; the builder works in absolute seconds, so these helpers convert.
+ * `attrs` carries any attributes we don't model (e.g. `duration`) so they
+ * survive a round trip.
+ */
+export interface ZwoTimelineEvent {
+  at: number
+  text: string
+  attrs: Record<string, string>
+}
+
+function attrCI(attrs: Record<string, string>, name: string): string | undefined {
+  for (const [k, v] of Object.entries(attrs)) if (k.toLowerCase() === name) return v
+  return undefined
+}
+
+/** Splits per-block `textEvents` into absolute-time events + event-free blocks. */
+export function flattenTextEvents(blocks: readonly ZwoBlock[]): { blocks: ZwoBlock[], events: ZwoTimelineEvent[] } {
+  const events: ZwoTimelineEvent[] = []
+  const out: ZwoBlock[] = []
+  let cursor = 0
+  for (const b of blocks) {
+    const total = blockTotalSeconds(b)
+    for (const ev of b.textEvents ?? []) {
+      const offset = Number(attrCI(ev.attrs, 'timeoffset') ?? 0)
+      const rest: Record<string, string> = {}
+      for (const [k, v] of Object.entries(ev.attrs)) {
+        const lk = k.toLowerCase()
+        if (lk !== 'timeoffset' && lk !== 'message') rest[k] = v
+      }
+      events.push({
+        at: cursor + (Number.isFinite(offset) && offset > 0 ? offset : 0),
+        text: attrCI(ev.attrs, 'message') ?? '',
+        attrs: rest,
+      })
+    }
+    const { textEvents: _drop, ...plain } = b
+    out.push(plain as ZwoBlock)
+    cursor += total
+  }
+  events.sort((a, c) => a.at - c.at)
+  return { blocks: out, events }
+}
+
+/**
+ * Inverse of `flattenTextEvents`: each event goes on the block that contains
+ * its time (an event past the end lands on the last block). With no blocks
+ * there is nothing to hang events on, so they are dropped.
+ */
+export function attachTextEvents(blocks: readonly ZwoBlock[], events: readonly ZwoTimelineEvent[]): ZwoBlock[] {
+  const out: ZwoBlock[] = blocks.map((b) => {
+    const { textEvents: _drop, ...plain } = b
+    return plain as ZwoBlock
+  })
+  if (out.length === 0) return out
+
+  const starts: number[] = []
+  let cursor = 0
+  for (const b of out) {
+    starts.push(cursor)
+    cursor += blockTotalSeconds(b)
+  }
+
+  for (const ev of [...events].sort((a, c) => a.at - c.at)) {
+    let idx = out.length - 1
+    for (let i = 0; i < out.length; i++) {
+      if (ev.at < starts[i]! + blockTotalSeconds(out[i]!)) { idx = i; break }
+    }
+    const offset = Math.max(0, Math.round(ev.at - starts[idx]!))
+    const target = out[idx]!
+    ;(target.textEvents ??= []).push({ attrs: { ...ev.attrs, timeoffset: String(offset), message: ev.text } })
+  }
+  return out
 }
 
 // ── Canonical form ───────────────────────────────────────────────────────
