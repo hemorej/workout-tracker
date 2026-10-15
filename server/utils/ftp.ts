@@ -17,8 +17,10 @@ import { desc, asc, isNotNull, eq, and, lte } from 'drizzle-orm'
 import { workouts } from '../db/schema'
 import { useDB } from '../db'
 
+/** Used when the athlete has never logged an FTP marker. */
 const FALLBACK_FTP = 230
 
+/** The most recent `ftp_watts` marker for `userId`, or 230 if none exists. */
 export async function getCurrentFtpWatts(userId: number): Promise<number> {
   const db = useDB()
 
@@ -32,6 +34,10 @@ export async function getCurrentFtpWatts(userId: number): Promise<number> {
   return mostRecentFtp?.ftpWatts ?? FALLBACK_FTP
 }
 
+/**
+ * The FTP in effect on `date` ("YYYY-MM-DD"): the latest marker on or before
+ * it, else the earliest marker overall, else 230.
+ */
 export async function getFtpAsOf(userId: number, date: string): Promise<number> {
   const db = useDB()
 

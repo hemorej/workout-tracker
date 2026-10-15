@@ -3,9 +3,12 @@
  * from the raw per-second record stream a head unit/trainer wrote, rather
  * than a third party's smoothed/compressed numbers.
  *
- * Used by server/utils/wahoo.ts against files downloaded from Wahoo's Cloud
- * API. Formerly a standalone CLI (scripts/analyze-fit.ts) — folded in here
- * once the app started doing this parsing itself on every logged ride.
+ * Used by server/utils/wahoo.ts (files downloaded from Wahoo's Cloud API),
+ * POST /api/fit/upload (manual upload for indoor/Zwift rides), the Wahoo
+ * webhook, and the one-off scripts under scripts/. Callers shape the result
+ * into workout fields via `metricsToWorkoutFields` (./fitWorkout). Formerly a
+ * standalone CLI (scripts/analyze-fit.ts) — folded in here once the app
+ * started doing this parsing itself on every logged ride.
  */
 
 import FitParser from 'fit-file-parser'
@@ -143,8 +146,7 @@ export interface ParsedFitMetrics {
 /**
  * Upper FTP-fraction bound of Z1…Z5 (Z6 is the open-ended tail). Mirrors
  * `ZONES` in app/components/WorkoutBuilderTab.vue and `zoneFor`'s `pct <= z.max`
- * (upper bound inclusive). Keep in sync with the design ramp in
- * design_handoff_time_in_zone/README.md.
+ * (upper bound inclusive) — keep the three in sync.
  */
 const ZONE_UPPER_PCT = [0.55, 0.75, 0.90, 1.05, 1.20]
 
@@ -164,6 +166,7 @@ function computeZoneBuckets(w: number[], ftp: number): number[] {
   return buckets
 }
 
+/** Arithmetic mean; 0 for an empty array. */
 function mean(arr: number[] | Float64Array): number {
   if (arr.length === 0) return 0
   let sum = 0

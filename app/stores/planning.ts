@@ -2,7 +2,8 @@
  * Planning store (Pinia)
  *
  * Manages the 4-week training plan grid:
- *   - The list of planned days (28 days, current Monday + 3 weeks ahead)
+ *   - The list of planned days (at least 28: the current Monday + 3 weeks ahead,
+ *     extended to whole weeks to cover any later planned day or added week)
  *   - Current CTL and ATL from the actual training history (used as the seed)
  *   - Projected CTL and TSB computed locally without a round-trip
  *
@@ -10,8 +11,10 @@
  *   fetchPlans()         — loads the plan grid from the API
  *   savePlan(date, entry)— upserts a planned workout and recomputes projections
  *   clearPlan(date)      — removes a planned workout and recomputes projections
- *   setDraft / discardDraft / applyDraft / undoApply — the "Suggest plan" preview
- *                          overlay and its batch write (see below)
+ *   addWeek / extendTo   — append blank weeks (client-side until a day is saved)
+ *   setDraft / discardDraft / draftConflicts / projectCtl / applyDraft / undoApply
+ *                        — the "Suggest plan" preview overlay, its projected-CTL
+ *                          readout and its batch write (see below)
  *
  * The local recompute (recomputeProjections) uses the same EMA formula as the
  * server so draft TSS values update the projected numbers as the user types,
@@ -43,7 +46,7 @@ export interface PlannedDay {
   actual: { tss: number, durationMinutes: number } | null
   /** Projected Chronic Training Load after applying this day's planned TSS */
   projectedCtl: number
-  /** Projected Training Stress Balance (CTL − ATL) at the start of this day */
+  /** Projected Training Stress Balance (CTL − ATL) at the end of this day, after its TSS is absorbed (same convention as server/utils/tss.ts) */
   projectedTsb: number
 }
 

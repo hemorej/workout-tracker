@@ -31,7 +31,8 @@
  *
  *  These are first-order IIR (infinite impulse response) low-pass filters.
  *  The "/ 42" and "/ 7" terms set the time constants.
- *  CTL and ATL both start at 0 (assuming no prior training history).
+ *  CTL and ATL are seeded from `initialCTL` / `initialATL` (the user's
+ *  `users.initial_ctl` / `initial_atl`, default 0 = no prior training history).
  *
  * ─── Note on TSB timing ─────────────────────────────────────────────────────
  *

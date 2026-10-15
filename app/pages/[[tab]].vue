@@ -1,28 +1,26 @@
 <script setup lang="ts">
 /**
- * Homepage / Dashboard
+ * Dashboard shell — the app's only authenticated page.
  *
- * The main view of the app. Requires the user to be logged in.
+ * Matches `/` and `/:tab` (optional catch-all), so the URL drives the active
+ * tab: Training log (`/`), Planning (`/planning`), Workout builder
+ * (`/builder`), History (`/history`). Alt/Option+1..4 jump between tabs.
+ * Switching tabs remounts the page, which is why cross-tab hand-offs go
+ * through Pinia stores (`coach`, `zwiftLibrary`).
  *
- * Layout:
- *  ┌─────────────────────────────────────────────────────┐
- *  │  Header: app name + username + logout button         │
- *  ├─────────────────────────────────────────────────────┤
- *  │  MetricsSummary: weekly TSS, hours, CTL, TSB         │
- *  ├─────────────────────────────────────────────────────┤
- *  │  "Add workout" button                                │
- *  ├─────────────────────────────────────────────────────┤
- *  │  WorkoutCard list (paginated, newest first)          │
- *  │    — workouts show name, duration, TSS, metrics      │
- *  │    — rest days show "Rest day" badge                 │
- *  ├─────────────────────────────────────────────────────┤
- *  │  Pagination controls                                 │
- *  └─────────────────────────────────────────────────────┘
+ * This file owns the Training log tab itself plus the flows launched from it:
+ *  - MetricsSummary + paginated WorkoutCard list (days incl. rest days), with
+ *    the filter bar (name/type/TSS/distance/duration/date) pushed to the
+ *    workouts store, which switches GET /api/workouts to its filtered mode
+ *  - "Mark as completed" — Strava activity picker → FIT from Wahoo (outdoor)
+ *    or manual upload (indoor) → AddWorkoutModal prefill; per-row "Refresh
+ *    ride data" re-runs that for an existing workout (PATCH)
+ *  - "Auto-build" — AI coach (POST /api/coach/generate) → builder tab
+ *  - ride-stats overlay (fitData/laps loaded on demand), CTL/TSB history
+ *    chart modal, user settings modal
  *
- * Data flow:
- *  - On mount: workoutsStore.fetchPage(1) loads first page + summary stats
- *  - AddWorkoutModal emits 'saved' → store.fetchPage(1) refreshes everything
- *  - WorkoutCard emits 'delete' → store.deleteWorkout(id)
+ * The other tabs are components (PlanningTab, WorkoutBuilderTab, HistoryTab).
+ * The initial load (first workouts page + planning grid) runs during SSR.
  */
 
 import { useAuthStore } from '~/stores/auth'
@@ -619,7 +617,7 @@ async function onPageChange(page: number) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-// ── Training log filter bar — UI only, not yet wired to the workout list ──
+// ── Training log filter bar — local UI state, pushed to the workouts store below ──
 type LogFilterType = 'all' | 'zwift' | 'outdoor'
 type LogPanel = null | 'type' | 'tss' | 'dist' | 'dur' | 'dates'
 

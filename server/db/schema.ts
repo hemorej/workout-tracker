@@ -1,12 +1,18 @@
 /**
  * Drizzle ORM schema definitions.
  *
- * Two tables:
- *   - users     — stores login credentials (email, username, hashed password)
- *   - workouts  — one workout entry per user per calendar day
+ * Tables:
+ *   - users                 — login credentials, CTL/ATL seeds, training plan, weight
+ *   - workouts              — one logged workout per user per calendar day (+ FIT-derived JSON)
+ *   - power_bests           — per-workout "best effort" durations (see server/utils/powerBests.ts)
+ *   - planned_workouts      — one planned session per user per day (Planning tab)
+ *   - wahoo_power_bests     — power-curve bests auto-detected from Wahoo rides
+ *   - wahoo_tokens          — the single rotating Wahoo OAuth refresh token
+ *   - tracked_segments / segment_efforts — starred Strava segments and the athlete's efforts
+ *   - zwift_workouts / zwift_workout_drafts — mirror of the local Zwift .zwo folder + web drafts
  *
- * Relationships:
- *   workouts.userId → users.id  (cascade delete: removing a user also removes their workouts)
+ * Every user-owned table cascades on user delete (workouts → power_bests also cascades).
+ * Relations for Drizzle's relational query API are declared near the bottom.
  */
 
 import {
@@ -115,16 +121,18 @@ export const users = pgTable('users', {
 
   /**
    * Acute Training Load (fatigue) on the day before the first workout.
-   * Defaults to the same value as initialCtl (assumes neutral form / TSB ≈ 0).
+   * Column default is 0 (independent of initialCtl); set it alongside
+   * initialCtl if you want to start from a neutral form (TSB ≈ 0).
    *
    * Override only if you know your actual fatigue level at that point.
    */
   initialAtl: integer('initial_atl').default(0).notNull(),
 
   /**
-   * Free-text training plan, used as context for the AI coach's workout
-   * generation (see server/api/coach/generate.post.ts). Not committed to
-   * the repo — edit via the settings UI or SQL when it changes.
+   * Free-text training plan, used as context for the AI coach (workout
+   * generation, plan suggestion and block-progression parsing — see
+   * server/api/coach/). Not committed to the repo — edit via the settings UI
+   * or SQL when it changes.
    */
   trainingPlan: text('training_plan'),
 
@@ -185,7 +193,11 @@ export const workouts = pgTable(
     /** Optional free-text notes about the workout */
     notes: text('notes'),
 
-    /** FTP (Functional Threshold Power) in watts recorded during this workout, if updated */
+    /**
+     * FTP (Functional Threshold Power) in watts. A *sparse marker*: set only
+     * on the day FTP changed, null otherwise — the FTP in effect on a date is
+     * the most recent marker on or before it (see server/utils/ftp.ts).
+     */
     ftpWatts: integer('ftp_watts'),
 
     /**
@@ -205,7 +217,7 @@ export const workouts = pgTable(
 
     /**
      * Extra stats from a parsed FIT file (avg/max power, NP, IF, avg/max HR,
-     * avg/max cadence) — see WorkoutFitData above. Null until a FIT file has
+     * avg/max cadence, time-in-zone) — see WorkoutFitData above. Null until a FIT file has
      * been parsed for this workout (via "Mark as completed" or "Refresh ride
      * data"); older/manually-entered workouts never get one.
      */
@@ -303,7 +315,7 @@ export const plannedWorkouts = pgTable(
       .notNull(),
     date: date('date').notNull(),
     name: text('name'),
-    /** Training zone: 'zone2' | 'zone4' | 'zone5' | 'zone6' */
+    /** Session type: 'zone2' | 'zone4' | 'zone5' | 'zone6' | 'rest' | 'outdoor' (PLAN_DAY_TYPES in server/utils/anthropic.ts) */
     type: text('type'),
     tss: integer('tss'),
     durationMinutes: integer('duration_minutes'),
@@ -320,9 +332,11 @@ export const plannedWorkouts = pgTable(
 //
 // Best rolling-average watts per duration, derived from Wahoo activity FIT
 // files (parsed by server/utils/fit.ts). Distinct from `power_bests` above,
-// which holds manually-entered/confirmed per-workout bests — this table
-// records whatever the raw power data showed for any ride the user previewed
-// via the "Mark completed" picker, regardless of whether they logged it.
+// which holds the per-workout best efforts saved with a *logged* workout —
+// this table records whatever the raw power data showed for any ride seen via
+// the Wahoo API (previewed through the "Mark completed" picker, or delivered
+// by the webhook), regardless of whether the user logged it. Single-user:
+// rows aren't keyed by user.
 //
 // Formerly `strava_power_bests`, populated by a nightly script against
 // Strava's power streams — renamed when the data source moved to Wahoo's
@@ -377,7 +391,7 @@ export const wahooPowerBests = pgTable(
 // expires under normal use) — server/utils/wahoo.ts persists the newest
 // value here so a process restart/deploy can pick up where the last one
 // left off instead of falling back to the (by then stale) WAHOO_REFRESH_TOKEN
-// env var. See CLAUDE.md's Wahoo integration section.
+// env var. See CLAUDE.md's "Wahoo Cloud API" section.
 // ---------------------------------------------------------------------------
 
 export const wahooTokens = pgTable('wahoo_tokens', {
@@ -398,7 +412,7 @@ export const wahooTokens = pgTable('wahoo_tokens', {
 // POST /api/segments/sync (the "Sync segments" button) and refreshed by the
 // nightly POST /api/segments/reconcile. A row is kept when the segment is
 // un-starred (`starred = false`) rather than deleted, so re-starring is
-// instant and the effort history survives. See CLAUDE.md's Strava segments
+// instant and the effort history survives. See CLAUDE.md's "Tracked segments"
 // section.
 // ---------------------------------------------------------------------------
 

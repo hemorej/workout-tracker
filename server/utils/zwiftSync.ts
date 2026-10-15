@@ -29,11 +29,16 @@ export const ZWIFT_SYNC_LIMITS = {
   maxDeletesPerBatch: 200,
 } as const
 
+/** Hex sha256 of a UTF-8 string — `contentHash` / `modelHash` values. */
 export function sha256Hex(s: string): string {
   return createHash('sha256').update(s, 'utf8').digest('hex')
 }
 
-/** First thing both sync handlers do — before any body read, DB or parse work. */
+/**
+ * First thing both sync handlers do — before any body read, DB or parse work.
+ * Throws 401 unless `Authorization: Bearer <NUXT_ZWIFT_SYNC_TOKEN>` matches
+ * (constant-time). An unset token ⇒ always 401.
+ */
 export function requireZwiftSyncToken(event: Parameters<typeof getHeader>[0]) {
   const expected = useRuntimeConfig().zwiftSyncToken as string | undefined
   const provided = getHeader(event, 'authorization')?.replace(/^Bearer\s+/i, '')
@@ -80,12 +85,19 @@ export async function readSyncBody(event: Parameters<typeof readRawBody>[0]): Pr
   return parsed.data
 }
 
+/** Per-batch counters returned to the daemon (and logged as `zwift.sync_applied`). */
 export interface ZwiftSyncResult {
+  /** Files inserted or updated (content changed). */
   upserted: number
+  /** Files whose contentHash already matched. */
   unchanged: number
+  /** Soft-deleted files that reappeared unchanged. */
   restored: number
+  /** Files soft-deleted by this batch. */
   deleted: number
+  /** Drafts removed because the saved file now equals them (modelHash match). */
   draftsCleared: number
+  /** Files skipped (invalid path/too large/unparseable); capped at 20 entries. */
   rejected: Array<{ path: string, reason: string }>
 }
 

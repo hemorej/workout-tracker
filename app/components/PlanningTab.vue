@@ -1,4 +1,21 @@
 <script setup lang="ts">
+/**
+ * Planning tab — rolling week-by-week grid (current Monday + 3 weeks, more
+ * when later days are planned or "Add week" is used) for sketching upcoming
+ * training. All grid state lives in the planning store.
+ *
+ *  - Past days show the logged workout's actual TSS/duration (dimmed,
+ *    read-only); future days are inline-editable (name, zone badge, TSS,
+ *    duration, notes) and save on blur/Enter via PUT /api/planned-workouts.
+ *  - CTL/TSB projections recompute locally as the user types (draft values
+ *    included) using the same EMA constants as server/utils/tss.ts.
+ *  - Per-row AI actions: "build complete workout" (emits `buildWorkout`, handled
+ *    by pages/[[tab]].vue → coach store → builder tab) and "fuelling guidelines
+ *    only" (POST /api/coach/generate?mode=fuelling).
+ *  - <PlanSuggest> adds the multi-week "Suggest plan" preview overlay; leaving
+ *    the tab discards an unapplied preview.
+ *  - `openTodaysEvents` asks the page to show TodaysEventsDialog.
+ */
 import { usePlanningStore } from '~/stores/planning'
 import type { PlanEntry } from '~/stores/planning'
 import { sameSession } from '~/stores/planning'

@@ -2,7 +2,10 @@
  * Resolves the single target user for secret-authed, session-less endpoints
  * (Zwift sync, and the same logic the Wahoo webhook / segments reconcile
  * inline): `NUXT_WEBHOOK_USER_EMAIL` if set, else the sole `users` row.
- * Ambiguous or empty ⇒ `null` (the caller decides how to respond).
+ * Ambiguous or empty ⇒ `userId: null` (the caller decides how to respond);
+ * `matched` is the number of rows found (0, 1, or 2 meaning "more than one").
+ *
+ * The Wahoo webhook and segments reconcile still inline the same lookup.
  */
 
 import { eq } from 'drizzle-orm'

@@ -1,8 +1,8 @@
 /**
  * One-off backfill: populate workouts.strava_activity_id for historical
- * entries logged before this field existed, so the AI insights endpoint can
- * fetch their raw power/HR stream from Strava (see server/utils/strava.ts's
- * fetchActivityStreams, used by server/api/workouts/[id]/insights.post.ts).
+ * entries logged before this field existed, so those rows can be matched back
+ * to their Strava activity (used by the tracked-segments sync and the overlay
+ * page's NP lookup).
  *
  * Matching strategy: one workout per calendar day (enforced by the DB's
  * unique (user_id, date) index), so each workout is matched to the Strava

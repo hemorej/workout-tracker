@@ -2,7 +2,7 @@
 /**
  * AddWorkoutModal — the form fields only, no modal wrapper.
  *
- * UModal lives in index.vue (where the open state is owned).
+ * The modal wrapper lives in pages/[[tab]].vue (where the open state is owned).
  * This component just handles form state, validation, and submission.
  *
  * Emits:

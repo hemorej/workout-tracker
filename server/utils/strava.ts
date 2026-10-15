@@ -1,5 +1,8 @@
 /**
- * Strava API access for the single-user "mark as completed" flow.
+ * Strava API access (single connected athlete): the "mark as completed"
+ * picker's activity list, the photo-overlay page's activity detail/streams, and
+ * — via `getStravaAccessToken` — the tracked-segments feature
+ * (./stravaSegments).
  *
  * OAuth is set up once, out of band (see CLAUDE.md) — this app never runs the
  * authorization redirect itself. It only holds a long-lived refresh token and
@@ -185,7 +188,11 @@ export async function fetchStravaActivityOverlayData(activityId: number): Promis
   }
 }
 
-/** Fetches the most recent Strava activities of type "Ride", newest first. */
+/**
+ * Fetches the most recent Strava rides (`Ride` and `VirtualRide`), newest
+ * first. Looks at the athlete's last 15 activities and keeps the first `limit`
+ * rides among them, so a run of non-rides can return fewer than `limit`.
+ */
 export async function fetchRecentStravaRides(limit = 3): Promise<StravaRideSummary[]> {
   const accessToken = await getStravaAccessToken()
 

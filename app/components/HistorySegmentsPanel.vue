@@ -3,7 +3,7 @@
  * History → 🏔️ Segments
  *
  * Lists the user's tracked Strava segments (their starred list, mirrored
- * locally — see CLAUDE.md's Strava segments section). Each row expands to a
+ * locally — see CLAUDE.md's "Tracked segments" section). Each row expands to a
  * sorted top-5 of the athlete's fastest efforts on that segment: time,
  * speed, power, HR, rank and date. Elevation gain is a property of the
  * segment, so it's shown once in the row's summary, not per effort.

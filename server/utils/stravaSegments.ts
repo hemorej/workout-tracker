@@ -1,6 +1,6 @@
 /**
  * Strava segment + segment-effort access for the "tracked segments" feature
- * (see CLAUDE.md's Strava segments section).
+ * (see CLAUDE.md's "Tracked segments" section).
  *
  * Everything here is scoped to the single connected athlete — Strava's API
  * only ever returns the authenticated athlete's own efforts on a segment,

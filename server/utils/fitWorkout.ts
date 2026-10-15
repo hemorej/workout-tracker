@@ -5,12 +5,14 @@
  *   - POST /api/fit/upload      (indoor/manual "Mark as completed")
  *   - POST /api/wahoo/webhook   (auto-log from a Wahoo webhook)
  *
- * `metricsToWorkoutFields` returns the exact object shape the first two
- * endpoints have always returned to the client, so their responses stay
- * byte-identical after the refactor.
+ * `metricsToWorkoutFields` returns the shape the first two endpoints send to
+ * the client as the Add Workout form prefill (the webhook uses the same
+ * fields to write the row directly). `powerBests` there are *all* parsed
+ * durations; `withNewBestEffortsOnly` (prefill time) and `filterNewBestEfforts`
+ * (save time, ./powerBests) narrow them to genuine improvements.
  *
- * `upsertWahooPowerBests` is the `wahoo_power_bests` upsert+prune lifted
- * verbatim from by-date.get.ts — it records whatever raw power any
+ * `upsertWahooPowerBests` is the `wahoo_power_bests` upsert+prune shared by
+ * by-date.get.ts and the webhook — it records whatever raw power any
  * Wahoo-sourced ride showed, pruned to the all-time top-3 / trailing-8-week
  * retention window per duration.
  */
@@ -19,9 +21,7 @@ import { sql } from 'drizzle-orm'
 import { wahooPowerBests, type WorkoutFitData, type WorkoutLap } from '../db/schema'
 import type { ParsedFitMetrics } from './fit'
 import type { useDB } from '../db'
-import { filterNewBestEfforts } from './powerBests'
-
-const EIGHT_WEEKS_MS = 8 * 7 * 24 * 60 * 60 * 1000
+import { filterNewBestEfforts, EIGHT_WEEKS_MS } from './powerBests'
 
 export interface FitWorkoutFields {
   tss: number
@@ -32,7 +32,12 @@ export interface FitWorkoutFields {
   laps: WorkoutLap[] | null
 }
 
-/** Exact response shape GET /api/wahoo/by-date and POST /api/fit/upload build today. */
+/**
+ * Shapes parsed FIT metrics into the fields a logged workout needs.
+ * `ftpWatts` is the FTP the zone split was bucketed against (stored as
+ * `fitData.zoneFtp`). `laps` is null unless the file had 2+ laps.
+ * Also the response shape of GET /api/wahoo/by-date and POST /api/fit/upload.
+ */
 export function metricsToWorkoutFields(metrics: ParsedFitMetrics, ftpWatts: number): FitWorkoutFields {
   return {
     tss: metrics.tss,

@@ -260,7 +260,7 @@ export default defineEventHandler(async (event) => {
   invalidateMetrics(user.id)
 
   // Outdoor rides created from a Strava activity: pull that activity's segment
-  // efforts for any tracked segment (see CLAUDE.md's Strava segments section).
+  // efforts for any tracked segment (see CLAUDE.md's "Tracked segments" section).
   // Fire-and-forget — Strava matches segments asynchronously so this can be
   // early, and the nightly reconcile is the backstop.
   if (newWorkout.rideType === 'outdoor' && newWorkout.stravaActivityId) {

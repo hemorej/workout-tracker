@@ -19,6 +19,10 @@
  * window per duration (same as the old activities/[id] endpoint this
  * replaces).
  *
+ * `powerBests` in the response is already narrowed to durations that beat the
+ * athlete's trailing-8-week (or all-time) max as of that day
+ * (`withNewBestEffortsOnly`); `wahoo_power_bests` still gets every duration.
+ *
  * Returns:
  *   200 { ride: WahooRideSummary, tss, powerBests, durationSeconds, distanceMeters, fitData, laps }
  *   400 for a missing/invalid date

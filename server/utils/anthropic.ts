@@ -1,6 +1,10 @@
 /**
- * Anthropic Messages API access for the AI coach + the structured-output
- * schema for AI-generated workouts (server/api/coach/generate.post.ts).
+ * Anthropic Messages API access for the AI coach (server/api/coach/*) and the
+ * structured-output schemas for its four calls:
+ *   - `generateCoachWorkout`      — one structured workout + fuelling guide
+ *   - `generateCoachFuellingGuide`— fuelling guide only
+ *   - `generateCoachPlan`         — 1–4 weeks of planned workouts
+ *   - `extractBlockProgression`   — weekly TSS targets parsed from the plan text
  *
  * This talks to `POST /v1/messages` directly with `fetch` rather than through
  * `@anthropic-ai/sdk`. The route only ever makes one kind of call — a single
@@ -41,7 +45,7 @@ const MAX_TOKENS = 10000
 const TTFT_TIMEOUT_MS = 45_000
 const OVERALL_TIMEOUT_MS = 120_000
 
-/** Matches the old `new Anthropic({ maxRetries: 2 })` default. */
+/** Retries after the first attempt (so up to 3 requests); transient failures only. */
 const MAX_RETRIES = 2
 const RETRYABLE_STATUS = new Set([408, 409, 429, 500, 502, 503, 529])
 
@@ -88,6 +92,11 @@ const IntervalBlockSchema = z.object({
   offCadence: z.number().int().nullable().describe('target cadence in rpm, or null if unspecified'),
 })
 
+/**
+ * One AI-generated workout. Block shapes mirror the builder's block union
+ * (WorkoutBuilderTab.vue) minus its client-only `id`; powers are fractions of
+ * FTP and durations are seconds.
+ */
 export const CoachWorkoutSchema = z.object({
   name: z.string().describe('short workout title, e.g. "3x10min Sweet Spot"'),
   blocks: z.array(z.discriminatedUnion('type', [RampBlockSchema, SteadyBlockSchema, IntervalBlockSchema]))
@@ -106,6 +115,12 @@ export const FuellingGuideSchema = z.object({
 
 export type FuellingGuide = z.infer<typeof FuellingGuideSchema>
 
+/** Shared JSON-Schema fragment for the nullable cadence fields below. */
+const cadence = {
+  anyOf: [{ type: 'integer' }, { type: 'null' }],
+  description: 'target cadence in rpm, or null if unspecified',
+} as const
+
 /**
  * Wire schema for `output_config.format`. Must stay in sync with
  * `CoachWorkoutSchema` above — kept hand-written (see the file header for
@@ -113,11 +128,6 @@ export type FuellingGuide = z.infer<typeof FuellingGuideSchema>
  * `enum`/`const`, `anyOf`, `required`, `additionalProperties: false`,
  * `description`.
  */
-const cadence = {
-  anyOf: [{ type: 'integer' }, { type: 'null' }],
-  description: 'target cadence in rpm, or null if unspecified',
-} as const
-
 const COACH_WORKOUT_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -177,6 +187,7 @@ const COACH_WORKOUT_JSON_SCHEMA = {
   },
 } as const
 
+/** Wire schema for `FuellingGuideSchema` (see COACH_WORKOUT_JSON_SCHEMA). */
 const FUELLING_GUIDE_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -400,13 +411,14 @@ export async function generateCoachFuellingGuide(
   return withCoachRetries(() => streamStructuredRequest(apiKey, body, FuellingGuideSchema))
 }
 
+/** Valid `planned_workouts.type` values (also the Planning tab's zone badges). */
+export const PLAN_DAY_TYPES = ['zone2', 'zone4', 'zone5', 'zone6', 'rest', 'outdoor'] as const
+
 /**
  * Multi-week plan suggestion (server/api/coach/generate-plan.post.ts). One
  * entry per requested day; days the model leaves empty come back with all-null
  * fields and are dropped by the route.
  */
-export const PLAN_DAY_TYPES = ['zone2', 'zone4', 'zone5', 'zone6', 'rest', 'outdoor'] as const
-
 export const CoachPlanSchema = z.object({
   weeks: z.array(z.object({
     monday: z.string().describe('YYYY-MM-DD of the Monday starting this week'),
@@ -505,6 +517,10 @@ const BLOCK_PROGRESSION_JSON_SCHEMA = {
   },
 } as const
 
+/**
+ * Parses the weekly TSS progression of one block out of the free-text training
+ * plan (server/api/coach/block-progression.get.ts, which caches the result).
+ */
 export async function extractBlockProgression(
   systemBlocks: AnthropicSystemBlock[],
   userText: string,

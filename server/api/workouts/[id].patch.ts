@@ -8,7 +8,12 @@
  *
  * Only the workout's owner can update it — same id+userId filter as DELETE.
  *
- * Body (JSON): same shape as POST /api/workouts.
+ * Body (JSON): same shape as POST /api/workouts — and the update is a full
+ * replace of the editable columns, not a partial patch: `date`, `name`,
+ * `durationMinutes`, `distanceKm`, `tss`, `rpe`, `notes`, `ftpWatts`, `rideType`,
+ * `fitData` and `laps` are all overwritten, with omitted optional fields stored
+ * as null (so omitting `laps` wipes the stored laps). `stravaActivityId` is
+ * not updatable here. A date already used by a different workout is a 409.
  *
  * powerBests, if provided, fully replaces the workout's existing power-best
  * rows (delete + reinsert) rather than merging — the simplest correct way to
@@ -20,6 +25,7 @@
  *   200 { workout }  on success
  *   400 for validation errors
  *   404 if the workout doesn't exist or belongs to a different user
+ *   409 if another workout is already logged on the (new) date
  */
 
 import { eq, and, ne } from 'drizzle-orm'

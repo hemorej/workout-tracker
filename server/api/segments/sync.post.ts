@@ -4,7 +4,7 @@
  * The "Sync segments" button on the History → Segments tab. Strava has no
  * webhook for starring and no "list every segment I've ridden" endpoint, so
  * the athlete's starred list is the tracked set and this is how it's pulled
- * in (see CLAUDE.md's Strava segments section).
+ * in (see CLAUDE.md's "Tracked segments" section).
  *
  * Steps:
  *  1. Fetch the starred list; upsert a `tracked_segments` row per entry and

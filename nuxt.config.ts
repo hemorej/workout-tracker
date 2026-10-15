@@ -60,7 +60,11 @@ export default defineNuxtConfig({
 
     /**
      * Runtime config values exposed server-side only (no `public` key = server only).
-     * These are overridden by environment variables at runtime:
+     * Values come from `process.env` when this file is evaluated (dev / build).
+     * At runtime Nuxt additionally overrides any key from a `NUXT_`-prefixed
+     * variable (camelCase → SCREAMING_SNAKE), so e.g. `NUXT_WAHOO_CLIENT_ID`
+     * also sets `wahooClientId` — either spelling works for the Strava/Wahoo
+     * credentials below. The variables that read from `process.env` here:
      *   DATABASE_URL            → runtimeConfig.databaseUrl
      *   NUXT_SESSION_PASSWORD   → read directly by nuxt-auth-utils (≥32 chars required)
      *   NUXT_SESSION_MAX_AGE    → overrides runtimeConfig.session.maxAge

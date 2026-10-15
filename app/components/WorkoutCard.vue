@@ -12,8 +12,13 @@
  *   - Optional notes (truncated, expandable)
  *   - A single overflow menu per logged row; delete lives inside it
  *
- * Emits:
- *   delete — when the user confirms deletion (parent calls the store)
+ * Emits (all handled by pages/[[tab]].vue):
+ *   delete            — user confirmed deletion (parent calls the store)
+ *   mark-completed    — open the Strava activity picker for a planned day
+ *   open-fit-overlay  — show the ride-stats popup (WorkoutFitOverlay)
+ *   refresh-ride-data — re-parse the FIT file for an already-logged workout
+ *   reupload-fit      — same, but force the manual FIT upload step
+ *   edit              — open the Add Workout form in edit mode
  */
 
 import type { DropdownMenuItem } from '@nuxt/ui'
@@ -211,7 +216,7 @@ function confirmDelete() {
     so they sit snug together instead of spreading across the column.
     Workout rows have a left accent line in orange-600.
     Rest days are visually quieter — no accent, lighter text.
-    The parent (index.vue) wraps all rows in a single white container
+    The parent (pages/[[tab]].vue) wraps all rows in a single white container
     with divide-y so the borders render between rows, not around each one.
   -->
   <!-- Mobile swipe row (< sm): panel 1 (title/duration/distance) at rest,

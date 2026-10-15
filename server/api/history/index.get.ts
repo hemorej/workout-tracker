@@ -4,8 +4,9 @@
  * Returns aggregated training history grouped by the requested period,
  * plus a power-bests panel (last 8 weeks vs all time) and current FTP.
  *
- * The power-bests panel merges two sources: manually-entered bests tied to
- * a logged workout (`power_bests`), and bests derived from Wahoo FIT files
+ * The power-bests panel merges two sources: the best efforts saved with a
+ * logged workout (`power_bests` — FIT-derived, filtered to genuine
+ * improvements, see server/utils/powerBests.ts), and bests derived from Wahoo FIT files
  * (`wahoo_power_bests`, populated by server/api/wahoo/by-date.get.ts
  * whenever an outdoor ride is previewed via the "Mark completed" picker —
  * indoor/virtual rides go through the manual-upload path in
@@ -16,7 +17,8 @@
  *
  * Response shape:
  * {
- *   periods:          PeriodEntry[]
+ *   periods:          PeriodEntry[]   — newest first; { key, label, tssTotal, hoursTotal,
+ *                                       kmTotal, workoutCount, hasFtp, ftpWatts, hasPowerBests }
  *   powerBestsPanel:  {
  *     last8Weeks: Record<duration, watts>,     // single best value
  *     allTime:    Record<duration, watts[]>,   // top 3, descending
@@ -162,7 +164,7 @@ export default defineEventHandler(async (event) => {
 
   const cutoffStr = new Date(Date.now() - EIGHT_WEEKS_MS).toISOString().slice(0, 10)
 
-  // Merge candidates from both sources — manual entries (tied to a workout date)
+  // Merge candidates from both sources — saved workout bests (tied to a workout date)
   // and Wahoo-derived bests (tied to an activity date) — before ranking. Shared
   // with the write-time best-effort filter (server/utils/powerBests.ts) so the
   // "Last 8 Weeks"/"All Time" columns here and what gets saved as a best effort

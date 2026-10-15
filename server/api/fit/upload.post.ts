@@ -11,7 +11,9 @@
  * — that table specifically tracks bests auto-detected from rides seen via
  * the Wahoo API; there's no Wahoo activity id to key a row on here. The
  * parsed bests still flow into the Add Workout form as an editable prefill,
- * and get saved normally via POST /api/workouts if the user keeps them.
+ * and get saved normally via POST /api/workouts if the user keeps them. As
+ * with by-date, `powerBests` is narrowed to genuine improvements
+ * (`withNewBestEffortsOnly`).
  *
  * Returns:
  *   200 { tss, powerBests, durationSeconds, distanceMeters, fitData, laps }

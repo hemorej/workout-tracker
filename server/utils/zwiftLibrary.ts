@@ -30,6 +30,7 @@ export interface LibraryVersion {
   editable: boolean
 }
 
+/** Parses a stored/draft `.zwo` into the builder's model; null if it no longer parses. */
 export function parseVersion(xml: string): LibraryVersion | null {
   const parsed = parseZwo(xml)
   if (!parsed.ok) return null
@@ -45,11 +46,16 @@ export function parseVersion(xml: string): LibraryVersion | null {
   }
 }
 
+/** True when a draft's base file changed on disk *and* describes a different workout than the draft. */
 export function isStaleDraft(workout: Pick<ZwiftWorkout, 'contentHash' | 'modelHash'>, draft: Pick<ZwiftWorkoutDraft, 'baseHash' | 'modelHash'> | null | undefined): boolean {
   return !!draft && draft.baseHash !== workout.contentHash && draft.modelHash !== workout.modelHash
 }
 
-/** Compact drawable form used by the list thumbnails / preview. */
+/**
+ * Compact drawable form used by the list thumbnails / preview: `segs` are
+ * {d: seconds, a/b: start/end power as fraction of FTP, t: 'f' freeride | 's'},
+ * `tot` the total seconds, `ev` the text-cue events.
+ */
 export function timelineOf(version: LibraryVersion) {
   const segs = zwoSegments(version.blocks).map(s => ({
     d: s.duration,

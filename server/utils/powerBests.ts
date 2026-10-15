@@ -12,8 +12,10 @@ import { and, eq, ne } from 'drizzle-orm'
 import { powerBests, wahooPowerBests, workouts } from '../db/schema'
 import { useDB } from '../db'
 
+/** Trailing window (56 days) behind the "Last 8 Weeks" bests and the best-effort filter. */
 export const EIGHT_WEEKS_MS = 56 * 24 * 60 * 60 * 1000
 
+/** One known best (duration → watts) with the date it was achieved. */
 export interface PowerBestCandidate {
   duration: string
   watts: number
@@ -30,7 +32,9 @@ export interface PowerBestCandidate {
  * `excludeWorkoutId` drops one workout's own `power_bests` rows from the
  * `power_bests` side of the merge — used when filtering that same workout's
  * candidates so its own (about-to-be-replaced) rows can't be their own
- * baseline.
+ * baseline. `excludeWahooDate` ("YYYY-MM-DD") does the same for the
+ * `wahoo_power_bests` side: rows achieved on that day are treated as the same
+ * ride and skipped.
  */
 export async function getPowerBestCandidates(
   db: ReturnType<typeof useDB>,
@@ -49,7 +53,7 @@ export async function getPowerBestCandidates(
     )
 
   // Not scoped by user — wahoo_power_bests is a single-user table (see
-  // CLAUDE.md's Wahoo integration section).
+  // CLAUDE.md's "Wahoo Cloud API" section).
   const wahooBests = await db
     .select({ duration: wahooPowerBests.duration, watts: wahooPowerBests.watts, date: wahooPowerBests.achievedAt })
     .from(wahooPowerBests)

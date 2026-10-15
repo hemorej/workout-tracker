@@ -14,11 +14,16 @@
  * ── How invalidation works ───────────────────────────────────────────────────
  *
  *   • GET /api/workouts  → check cache first; compute & store on miss
- *   • POST /api/workouts → invalidate after write (next GET recomputes)
- *   • DELETE /api/workouts/:id → invalidate after delete
+ *   • POST /api/workouts, PATCH /api/workouts/:id, DELETE /api/workouts/:id,
+ *     and the Wahoo webhook's auto-upsert → invalidate after the write (next
+ *     GET recomputes). Anything else that changes a workout's date/TSS/duration/
+ *     distance must call `invalidateMetrics` too.
+ *   • GET /api/planned-workouts, /api/metrics/series and the coach plan
+ *     endpoint read through `getMetricsSeries` as well
  *
  * A short TTL (5 minutes) is also applied as a safety net so the series
- * rolls forward across midnight even if a mutation event is missed.
+ * rolls forward across midnight even if a mutation event is missed. Entries
+ * are also dropped once their `endDate` is before today (UTC).
  *
  * ── Limitations ─────────────────────────────────────────────────────────────
  *
@@ -164,7 +169,8 @@ async function computeSeries(userId: number): Promise<DayMetrics[]> {
 
 /**
  * The single entry point for the metrics series: returns the cached series, or
- * computes (once, even for concurrent callers) and caches it.
+ * computes (once, even for concurrent callers) and caches it. Seeds the series
+ * from the user's `initial_ctl` / `initial_atl`.
  */
 export async function getMetricsSeries(userId: number): Promise<DayMetrics[]> {
   const cached = getCachedMetrics(userId)

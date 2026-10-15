@@ -11,7 +11,10 @@
  * Actions:
  *   fetchPage(page)   — loads a page of the day list from the API
  *   addWorkout(data)  — posts a new workout, then refreshes the current page
+ *   updateWorkout(id, data) — PATCHes (full replace of) a workout, then refreshes
  *   deleteWorkout(id) — deletes a workout by id, then refreshes the current page
+ *   goToPage(page)    — fetchPage + keeps the active filters
+ *   setFilters(f)     — applies the training-log filter bar and reloads page 1
  */
 
 import { defineStore } from 'pinia'
@@ -241,6 +244,7 @@ export const useWorkoutsStore = defineStore('workouts', () => {
   /**
    * Navigates to a different page of results.
    */
+  /** Bounds-checked `fetchPage` — out-of-range pages are ignored. The active filters stay applied. */
   async function goToPage(page: number) {
     if (page < 1 || page > pagination.value.totalPages) return
     await fetchPage(page)

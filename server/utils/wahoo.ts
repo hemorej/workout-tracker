@@ -204,7 +204,12 @@ function toRideSummary(w: WahooWorkout): WahooRideSummary {
   }
 }
 
-/** Fetches the most recent completed Wahoo biking workouts, newest first. */
+/**
+ * Fetches the most recent completed Wahoo biking workouts, newest first.
+ * Pulls one page of 15 raw workouts, drops non-cycling types and unridden plan
+ * entries (`plan_id` set), then keeps the first `limit` — so it can return fewer
+ * than `limit`, and `findRideByDate`'s search window is at most 15 workouts.
+ */
 export async function fetchRecentRides(limit = 3): Promise<WahooRideSummary[]> {
   const accessToken = await getWahooAccessToken()
 
@@ -227,8 +232,8 @@ export interface WahooActivityDetail {
 /**
  * Finds the most recent Wahoo biking workout that started on the given
  * calendar day (local date, "YYYY-MM-DD"). Used to match a Strava-sourced
- * activity (the picker's source of truth, see CLAUDE.md's Strava/Wahoo
- * refactor) to its corresponding Wahoo workout so the original FIT file can
+ * activity (the picker's source of truth, see CLAUDE.md's "Completed-workout
+ * picker") to its corresponding Wahoo workout so the original FIT file can
  * be fetched — the user only ever logs one ride per day, so same-day is a
  * reliable match without needing to correlate by id or duration.
  */

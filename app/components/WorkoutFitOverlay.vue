@@ -8,8 +8,9 @@
  * (whose Teleport wrapper lives in the parent) — there's no shared open
  * state to coordinate here, just "show when a workout is passed in".
  *
- * Everything shown comes straight off the WorkoutDetail already loaded by
- * the training log list — no extra fetch.
+ * Everything shown comes off the WorkoutDetail passed in. The list omits the
+ * heavy `fitData` / `laps` JSONB, so pages/[[tab]].vue fetches them on demand
+ * from GET /api/workouts/:id and merges them in before opening this.
  */
 
 import type { WorkoutDetail } from '~/stores/workouts'
@@ -56,8 +57,7 @@ const hasLaps = computed(() => (props.workout?.laps?.length ?? 0) >= 2)
  * darkness reads as intensity. Names/order mirror `ZONES` in
  * WorkoutBuilderTab.vue; the seconds are bucketed server-side against the
  * same thresholds (see computeZoneBuckets in server/utils/fit.ts).
- * Deliberately not the builder's categorical rainbow — see
- * design_handoff_time_in_zone/README.md.
+ * Deliberately not the builder's categorical rainbow.
  */
 const ZONE_RAMP = [
   { label: 'Z1', name: 'Recovery', pctRange: '<55%', loPct: 0, hiPct: 0.55, color: '#d6d3d1' },

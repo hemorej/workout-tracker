@@ -1,10 +1,15 @@
 /**
  * PUT /api/planned-workouts
  *
- * Upserts a planned workout for a given date.
- * If name/type/tss/durationMinutes are all null/empty, deletes the row instead.
+ * Upserts a planned workout for a given date (never deletes — use
+ * DELETE /api/planned-workouts/:date, or the batch endpoint).
  *
  * Body: { date, name?, type?, tss?, durationMinutes?, notes? }
+ *
+ * Partial by design: on an existing row only the fields *present* in the body
+ * are overwritten, so callers that save a subset (the builder's fuelling-guide
+ * save never sends `type`) don't clobber each other. Empty name/type/notes
+ * store as null.
  */
 
 import { plannedWorkouts } from '../../db/schema'

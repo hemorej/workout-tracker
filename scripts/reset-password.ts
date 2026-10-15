@@ -1,3 +1,12 @@
+/**
+ * CLI utility: reset a user's password (AdonisJS Scrypt — the same hasher the
+ * login route verifies against; not bcrypt).
+ *
+ * Edit EMAIL and NEW_PASSWORD below, then run `pnpm reset-password` (which
+ * loads .env for DATABASE_URL). The new hash is read back and verified before
+ * the script reports success. Don't commit real values.
+ */
+
 import { Hash } from '@adonisjs/hash'
 import { Scrypt } from '@adonisjs/hash/drivers/scrypt'
 import { Pool } from 'pg'
