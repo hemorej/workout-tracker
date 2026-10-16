@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Workout library slide-over (Workout builder tab).
+ * Workout library dialog (Workout builder tab).
  *
  * Lists the mirrored Zwift `.zwo` files (GET /api/zwift/library), filters them
  * by text, duration range, TSS range and zone, previews one as a timeline and hands it to the builder via
@@ -202,15 +202,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 <template>
   <Teleport to="body">
-    <div class="fixed inset-0 z-50 flex justify-end" style="font-family: 'Hanken Grotesk', sans-serif;">
-      <div class="absolute inset-0 bg-black/25 backdrop-blur-sm" @click="emit('close')" />
+    <div
+      class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+      style="font-family: 'Hanken Grotesk', sans-serif;"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Workout library"
+    >
+      <div class="fixed inset-0 bg-black/25 backdrop-blur-sm" @click="emit('close')" />
 
-      <aside
-        class="relative flex flex-col h-full bg-white"
-        style="width: 480px; max-width: 100vw; box-shadow: -16px 0 40px rgba(28,25,23,.14);"
-        role="dialog"
-        aria-label="Workout library"
-      >
+      <aside class="relative flex flex-col bg-white rounded-2xl shadow-xl w-full max-w-xl my-8 overflow-hidden" style="height: min(820px, calc(100vh - 4rem));">
         <!-- Header -->
         <div class="flex-none px-5 pt-5">
           <div class="flex items-start justify-between">
