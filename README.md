@@ -612,6 +612,13 @@ tail -f  ~/Library/Logs/sprocket-zwift-activities.log
 tail -200 ~/Library/Logs/sprocket-zwift-sync.log
 ```
 
+**Is it healthy?** Read the three columns of `launchctl list | grep sprocket` (PID, last exit status, label):
+
+- PID number + status `0` → running.
+- PID `-` + non-zero status → crash-looping. `78` (`EX_CONFIG`) means launchd couldn't even start the program — a bad node/script path in the plist (a stray leading space in a `<string>` is enough) — so the **log stays empty**; `127`/`126` is a bad node path; `1` is a script error (read the log).
+- Check what launchd thinks: `launchctl print gui/$(id -u)/<label> | grep -E "state|last exit|program"`. `state = spawn scheduled` with a non-zero exit code means it is failing to start.
+- Rule of thumb: a healthy daemon always logs `watching …` and `reconcile (startup)…` within a second of starting. An empty log file means it never ran.
+
 **Reload after editing a plist or rotating a token**
 
 ```bash
