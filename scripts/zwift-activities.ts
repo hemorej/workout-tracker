@@ -8,6 +8,7 @@
  *   pnpm zwift-activities            # run forever (watch + periodic reconcile)
  *   pnpm zwift-activities --once     # one reconcile, then exit
  *   pnpm zwift-activities --dry-run  # log what would be uploaded; send nothing
+ *   pnpm zwift-activities --baseline # mark every existing file as seen, upload nothing, exit
  *
  * Config (environment):
  *   SPROCKET_URL            — e.g. https://sprocket.jerome-arfouche.ca (required)
@@ -41,6 +42,7 @@ import { join } from 'node:path'
 const args = new Set(process.argv.slice(2))
 const ONCE = args.has('--once')
 const DRY_RUN = args.has('--dry-run')
+const BASELINE = args.has('--baseline')
 
 const ROOT = process.env.ZWIFT_ACTIVITIES_DIR ?? join(homedir(), 'Documents/Zwift/Activities')
 const STATE_PATH = process.env.ZWIFT_ACTIVITIES_STATE ?? join(homedir(), '.sprocket-zwift-activities.json')
@@ -265,6 +267,22 @@ async function main() {
     process.exit(1)
   }
   await loadState()
+
+  if (BASELINE) {
+    // Record everything currently on disk as handled, so only rides finished
+    // from now on are uploaded. Existing state entries are left as they are.
+    const names = (await readdir(ROOT)).filter(n => NAME_RE.test(n))
+    let marked = 0
+    for (const n of names) {
+      if (!state.files[n]) {
+        state.files[n] = { hash: '', outcome: 'baseline' }
+        marked++
+      }
+    }
+    await saveState()
+    log(`baseline: marked ${marked} existing file(s) as seen (${names.length} total) → ${STATE_PATH}`)
+    return
+  }
 
   log(`watching ${ROOT} → ${SERVER}${DRY_RUN ? ' [dry-run]' : ''}`)
 
