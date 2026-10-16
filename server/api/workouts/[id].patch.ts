@@ -10,9 +10,10 @@
  *
  * Body (JSON): same shape as POST /api/workouts — and the update is a full
  * replace of the editable columns, not a partial patch: `date`, `name`,
- * `durationMinutes`, `distanceKm`, `tss`, `rpe`, `notes`, `ftpWatts`, `rideType`,
- * `fitData` and `laps` are all overwritten, with omitted optional fields stored
- * as null (so omitting `laps` wipes the stored laps). `stravaActivityId` is
+ * `durationMinutes`, `distanceKm`, `tss`, `rpe`, `notes`, `ftpWatts` and `rideType`
+ * are overwritten, with omitted optional fields stored as null. `fitData` and
+ * `laps` are the exception: omitted ⇒ the stored values are kept (the list API
+ * doesn't return them, so a manual edit can't echo them back); send `null` to clear. `stravaActivityId` is
  * not updatable here. A date already used by a different workout is a 409.
  *
  * powerBests, if provided, fully replaces the workout's existing power-best
@@ -100,8 +101,11 @@ export default defineEventHandler(async (event) => {
     rideType = body.rideType
   }
 
-  let fitData: WorkoutFitData | null = null
-  if (body.fitData !== undefined && body.fitData !== null) {
+  // undefined = key omitted → leave the stored column alone (a plain "Edit ride"
+  // doesn't have the heavy fit_data/laps columns client-side, see index.get.ts)
+  let fitData: WorkoutFitData | null | undefined
+  if (body.fitData === null) fitData = null
+  else if (body.fitData !== undefined) {
     if (typeof body.fitData !== 'object') {
       throw createError({ statusCode: 400, statusMessage: 'fitData must be an object.' })
     }
@@ -147,8 +151,9 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  let laps: WorkoutLap[] | null = null
-  if (body.laps !== undefined && body.laps !== null) {
+  let laps: WorkoutLap[] | null | undefined
+  if (body.laps === null) laps = null
+  else if (body.laps !== undefined) {
     if (!Array.isArray(body.laps)) {
       throw createError({ statusCode: 400, statusMessage: 'laps must be an array.' })
     }

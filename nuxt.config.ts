@@ -17,6 +17,9 @@ export default defineNuxtConfig({
     colorMode: {
         preference: 'light',
         fallback: 'light',
+        // New key so a stale 'dark' saved in localStorage under the default
+        // key can't override the pinned preference.
+        storageKey: 'sprocket-color-mode',
     },
 
     /**
