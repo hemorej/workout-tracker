@@ -4,7 +4,7 @@
 
 A personal cycling training tracker built on the modern Nuxt 4 + Vue 3.5 + TypeScript stack.
 
-Track your daily sessions, visualise fitness and fatigue over time, and understand your "form" at a glance using industry-standard training load metrics. Also includes: a structured workout builder that exports Zwift `.zwo` files, a 4-week planner with live CTL/TSB projections, a single-user "mark planned workout as completed" flow that pulls the ride title from Strava and the real power/TSS numbers from a parsed FIT file (via Wahoo's Cloud API or manual upload), an AI coach that turns a written training plan into a structured workout (or a multi-week plan suggestion), a Wahoo webhook that auto-logs finished outdoor rides, a Strava-segment tracker, and a Zwift workout library that mirrors your local `.zwo` folder.
+Track your daily sessions, visualise fitness and fatigue over time, and understand your "form" at a glance using industry-standard training load metrics. Also includes: a structured workout builder that exports Zwift `.zwo` files, a 4-week planner with live CTL/TSB projections, a single-user "mark planned workout as completed" flow that pulls the ride title from Strava and the real power/TSS numbers from a parsed FIT file (via Wahoo's Cloud API or manual upload), an AI coach that turns a written training plan into a structured workout (or a multi-week plan suggestion), a Wahoo webhook that auto-logs finished outdoor rides, a local daemon that auto-logs finished Zwift rides from their FIT files, a Strava-segment tracker, and a Zwift workout library that mirrors your local `.zwo` folder.
 
 ---
 
@@ -94,9 +94,10 @@ sprocket/
 ├── scripts/
 │   ├── reset-password.ts       ← CLI utility to reset a user's password (AdonisJS Scrypt)
 │   ├── zwift-sync.ts           ← Local daemon: Zwift Workouts folder → server (launchd agent in infra/)
+│   ├── zwift-activities.ts     ← Local daemon: Zwift Activities folder → server, logs finished rides (launchd agent in infra/)
 │   ├── backfill-*.ts, gen-*-sql.ts ← One-off historical backfills / recovery SQL generators, kept for reference
 │   └── check-new-publishers.mjs ← CI supply-chain check for newly published dependency versions
-├── infra/                      ← Forge deploy script, nginx/supervisor/psql configs, zwift-sync launchd plist
+├── infra/                      ← Forge deploy script, nginx/supervisor/psql configs, zwift-sync / zwift-activities launchd plists
 ├── drizzle/                    ← Auto-generated migration SQL files
 ├── drizzle.config.ts
 ├── nuxt.config.ts
@@ -171,11 +172,13 @@ NUXT_FIT_STORAGE_DIR=
 # Unset ⇒ the sole row in `users`.
 NUXT_WEBHOOK_USER_EMAIL=
 
-# Optional — shared secrets for POST /api/segments/reconcile (nightly cron) and
-# the Zwift sync daemon (POST /api/zwift/sync + manifest). Unset ⇒ not callable.
-# Generate with: openssl rand -hex 32
+# Optional — shared secrets for POST /api/segments/reconcile (nightly cron), the
+# Zwift workout-library sync daemon (POST /api/zwift/sync + manifest) and the
+# Zwift activity-upload daemon (POST /api/zwift/activity). Unset ⇒ not callable.
+# Use a different value for each. Generate with: openssl rand -hex 32
 NUXT_SEGMENTS_SYNC_TOKEN=
 NUXT_ZWIFT_SYNC_TOKEN=
+NUXT_ZWIFT_ACTIVITY_TOKEN=
 
 # Optional — Anthropic API key for the AI coach (workout generation, plan
 # suggestion, block-progression parsing). Static, no rotation.
@@ -352,7 +355,7 @@ CTL and ATL are seeded from `users.initial_ctl` / `initial_atl` on the day befor
 
 ## API reference
 
-All routes require a valid session cookie except `/api/auth/login`, `/api/auth/register`, and the machine endpoints that authenticate with a shared secret instead (`/api/wahoo/webhook`, `/api/segments/reconcile`, `/api/zwift/sync`, `/api/zwift/sync/manifest`).
+All routes require a valid session cookie except `/api/auth/login`, `/api/auth/register`, and the machine endpoints that authenticate with a shared secret instead (`/api/wahoo/webhook`, `/api/segments/reconcile`, `/api/zwift/sync`, `/api/zwift/sync/manifest`, `/api/zwift/activity`).
 
 | Method | Path | Description |
 |---|---|---|
@@ -388,6 +391,7 @@ All routes require a valid session cookie except `/api/auth/login`, `/api/auth/r
 | PUT | `/api/zwift/drafts` | Save the builder's edit of a library workout as its draft |
 | DELETE | `/api/zwift/drafts/:workoutId` · POST `.../rebase` | Discard a draft / keep it on top of the changed disk file |
 | POST | `/api/zwift/sync` · GET `/api/zwift/sync/manifest` | Sync daemon receiver + hash manifest — **public**, Bearer-token auth (`NUXT_ZWIFT_SYNC_TOKEN`) |
+| POST | `/api/zwift/activity` | Activity-upload daemon receiver (raw FIT body + `X-Ride-Date`) — **public**, Bearer-token auth (`NUXT_ZWIFT_ACTIVITY_TOKEN`) |
 
 ### GET /api/workouts response shape
 
@@ -468,13 +472,230 @@ To (re)acquire a refresh token: register an app at [strava.com/settings/api](htt
 
 ## Wahoo webhook and FIT storage
 
-Besides the on-demand lookup, the app receives Wahoo's workout-summary webhook at `POST /api/wahoo/webhook` (shared-secret auth — `NUXT_WAHOO_WEBHOOK_TOKEN` must equal the subscription's `webhook_token`). For a finished outdoor ride with a FIT file it stores the raw file under `NUXT_FIT_STORAGE_DIR` (default `.data/fit-files`; in production use an absolute path outside the release dir), parses it, and upserts that day's `workouts` row (FIT-derived fields refresh; a manual name/notes/RPE/FTP are kept). Zwift rides never carry a FIT file in Wahoo's API, hence the manual-upload branch. Details: CLAUDE.md → "Wahoo webhook + FIT file storage".
+Besides the on-demand lookup, the app receives Wahoo's workout-summary webhook at `POST /api/wahoo/webhook` (shared-secret auth — `NUXT_WAHOO_WEBHOOK_TOKEN` must equal the subscription's `webhook_token`). For a finished outdoor ride with a FIT file it stores the raw file under `NUXT_FIT_STORAGE_DIR` (default `.data/fit-files`; in production use an absolute path outside the release dir), parses it, and upserts that day's `workouts` row (FIT-derived fields refresh; a manual name/notes/RPE/FTP are kept). Zwift rides never carry a FIT file in Wahoo's API, hence the manual-upload branch and the local activity-upload daemon (see "Local Zwift daemons"). Both ingest paths share one Strava title-matching rule: same calendar day only, never the newest ride. Details: CLAUDE.md → "Wahoo webhook + FIT file storage".
 
 ---
 
-## Zwift workout library sync
+## Local Zwift daemons
 
-`pnpm zwift-sync` runs a local daemon that watches `~/Documents/Zwift/Workouts` and mirrors every `.zwo` to the server (`POST /api/zwift/sync`, authenticated with `NUXT_ZWIFT_SYNC_TOKEN`; set `SPROCKET_URL` and `ZWIFT_SYNC_TOKEN` for the daemon). The folder is the source of truth — sync is one-way (disk → server), with a periodic full reconcile because file events are lossy. The Workout builder's library panel lists the mirror; edits are saved as server-side drafts and reach the real file only when you download the `.zwo` and save it back into the folder. `infra/zwift-sync.plist.example` is a launchd agent for running it at login. Details: CLAUDE.md → "Zwift workout library sync".
+Two small Node scripts run on the Mac that runs Zwift and push to the server. Both are one-way (disk → server), authenticate with their own shared secret, and are meant to run at login as launchd agents.
+
+| Daemon | Watches | Sends to | Purpose |
+|---|---|---|---|
+| `pnpm zwift-sync` | `~/Documents/Zwift/Workouts` (`*.zwo`) | `POST /api/zwift/sync` | Mirrors your custom workouts so the builder's library panel can preview/tweak them |
+| `pnpm zwift-activities` | `~/Documents/Zwift/Activities` (`YYYY-MM-DD-HH-MM-SS.fit`) | `POST /api/zwift/activity` | Logs each finished Zwift ride automatically |
+
+### Workout library sync (`zwift-sync`)
+
+The folder is the source of truth. The daemon watches it (debounced), does a full reconcile at startup and every 10 minutes (file events are lossy), and refuses to send deletes if the local scan is empty or would remove over half the mirror. Edits made in the builder are saved as server-side drafts and reach the real file only when you download the `.zwo` and save it back into the folder. Details: CLAUDE.md → "Zwift workout library sync".
+
+### Activity upload (`zwift-activities`)
+
+When Zwift finishes writing a ride's FIT file the daemon uploads it once; the server parses it and upserts that day's workout row (FIT-derived fields refresh; a manual name/notes/RPE/FTP are kept). Worth knowing:
+
+- **Title** — FIT files carry no activity name. The server uses the Strava ride from the **same day** (retrying a few times, Strava lags), else that day's planned workout, else "Zwift ride". It never borrows another day's ride, and the name is not refreshed on re-upload.
+- **Date** — taken from Zwift's local-time filename; the FIT only has UTC timestamps.
+- **First run** — uploads only the last couple of days and marks the hundreds of older files as seen. Use `--baseline` (below) to upload nothing historical at all.
+- **Once only** — a state file (`~/.sprocket-zwift-activities.json`, filename → sha256) records what was sent. The server is idempotent too, so a lost state file only re-sends recent rides.
+- **Input is untrusted** — the server checks the `.FIT` header before writing anything to disk, caps the body at 8 MB, and refuses files spanning over 48 h. Details: CLAUDE.md → "Zwift activity upload".
+
+---
+
+## Setting up the daemons (launchd)
+
+Do the server steps once, then repeat the local steps per daemon. Replace the placeholders; run everything from the repo root on the machine that runs Zwift.
+
+### 1. Server
+
+```bash
+openssl rand -hex 32      # run twice: one token per daemon
+```
+
+Add to the server's `.env` and restart the app:
+
+```bash
+NUXT_ZWIFT_SYNC_TOKEN=<token A>
+NUXT_ZWIFT_ACTIVITY_TOKEN=<token B>
+```
+
+The activity upload needs `client_max_body_size 8m` (already in `infra/nginx.config`; deploy it, or add it to the Forge site's nginx config).
+
+### 2. Local prerequisites
+
+```bash
+pnpm install
+which node && node -v     # needs Node >= 22.6 (--experimental-strip-types); use this absolute path below
+mkdir -p ~/Library/Logs
+```
+
+launchd has no shell `PATH`, so the plist needs the **absolute** node path. With nvm that path contains the version (`~/.nvm/versions/node/vXX/bin/node`) — update the plist after upgrading node.
+
+### 3. Try each daemon by hand first
+
+```bash
+export SPROCKET_URL=https://sprocket.jerome-arfouche.ca
+
+ZWIFT_SYNC_TOKEN=<token A> pnpm zwift-sync --dry-run
+ZWIFT_ACTIVITY_TOKEN=<token B> pnpm zwift-activities --dry-run
+```
+
+`--dry-run` logs what would be sent and sends nothing.
+
+### 4. Activity daemon: skip history
+
+If your Activities folder already holds rides you don't want re-matched, mark everything as seen **before** the first real run. This uploads nothing:
+
+```bash
+ZWIFT_ACTIVITY_TOKEN=<token B> pnpm zwift-activities --baseline
+```
+
+Only rides finished from now on will be uploaded.
+
+### 5. Install the launchd agents
+
+```bash
+# Workout library sync
+cp infra/zwift-sync.plist.example \
+   ~/Library/LaunchAgents/ca.jerome-arfouche.sprocket-zwift-sync.plist
+chmod 600 ~/Library/LaunchAgents/ca.jerome-arfouche.sprocket-zwift-sync.plist
+
+# Activity upload
+cp infra/zwift-activities.plist.example \
+   ~/Library/LaunchAgents/ca.jerome-arfouche.sprocket-zwift-activities.plist
+chmod 600 ~/Library/LaunchAgents/ca.jerome-arfouche.sprocket-zwift-activities.plist
+```
+
+Edit each copied plist (they hold a secret — hence `chmod 600`):
+
+- the node path (`ProgramArguments[0]`) → your `which node`
+- the repo path in `ProgramArguments` if it isn't `/Users/jerome/Code/sprocket`
+- the token (`ZWIFT_SYNC_TOKEN` / `ZWIFT_ACTIVITY_TOKEN`) → must equal the server's value
+- optionally `SPROCKET_URL`, and the watched folder (`ZWIFT_WORKOUTS_DIR` / `ZWIFT_ACTIVITIES_DIR`)
+
+Validate and load:
+
+```bash
+plutil -lint ~/Library/LaunchAgents/ca.jerome-arfouche.sprocket-zwift-*.plist
+
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ca.jerome-arfouche.sprocket-zwift-sync.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ca.jerome-arfouche.sprocket-zwift-activities.plist
+
+tail -f ~/Library/Logs/sprocket-zwift-sync.log ~/Library/Logs/sprocket-zwift-activities.log
+```
+
+You should see `watching … → https://…` and then `in sync` / `nothing new`. Both agents start at login and restart on crash (30 s throttle).
+
+macOS may prompt to let the node binary read `~/Documents`; if a daemon logs `EPERM`, allow it under System Settings → Privacy & Security → Files and Folders.
+
+### 6. Verify end to end
+
+Finish a ride (or drop a `.fit` in the folder and wait ~10 s). The activities log should show something like:
+
+```
+2026-10-16T… 2026-10-16-17-35-41.fit: created workout #482 "Zwift - 3x4" (strava), TSS 71
+```
+
+`(strava)` / `(planned)` / `(fallback)` says where the title came from. The server may take up to ~40 s on that request while it waits for Strava to receive the ride.
+
+---
+
+## Daemon operations cheat sheet
+
+Practical commands to keep handy. Examples use the activities daemon; for the workout-library one, swap `sprocket-zwift-activities` for `sprocket-zwift-sync`.
+
+**Status and logs**
+
+```bash
+launchctl list | grep sprocket                                   # PID + last exit status (0 = fine)
+launchctl print gui/$(id -u)/ca.jerome-arfouche.sprocket-zwift-activities | head -30
+tail -f  ~/Library/Logs/sprocket-zwift-activities.log
+tail -200 ~/Library/Logs/sprocket-zwift-sync.log
+```
+
+**Reload after editing a plist or rotating a token**
+
+```bash
+launchctl bootout   gui/$(id -u)/ca.jerome-arfouche.sprocket-zwift-activities
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ca.jerome-arfouche.sprocket-zwift-activities.plist
+```
+
+**Restart or stop without unloading the plist**
+
+```bash
+launchctl kickstart -k gui/$(id -u)/ca.jerome-arfouche.sprocket-zwift-activities   # kill + restart now
+launchctl bootout   gui/$(id -u)/ca.jerome-arfouche.sprocket-zwift-activities      # stop (until next bootstrap/login)
+```
+
+**Rotate a token** — update the server `.env` and restart the app, update the plist, then bootout/bootstrap as above. A leaked sync token only reaches the mirror tables; the activity token can create workouts, so rotate that one promptly if it leaks.
+
+**Run a daemon manually (stop the agent first, or you'll have two)**
+
+```bash
+pnpm zwift-sync --once                 # one reconcile, then exit
+pnpm zwift-sync --dry-run              # show what would be sent
+pnpm zwift-sync --force-deletes        # allow deleting >50% of the mirror (after a deliberate cleanup)
+pnpm zwift-activities --once           # upload anything new, then exit
+pnpm zwift-activities --dry-run        # show what would be uploaded
+pnpm zwift-activities --baseline       # mark every existing file as seen, upload nothing
+```
+
+Both read `SPROCKET_URL` and their token from the environment, e.g. `SPROCKET_URL=… ZWIFT_ACTIVITY_TOKEN=… pnpm zwift-activities --once`.
+
+**Inspect and edit the activity state**
+
+```bash
+jq '.files | length' ~/.sprocket-zwift-activities.json                       # files tracked
+jq '.files | to_entries | map(select(.value.outcome=="rejected"))' ~/.sprocket-zwift-activities.json
+jq '.files | to_entries | sort_by(.key) | .[-5:]' ~/.sprocket-zwift-activities.json   # most recent
+
+# Re-send one ride: drop its entry, then wait for the next reconcile (or kickstart)
+jq 'del(.files["2026-10-16-17-35-41.fit"])' ~/.sprocket-zwift-activities.json > /tmp/s.json \
+  && mv /tmp/s.json ~/.sprocket-zwift-activities.json
+
+# Start over (then re-run --baseline unless you want recent rides re-sent)
+rm ~/.sprocket-zwift-activities.json
+```
+
+Outcomes: `uploaded`, `baseline` (skipped on purpose), `rejected` (server said 422 — corrupt or no power data; never retried). A file the daemon couldn't read or the server errored on has **no** entry, so it retries on the next scan.
+
+**Check the server and token from the shell**
+
+```bash
+URL=https://sprocket.jerome-arfouche.ca
+
+# Activity endpoint: 401 = wrong/missing token; 400 "X-Ride-Date … required" = token is good
+curl -i -X POST $URL/api/zwift/activity -H "Authorization: Bearer $ZWIFT_ACTIVITY_TOKEN"
+
+# Sync manifest: 401 = wrong token; 200 = good (lists mirrored files)
+curl -i $URL/api/zwift/sync/manifest -H "Authorization: Bearer $ZWIFT_SYNC_TOKEN"
+```
+
+**Common problems**
+
+| Symptom | Likely cause / fix |
+|---|---|
+| Log: `server rejected the token (401)` | Token in the plist ≠ server `.env`, or the app wasn't restarted after setting it |
+| Log: `→ 413` / nginx 413 | Body over nginx's limit — deploy `client_max_body_size 8m` |
+| Log: `server rejected the file (422 …)` | Not a valid FIT, or no power data. Marked `rejected`; fix the cause and delete its state entry to retry |
+| Log: `not readable/settled yet` | Zwift is still writing the file; it's retried on the next scan |
+| Ride titled "Zwift ride" or the planned name | Strava hadn't received the ride within the retry window. Rename it in the app (a re-upload won't change it) |
+| Ride logged on the wrong day | Check the filename's date — the daemon uses it as the local day |
+| Nothing happens after a ride | `launchctl list \| grep sprocket` (running?), check the log, then `pnpm zwift-activities --once --dry-run` |
+| `EPERM` reading the folder | Grant node access to Documents (System Settings → Privacy & Security → Files and Folders) |
+| Daemon won't start, exit status 78/126/127 | Bad node path or repo path in the plist; `plutil -lint` it |
+| `REFUSING n delete(s)` (sync) | Safety stop: folder empty/unmounted or would drop >50% of the mirror. Fix the folder, or `--force-deletes` if intended |
+
+**Server-side checks**
+
+```bash
+# Raw FIT files received (dir = NUXT_FIT_STORAGE_DIR)
+ls -lt /home/forge/sprocket.jerome-arfouche.ca/storage/fit-files | head
+
+# App logs for these events (structured JSON in production)
+grep -E 'zwift\.activity_|workouts\.ingest_' <app log> | tail -50
+```
+
+Events: `zwift.activity_received`, `zwift.activity_unauthorized`, `zwift.activity_not_fit`, `zwift.activity_process_failed`, `workouts.ingest_created`, `workouts.ingest_updated`, `workouts.strava_lookup_failed`.
 
 ---
 
@@ -495,8 +716,9 @@ pnpm dev             # Start dev server with hot reload (also starts PostgreSQL 
 pnpm stop            # Stop the brew PostgreSQL service
 pnpm build           # Build for production
 pnpm start           # Run the production build (.output/server/index.mjs)
-pnpm test            # Unit tests for the .zwo parser (node:test, no test dependency)
-pnpm zwift-sync      # Local Zwift-folder sync daemon (--once, --dry-run, --force-deletes)
+pnpm test            # Unit tests: .zwo parser + ride/Strava matching (node:test, no test dependency)
+pnpm zwift-sync      # Local Zwift workouts-folder sync daemon (--once, --dry-run, --force-deletes)
+pnpm zwift-activities # Local Zwift activities-folder upload daemon (--once, --dry-run, --baseline)
 
 pnpm db:generate     # Generate migration files after schema changes
 pnpm db:migrate      # Apply pending migrations
