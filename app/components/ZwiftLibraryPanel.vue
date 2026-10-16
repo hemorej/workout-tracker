@@ -211,7 +211,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     >
       <div class="fixed inset-0 bg-black/25 backdrop-blur-sm" @click="emit('close')" />
 
-      <aside class="relative flex flex-col bg-white rounded-2xl shadow-xl w-full max-w-xl my-8 overflow-hidden" style="height: min(820px, calc(100vh - 4rem));">
+      <aside class="relative flex flex-col bg-white rounded-2xl shadow-xl w-full max-w-2xl my-8 overflow-hidden" style="height: min(820px, calc(100vh - 4rem));">
         <!-- Header -->
         <div class="flex-none px-5 pt-5">
           <div class="flex items-start justify-between">
