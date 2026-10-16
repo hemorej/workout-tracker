@@ -158,6 +158,13 @@ const INDOOR_WORKOUT_TYPE_IDS = new Set([
 ])
 const BIKING_WORKOUT_TYPE_IDS = new Set([...OUTDOOR_BIKING_WORKOUT_TYPE_IDS, ...INDOOR_WORKOUT_TYPE_IDS])
 
+/** 'trainer' / 'outdoor' for a known cycling workout_type_id, undefined for anything unrecognised. */
+export function rideTypeForWorkoutType(workoutTypeId: number): 'trainer' | 'outdoor' | undefined {
+  if (INDOOR_WORKOUT_TYPE_IDS.has(workoutTypeId)) return 'trainer'
+  if (OUTDOOR_BIKING_WORKOUT_TYPE_IDS.has(workoutTypeId)) return 'outdoor'
+  return undefined
+}
+
 interface WahooWorkoutSummary {
   file?: { url: string } | null
   /** Meters, as a numeric string — Wahoo returns workout_summary metrics as strings, not numbers. */

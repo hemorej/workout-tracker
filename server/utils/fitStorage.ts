@@ -1,6 +1,7 @@
 /**
- * Persistent storage for raw Wahoo FIT files delivered by the webhook
- * (server/api/wahoo/webhook.post.ts) — the first and only filesystem writes
+ * Persistent storage for raw FIT files delivered by the Wahoo webhook
+ * (server/api/wahoo/webhook.post.ts) and the Zwift activity daemon
+ * (server/api/zwift/activity.post.ts) — the first and only filesystem writes
  * in `server/`. Everything else that needs to survive a deploy goes to
  * Postgres; FIT files are large binary blobs kept on disk instead.
  *
@@ -22,17 +23,22 @@ export function fitStorageDir(): string {
   return isAbsolute(dir) ? dir : resolve(process.cwd(), dir)
 }
 
-/** `<wahooWorkoutId>-<YYYY-MM-DD>.fit` — stable per (workout, date) so a re-delivered webhook overwrites rather than duplicates. */
-export function fitFileName(wahooWorkoutId: number, dateLocal: string): string {
+/**
+ * `<id>-<YYYY-MM-DD>.fit` — stable per (source id, date) so a re-delivery
+ * overwrites rather than duplicates. `id` is the Wahoo workout id, or
+ * `zwift-<content hash>` for files uploaded by the Zwift activity daemon.
+ */
+export function fitFileName(id: number | string, dateLocal: string): string {
   const safeDate = DATE_RE.test(dateLocal) ? dateLocal : 'unknown-date'
-  return `${wahooWorkoutId}-${safeDate}.fit`
+  const safeId = String(id).replace(/[^A-Za-z0-9_-]/g, '_')
+  return `${safeId}-${safeDate}.fit`
 }
 
 /** Writes the FIT bytes to the storage dir (creating it if needed) and returns the full path. */
-export async function saveFitFile(wahooWorkoutId: number, dateLocal: string, bytes: Buffer): Promise<string> {
+export async function saveFitFile(id: number | string, dateLocal: string, bytes: Buffer): Promise<string> {
   const dir = fitStorageDir()
   await mkdir(dir, { recursive: true })
-  const path = join(dir, fitFileName(wahooWorkoutId, dateLocal))
+  const path = join(dir, fitFileName(id, dateLocal))
   await writeFile(path, bytes)
   return path
 }

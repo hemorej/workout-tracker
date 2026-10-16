@@ -80,6 +80,7 @@ export default defineNuxtConfig({
      *   ANTHROPIC_API_KEY       → runtimeConfig.anthropicApiKey
      *   NUXT_SEGMENTS_SYNC_TOKEN → runtimeConfig.segmentsSyncToken
      *   NUXT_ZWIFT_SYNC_TOKEN   → runtimeConfig.zwiftSyncToken
+     *   NUXT_ZWIFT_ACTIVITY_TOKEN → runtimeConfig.zwiftActivityToken
      */
     runtimeConfig: {
         databaseUrl: process.env.DATABASE_URL,
@@ -106,6 +107,12 @@ export default defineNuxtConfig({
         // (scripts/zwift-sync.ts) sends it as a Bearer token. Unset ⇒ both
         // endpoints always 401. Generate with: openssl rand -hex 32
         zwiftSyncToken: process.env.NUXT_ZWIFT_SYNC_TOKEN,
+
+        // Shared secret authenticating POST /api/zwift/activity — the local
+        // Zwift-activities daemon (scripts/zwift-activities.ts) uploads finished
+        // rides with it as a Bearer token. Separate from the workout-library
+        // token because this one can create workouts. Unset ⇒ always 401.
+        zwiftActivityToken: process.env.NUXT_ZWIFT_ACTIVITY_TOKEN,
 
         // Wahoo Cloud API access — single-user, refresh token acquired via a
         // one-time manual OAuth exchange (see CLAUDE.md). No in-app OAuth flow.

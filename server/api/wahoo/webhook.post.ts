@@ -12,28 +12,23 @@
  *   1. downloads the FIT file and persists the raw bytes to
  *      `runtimeConfig.fitStorageDir` (survives deploys — see fitStorage.ts),
  *   2. parses it (server/utils/fit.ts) against the athlete's current FTP,
- *   3. takes the ride *title* from the matching Strava activity (falling back
- *      to the planned-workout name, then the Wahoo workout name),
- *   4. upserts the `workouts` row for that (user, date) — inserting a new one
- *      or refreshing an existing one's FIT-derived fields while keeping any
- *      manual name/notes/rpe/ftp,
- *   5. records power bests into `wahoo_power_bests`.
+ *   3. hands off to `ingestFitRide` (server/utils/ingestFitRide.ts, shared
+ *      with the Zwift activity upload): title from the same-day Strava
+ *      activity (falling back to the planned-workout name, then the Wahoo
+ *      workout name — never a different day's ride), upsert of the `workouts`
+ *      row for that (user, date) keeping any manual name/notes/rpe/ftp, power
+ *      bests, and `wahoo_power_bests`.
  *
  * Only auth failure returns a non-2xx status. Everything else (nothing to do,
  * or a processing error after the file is safely on disk) returns 2xx so
  * Wahoo doesn't retry-hammer; failures are logged for manual follow-up.
  */
 
-import { eq, and } from 'drizzle-orm'
-import { users, workouts, powerBests, plannedWorkouts } from '../../db/schema'
 import { useDB } from '../../db'
-import { invalidateMetrics } from '../../utils/metricsCache'
-import { parseFitFile } from '../../utils/fit'
-import { getCurrentFtpWatts } from '../../utils/ftp'
-import { metricsToWorkoutFields, upsertWahooPowerBests } from '../../utils/fitWorkout'
-import { fetchRecentStravaRides } from '../../utils/strava'
 import { saveFitFile } from '../../utils/fitStorage'
-import { filterNewBestEfforts } from '../../utils/powerBests'
+import { ingestFitRide } from '../../utils/ingestFitRide'
+import { rideTypeForWorkoutType } from '../../utils/wahoo'
+import { resolveWebhookUserId } from '../../utils/webhookUser'
 import { secretMatches, type WahooWebhookBody } from '../../utils/wahooWebhook'
 
 const log = getLogger('wahoo')
@@ -94,116 +89,28 @@ export default defineEventHandler(async (event) => {
     log.info('wahoo.webhook_fit_saved', { requestId, workoutId: workout.id, bytes: buf.length, path })
 
     // ── Resolve the target user (single-user app) ─────────────────────────
-    const userRows = config.webhookUserEmail
-      ? await db.select({ id: users.id }).from(users)
-          .where(eq(users.email, String(config.webhookUserEmail).toLowerCase())).limit(1)
-      : await db.select({ id: users.id }).from(users).limit(2)
-    if (userRows.length !== 1) {
-      log.warn('wahoo.webhook_user_unresolved', { requestId, matched: userRows.length })
+    const { userId, matched } = await resolveWebhookUserId(db)
+    if (userId == null) {
+      log.warn('wahoo.webhook_user_unresolved', { requestId, matched })
       setResponseStatus(event, 202)
       return { ok: false }
     }
-    const userId = userRows[0]!.id
 
-    // ── Parse ───────────────────────────────────────────────────────────
-    const ftpWatts = await getCurrentFtpWatts(userId)
-    const metrics = await parseFitFile(buf, ftpWatts)
-    const fields = metricsToWorkoutFields(metrics, ftpWatts)
-
-    // ── Title/type from Strava (source of truth for the ride name) ───────
-    let stravaName: string | null = null
-    let rideType: 'trainer' | 'outdoor' = 'outdoor'
-    let stravaActivityId: number | null = null
-    try {
-      const rides = await fetchRecentStravaRides(3)
-      const match = rides.find((r) => r.startDateLocal.slice(0, 10) === rideDate) ?? rides[0] ?? null
-      if (match) {
-        stravaName = match.name
-        rideType = match.rideType
-        stravaActivityId = match.id
-      }
-    }
-    catch (err: unknown) {
-      log.warn('wahoo.webhook_strava_lookup_failed', { requestId, err: (err as Error)?.message })
-    }
-
-    // ── Planned-workout name fallback ───────────────────────────────────
-    const [planned] = await db
-      .select({ name: plannedWorkouts.name })
-      .from(plannedWorkouts)
-      .where(and(eq(plannedWorkouts.userId, userId), eq(plannedWorkouts.date, rideDate)))
-      .limit(1)
-
-    const name = stravaName ?? planned?.name ?? workout.name?.trim() ?? 'Outdoor ride'
-
-    // ── Derive scalar columns (same rounding as POST /api/workouts) ─────
-    const durationMinutes = Math.max(1, Math.round(fields.durationSeconds / 60))
-    const distanceKm = fields.distanceMeters > 0 ? Math.round(fields.distanceMeters / 100) / 10 : null
-
-    // ── Upsert the workouts row for (userId, rideDate) ──────────────────
-    const [existing] = await db
-      .select()
-      .from(workouts)
-      .where(and(eq(workouts.userId, userId), eq(workouts.date, rideDate)))
-      .limit(1)
-
-    let workoutId: number
-    if (!existing) {
-      const [inserted] = await db
-        .insert(workouts)
-        .values({
-          userId,
-          date: rideDate,
-          name,
-          durationMinutes,
-          distanceKm,
-          tss: fields.tss,
-          rpe: null,
-          notes: null,
-          ftpWatts: null,
-          rideType,
-          fitData: fields.fitData,
-          laps: fields.laps,
-          stravaActivityId,
-        })
-        .returning()
-      if (!inserted) throw new Error('workout insert returned no row')
-      workoutId = inserted.id
-      log.info('wahoo.webhook_workout_created', { requestId, workoutId, tss: fields.tss })
-    }
-    else {
-      // Overwrite the FIT-derived fields; keep manual name/notes/rpe/ftp.
-      await db
-        .update(workouts)
-        .set({
-          durationMinutes,
-          distanceKm,
-          tss: fields.tss,
-          rideType,
-          fitData: fields.fitData,
-          laps: fields.laps,
-          stravaActivityId: existing.stravaActivityId ?? stravaActivityId,
-        })
-        .where(and(eq(workouts.id, existing.id), eq(workouts.userId, userId)))
-      workoutId = existing.id
-      log.info('wahoo.webhook_workout_updated', { requestId, workoutId, tss: fields.tss })
-    }
-
-    // ── Power bests (per-workout, full replace) ─────────────────────────
-    // Only durations that beat the trailing-8-week (or all-time) max are stored
-    // as best efforts — same filter as POST/PATCH /api/workouts.
-    await db.delete(powerBests).where(eq(powerBests.workoutId, workoutId))
-    const bestEfforts = await filterNewBestEfforts(db, userId, rideDate, fields.powerBests, workoutId)
-    if (bestEfforts.length > 0) {
-      await db.insert(powerBests).values(
-        bestEfforts.map((pb) => ({ workoutId, duration: pb.duration, watts: pb.watts })),
-      )
-    }
-
-    // ── wahoo_power_bests (all-time / 8-week retention, like by-date) ───
-    await upsertWahooPowerBests(db, workout.id, fields.powerBests, rideDate)
-
-    invalidateMetrics(userId)
+    // ── Parse, title, upsert, bests (shared with the Zwift activity upload) ──
+    // Title: matching same-day Strava ride → planned workout → Wahoo name.
+    const result = await ingestFitRide({
+      userId,
+      rideDate,
+      buf,
+      source: 'wahoo',
+      wahooWorkoutId: workout.id,
+      rideType: rideTypeForWorkoutType(workout.workout_type_id),
+      fallbackName: workout.name?.trim() || 'Outdoor ride',
+      nameLookup: { attempts: 3, delayMs: 5_000 },
+      requestId,
+    })
+    const workoutId = result.workoutId
+    log.info('wahoo.webhook_ingested', { requestId, workoutId, created: result.created, nameSource: result.nameSource })
 
     setResponseStatus(event, 200)
     return { ok: true, workoutId }

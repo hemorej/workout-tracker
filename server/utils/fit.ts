@@ -207,11 +207,19 @@ function computeBests(w: number[]): Partial<Record<PowerBestDuration, number>> {
   return bests
 }
 
+/** Longest ride we'll parse (48 h of moving time) — bounds the per-second power array. */
+const MAX_RIDE_SECONDS = 48 * 3600
+
 /**
  * Parses a raw FIT file buffer and computes power metrics against the given
  * FTP. Throws if the file has no record data or no power data at all (e.g. a
  * run, or a ride with no power meter/trainer).
  */
+/** FIT header sanity: size byte 12 or 14 and the ".FIT" signature at bytes 8–11. */
+export function looksLikeFit(buf: Buffer): boolean {
+  return buf.length >= 14 && (buf[0] === 12 || buf[0] === 14) && buf.toString('latin1', 8, 12) === '.FIT'
+}
+
 export async function parseFitFile(content: Buffer, ftp: number): Promise<ParsedFitMetrics> {
   const parser = new FitParser({
     mode: 'list',
@@ -243,6 +251,12 @@ export async function parseFitFile(content: Buffer, ftp: number): Promise<Parsed
     const ts = r.timestamp.getTime()
     const movingTime = Math.round((ts - startTs) / 1000 - pausedSecondsBefore(ts))
     if (movingTime < 0) continue
+    // Untrusted input: FIT timestamps are uint32 seconds, so two records can
+    // sit ~136 years apart and the `watts` fill below would allocate billions
+    // of entries (a 42-byte file OOM-crashes the process). Refuse instead.
+    if (movingTime > MAX_RIDE_SECONDS) {
+      throw new Error('FIT file spans an implausible duration — corrupt or malformed.')
+    }
     if (movingTime > totalSeconds) totalSeconds = movingTime
     while (watts.length <= movingTime) watts.push(0)
     if (r.power !== undefined) watts[movingTime] = r.power
