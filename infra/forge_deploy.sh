@@ -2,6 +2,10 @@ $CREATE_RELEASE()
 
 cd $FORGE_RELEASE_DIRECTORY
 
+# Forge clones with a token embedded in the remote URL; strip the userinfo so it
+# isn't left readable in .git/config of every release.
+git remote set-url origin "$(git remote get-url origin | sed -E 's#^(https?://)[^/@]+@#\1#')"
+
 # --ignore-scripts skips the root `postinstall` (`nuxt prepare`), which `nuxt build`
 # runs itself. Dependency installs don't need lifecycle scripts (esbuild and
 # @parcel/watcher ship prebuilt platform binaries).
