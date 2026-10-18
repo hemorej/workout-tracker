@@ -5,3 +5,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Every merge to main triggers a Forge deploy (ci.yml), so batch the
+    # routine bumps into one PR = one deploy. Major bumps stay individual.
+    groups:
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
