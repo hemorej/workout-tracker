@@ -487,6 +487,7 @@ function clearWorkout() {
   blocks.value = []
   events.value = []
   selectedId.value = null
+  exitLibraryEditing()
 }
 
 // ── Text events ──────────────────────────────────────────────────────────
@@ -595,6 +596,18 @@ function onLibraryOpen() {
 }
 
 onMounted(applyPendingOpen)
+
+/** Drop the library-file context (banner, stale lock, baseline). A saved server-side draft is left intact. */
+function exitLibraryEditing() {
+  editing.value = null
+  libraryMeta.value = null
+  diskVersion.value = null
+  hasDraft.value = false
+  stale.value = false
+  baselineSig.value = ''
+  confirmingRevert.value = false
+  clearTimeout(confirmTimer)
+}
 
 const isSavingDraft = ref(false)
 const confirmingRevert = ref(false)
