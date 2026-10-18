@@ -194,7 +194,22 @@ async function openInBuilder() {
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') emit('close')
+  if (e.key === 'Escape') return emit('close')
+  const inField = (e.target as HTMLElement | null)?.tagName === 'INPUT'
+  if (inField) return
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    const list = filtered.value
+    if (!list.length) return
+    e.preventDefault()
+    const idx = list.findIndex(r => r.id === selectedId.value)
+    const next = e.key === 'ArrowDown' ? Math.min(idx + 1, list.length - 1) : Math.max(idx - 1, 0)
+    selectedId.value = list[idx === -1 ? 0 : next]!.id
+    nextTick(() => document.querySelector('[data-lib-selected="true"]')?.scrollIntoView({ block: 'nearest' }))
+  }
+  else if (e.key === 'Enter' && selected.value) {
+    e.preventDefault()
+    openInBuilder()
+  }
 }
 onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
@@ -203,7 +218,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 <template>
   <Teleport to="body">
     <div
-      class="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+      class="fixed inset-0 z-50"
       style="font-family: 'Hanken Grotesk', sans-serif;"
       role="dialog"
       aria-modal="true"
@@ -211,9 +226,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     >
       <div class="fixed inset-0 bg-black/25 backdrop-blur-sm" @click="emit('close')" />
 
-      <aside class="relative flex flex-col bg-white rounded-2xl shadow-xl w-full max-w-2xl my-8 overflow-hidden" style="height: min(820px, calc(100vh - 4rem));">
+      <aside
+        class="absolute left-1/2 flex flex-col bg-white rounded-2xl overflow-hidden"
+        style="top: 36px; transform: translateX(-50%); width: min(960px, calc(100% - 48px)); height: min(748px, calc(100vh - 72px)); box-shadow: 0 24px 60px rgba(28,25,23,.28);"
+      >
         <!-- Header -->
-        <div class="flex-none px-5 pt-5">
+        <div class="flex-none px-6 pt-[22px]">
           <div class="flex items-start justify-between">
             <div>
               <h2 style="font: 600 18px 'Hanken Grotesk'; color: #1c1917;">
@@ -223,36 +241,35 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                 Zwift/Workouts · {{ rows.length }} {{ rows.length === 1 ? 'file' : 'files' }}
               </p>
             </div>
-            <button
-              aria-label="Close"
-              class="cursor-pointer text-stone-300 hover:text-stone-500"
-              style="background: none; border: none;"
-              @click="emit('close')"
-            >
-              <UIcon name="i-heroicons-x-mark" class="block" style="width: 20px; height: 20px;" />
-            </button>
+            <div class="flex items-center gap-[18px]">
+              <p v-if="lastSyncedLabel" class="flex items-center gap-1.5 tabular" style="font: 500 12px 'Hanken Grotesk'; color: #a8a29e;">
+                <UIcon name="i-heroicons-arrow-path" style="width: 14px; height: 14px;" />
+                Last synced {{ lastSyncedLabel }}
+              </p>
+              <button
+                aria-label="Close"
+                class="cursor-pointer text-stone-300 hover:text-stone-500"
+                style="background: none; border: none;"
+                @click="emit('close')"
+              >
+                <UIcon name="i-heroicons-x-mark" class="block" style="width: 20px; height: 20px;" />
+              </button>
+            </div>
           </div>
 
-          <p v-if="lastSyncedLabel" class="flex items-center gap-1.5 mt-2 tabular" style="font: 500 12px 'Hanken Grotesk'; color: #a8a29e;">
-            <UIcon name="i-heroicons-arrow-path" style="width: 14px; height: 14px;" />
-            Last synced {{ lastSyncedLabel }}
-          </p>
-
-          <!-- Search -->
-          <div class="relative mt-4">
-            <UIcon name="i-heroicons-magnifying-glass" class="absolute" style="left: 14px; top: 14px; width: 18px; height: 18px; color: #a8a29e;" />
-            <input
-              v-model="q"
-              type="text"
-              placeholder="Search workouts"
-              class="w-full outline-none search-input"
-              style="height: 46px; border-radius: 12px; border: 1.5px solid #e7e5e4; background: #fafaf9; padding: 0 14px 0 42px; font: 500 15px 'Hanken Grotesk'; color: #1c1917;"
-            >
-          </div>
-
-          <!-- Ranges -->
-          <div class="grid grid-cols-2 mt-3.5" style="gap: 14px;">
-            <div>
+          <!-- Row 1: search + ranges -->
+          <div class="flex flex-wrap items-end gap-4 mt-[18px]">
+            <div class="relative flex-1 min-w-[200px]">
+              <UIcon name="i-heroicons-magnifying-glass" class="absolute" style="left: 14px; top: 13px; width: 18px; height: 18px; color: #a8a29e;" />
+              <input
+                v-model="q"
+                type="text"
+                placeholder="Search workouts"
+                class="w-full outline-none search-input"
+                style="height: 44px; border-radius: 12px; border: 1.5px solid #e7e5e4; background: #fafaf9; padding: 0 14px 0 42px; font: 500 15px 'Hanken Grotesk'; color: #1c1917;"
+              >
+            </div>
+            <div class="w-[158px] flex-none">
               <p class="mb-1.5" style="font: 500 11px 'Hanken Grotesk'; letter-spacing: .08em; text-transform: uppercase; color: #a8a29e;">
                 Duration (min)
               </p>
@@ -262,7 +279,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                 <input :value="durMax" inputmode="numeric" placeholder="max" class="range-input" @input="durMax = digits(($event.target as HTMLInputElement).value)">
               </div>
             </div>
-            <div>
+            <div class="w-[158px] flex-none">
               <p class="mb-1.5" style="font: 500 11px 'Hanken Grotesk'; letter-spacing: .08em; text-transform: uppercase; color: #a8a29e;">
                 TSS
               </p>
@@ -274,28 +291,26 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
             </div>
           </div>
 
-          <!-- Zone chips -->
-          <div class="flex items-start gap-2 mt-3.5 pb-4">
-            <div class="flex flex-wrap gap-1.5 flex-1">
-              <button
-                v-for="z in ZONE_CHIPS"
-                :key="z.value"
-                class="inline-flex items-center cursor-pointer"
-                :style="{
-                  height: '28px', gap: '7px', padding: '0 11px 0 9px', borderRadius: '9999px', font: `600 12px 'Hanken Grotesk'`,
-                  border: `1.5px solid ${zone === z.value ? '#fdba74' : '#e7e5e4'}`,
-                  background: zone === z.value ? '#fff7ed' : '#fff',
-                  color: zone === z.value ? '#ea580c' : '#57534e',
-                }"
-                @click="zone = zone === z.value ? null : z.value"
-              >
-                <span class="inline-block rounded-full" :style="{ width: '9px', height: '9px', background: TONES[z.tone]!.dot }" />
-                {{ z.label }}
-              </button>
-            </div>
+          <!-- Row 2: zone chips -->
+          <div class="flex flex-wrap items-center gap-1.5 mt-[14px] mb-[16px]">
+            <button
+              v-for="z in ZONE_CHIPS"
+              :key="z.value"
+              class="inline-flex items-center cursor-pointer"
+              :style="{
+                height: '28px', gap: '7px', padding: '0 11px 0 9px', borderRadius: '9999px', font: `600 12px 'Hanken Grotesk'`,
+                border: `1.5px solid ${zone === z.value ? '#fdba74' : '#e7e5e4'}`,
+                background: zone === z.value ? '#fff7ed' : '#fff',
+                color: zone === z.value ? '#ea580c' : '#57534e',
+              }"
+              @click="zone = zone === z.value ? null : z.value"
+            >
+              <span class="inline-block rounded-full" :style="{ width: '9px', height: '9px', background: TONES[z.tone]!.dot }" />
+              {{ z.label }}
+            </button>
             <button
               :disabled="!filtersActive"
-              class="flex-none"
+              class="ml-auto flex-none"
               :class="filtersActive ? 'cursor-pointer' : 'cursor-default'"
               :style="{ font: `600 12px 'Hanken Grotesk'`, color: filtersActive ? '#ea580c' : '#d6d3d1', background: 'none', border: 'none', padding: '6px 0' }"
               @click="resetFilters"
@@ -305,105 +320,132 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           </div>
         </div>
 
-        <!-- List -->
-        <div class="flex-1 min-h-0 overflow-y-auto">
-          <div class="flex items-baseline justify-between px-5 pb-2 mx-0" style="position: sticky; top: 0; background: #fff; z-index: 1;">
-            <span style="font: 600 11px 'Hanken Grotesk'; letter-spacing: .12em; text-transform: uppercase; color: #78716c; border-bottom: 2px solid #e7e5e0; padding-bottom: 4px;">Workouts</span>
-            <span class="tabular whitespace-nowrap" style="font: 400 12px 'Hanken Grotesk'; color: #a8a29e;">{{ filtered.length }} of {{ rows.length }}</span>
-          </div>
-
-          <div v-if="loading" class="flex justify-center py-12">
-            <BikeSpinner />
-          </div>
-          <div v-else-if="loadError" class="text-center py-12" style="font: 500 14px 'Hanken Grotesk'; color: #78716c;">
-            Couldn't load the library.
-          </div>
-          <div v-else-if="filtered.length === 0" class="text-center py-12">
-            <p style="font-size: 36px; color: #d6d3d1; line-height: 1;">○</p>
-            <p class="mt-2" style="font: 500 14px 'Hanken Grotesk'; color: #78716c;">
-              {{ rows.length ? 'No matching workouts' : 'No workouts synced yet' }}
-            </p>
-            <p style="font: 400 12px 'Hanken Grotesk'; color: #a8a29e;">
-              {{ rows.length ? 'Adjust or reset the filters' : 'Run the Zwift sync daemon to mirror your folder' }}
-            </p>
-          </div>
-          <ul v-else class="list-none m-0 p-0">
-            <li
-              v-for="r in filtered"
-              :key="r.id"
-              class="relative flex items-center cursor-pointer row"
-              :class="{ 'row-selected': r.id === selectedId }"
-              style="gap: 14px; padding: 12px 20px; border-top: 1px solid #f7f5f3;"
-              @click="selectedId = r.id"
-            >
-              <span v-if="r.id === selectedId" class="absolute" style="left: 0; top: 12px; bottom: 12px; width: 3px; background: #ea580c; border-radius: 2px;" />
-              <div class="flex-none">
-                <WorkoutTimeline :segs="toSegs(r)" :total="r.timeline.tot" :width="64" :height="32" mini />
-              </div>
-              <div class="min-w-0 flex-1">
-                <p class="truncate" style="font: 600 15px 'Hanken Grotesk'; color: #292524;">
-                  {{ r.name }}
-                </p>
-                <div class="flex flex-wrap items-center" style="gap: 6px;">
-                  <span class="tabular" style="font: 400 13px 'Hanken Grotesk'; color: #a8a29e; min-width: 48px;">{{ fmtDuration(r.durationSec) }}</span>
-                  <span class="tabular whitespace-nowrap" style="font: 600 12px 'Hanken Grotesk'; color: #d97706; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 1px 6px;">{{ r.tss }} TSS</span>
-                  <span
-                    v-if="zoneChip(r.zone)"
-                    class="whitespace-nowrap"
-                    :style="{
-                      font: `600 12px 'Hanken Grotesk'`, borderRadius: '6px', padding: '1px 6px',
-                      color: TONES[zoneChip(r.zone)!.tone]!.fg,
-                      background: TONES[zoneChip(r.zone)!.tone]!.bg,
-                      border: `1px solid ${TONES[zoneChip(r.zone)!.tone]!.border}`,
-                    }"
-                  >{{ zoneChip(r.zone)!.label }}</span>
-                  <span v-if="r.hasDraft" class="inline-flex items-center whitespace-nowrap" style="gap: 3px; font: 600 12px 'Hanken Grotesk'; color: #7c3aed; background: #f5f3ff; border-radius: 6px; padding: 1px 6px;">
-                    <UIcon name="i-heroicons-pencil" style="width: 11px; height: 11px;" />
-                    edited
-                  </span>
-                </div>
-                <p v-if="r.stale" class="flex items-center" style="gap: 4px; margin-top: 2px; font: 500 12px 'Hanken Grotesk'; color: #b45309;">
-                  <UIcon name="i-heroicons-exclamation-triangle" style="width: 13px; height: 13px;" />
-                  disk changed since your edit
-                </p>
-              </div>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Preview -->
-        <div
-          v-if="selected"
-          class="flex-none bg-white px-5 py-4"
-          style="border-top: 1px solid #f0eeec; box-shadow: 0 -8px 20px rgba(28,25,23,.05);"
-        >
-          <div class="flex items-baseline justify-between gap-3 mb-2.5">
-            <div class="min-w-0">
-              <p style="font: 600 11px 'Hanken Grotesk'; letter-spacing: .12em; text-transform: uppercase; color: #78716c;">
-                Preview
-              </p>
-              <p class="truncate" style="font: 500 12px 'Hanken Grotesk'; color: #a8a29e;">
-                {{ selected.path }}
-              </p>
+        <!-- Body: list + preview -->
+        <div class="grid grid-cols-1 min-[900px]:grid-cols-[minmax(0,1fr)_300px] grid-rows-[minmax(0,1fr)] flex-1 min-h-0 border-t" style="border-color: #f0eeec;">
+          <!-- List -->
+          <div class="flex flex-col min-h-0 min-w-0">
+            <div class="flex-none flex items-baseline justify-between px-6 py-3" style="border-bottom: 1px solid #f0eeec;">
+              <span style="font: 600 11px 'Hanken Grotesk'; letter-spacing: .12em; text-transform: uppercase; color: #78716c;">Workouts</span>
+              <span class="tabular whitespace-nowrap" style="font: 400 12px 'Hanken Grotesk'; color: #a8a29e;">{{ filtered.length }} of {{ rows.length }}</span>
             </div>
-            <p class="tabular whitespace-nowrap" style="font: 700 15px 'Hanken Grotesk'; color: #292524;">
-              {{ fmtDuration(selected.durationSec) }} · {{ selected.tss }} TSS
-            </p>
+
+            <div class="flex-1 overflow-auto">
+              <div v-if="loading" class="flex justify-center py-14">
+                <BikeSpinner />
+              </div>
+              <div v-else-if="loadError" class="text-center py-14" style="font: 500 14px 'Hanken Grotesk'; color: #78716c;">
+                Couldn't load the library.
+              </div>
+              <div v-else-if="filtered.length === 0" class="text-center py-14">
+                <p style="font-size: 36px; color: #d6d3d1; line-height: 1;">○</p>
+                <p class="mt-2" style="font: 500 14px 'Hanken Grotesk'; color: #78716c;">
+                  {{ rows.length ? 'No matching workouts' : 'No workouts synced yet' }}
+                </p>
+                <p style="font: 400 12px 'Hanken Grotesk'; color: #a8a29e;">
+                  {{ rows.length ? 'Adjust or reset the filters' : 'Run the Zwift sync daemon to mirror your folder' }}
+                </p>
+              </div>
+              <ul v-else class="list-none m-0 p-0">
+                <li
+                  v-for="r in filtered"
+                  :key="r.id"
+                  :data-lib-selected="r.id === selectedId"
+                  class="relative grid grid-cols-[128px_minmax(0,1fr)_auto] items-center gap-[18px] px-6 py-[14px] cursor-pointer row"
+                  :class="{ 'row-selected': r.id === selectedId }"
+                  style="border-top: 1px solid #f7f5f3;"
+                  @click="selectedId = r.id"
+                >
+                  <span v-if="r.id === selectedId" class="absolute" style="left: 0; top: 12px; bottom: 12px; width: 3px; background: #ea580c; border-radius: 2px;" />
+                  <div class="rounded-lg px-2 py-1.5" style="background: #fafaf9; border: 1px solid #f0eeec;">
+                    <WorkoutTimeline :segs="toSegs(r)" :total="r.timeline.tot" :width="110" :height="38" mini />
+                  </div>
+                  <div class="min-w-0">
+                    <p class="truncate" style="font: 600 16px 'Hanken Grotesk'; color: #292524;">
+                      {{ r.name }}
+                    </p>
+                    <div class="flex flex-wrap items-center" style="gap: 6px;">
+                      <span
+                        v-if="zoneChip(r.zone)"
+                        class="whitespace-nowrap"
+                        :style="{
+                          font: `600 12px 'Hanken Grotesk'`, borderRadius: '6px', padding: '1px 6px',
+                          color: TONES[zoneChip(r.zone)!.tone]!.fg,
+                          background: TONES[zoneChip(r.zone)!.tone]!.bg,
+                          border: `1px solid ${TONES[zoneChip(r.zone)!.tone]!.border}`,
+                        }"
+                      >{{ zoneChip(r.zone)!.label }}</span>
+                      <span v-if="r.hasDraft" class="inline-flex items-center whitespace-nowrap" style="gap: 3px; font: 600 12px 'Hanken Grotesk'; color: #7c3aed; background: #f5f3ff; border-radius: 6px; padding: 1px 6px;">
+                        <UIcon name="i-heroicons-pencil" style="width: 11px; height: 11px;" />
+                        edited
+                      </span>
+                    </div>
+                    <p v-if="r.stale" class="flex items-center" style="gap: 4px; margin-top: 2px; font: 500 12px 'Hanken Grotesk'; color: #b45309;">
+                      <UIcon name="i-heroicons-exclamation-triangle" style="width: 13px; height: 13px;" />
+                      disk changed since your edit
+                    </p>
+                  </div>
+                  <div class="flex items-center justify-end gap-3">
+                    <span class="tabular text-right min-w-14" style="font: 500 14px 'Hanken Grotesk'; color: #78716c;">{{ fmtDuration(r.durationSec) }}</span>
+                    <span class="tabular whitespace-nowrap text-center min-w-[52px]" style="font: 600 12px 'Hanken Grotesk'; color: #d97706; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 1px 6px;">{{ r.tss }} TSS</span>
+                  </div>
+                </li>
+              </ul>
+            </div>
           </div>
-          <WorkoutTimeline :segs="toSegs(selected)" :events="selected.timeline.ev" :total="selected.timeline.tot" :width="400" :height="84" :ftp="props.ftp" compact />
-          <div class="flex items-center justify-between gap-3 mt-3">
-            <p style="font: 400 12px 'Hanken Grotesk'; color: #a8a29e;">
-              {{ openHint }}
-            </p>
-            <button
-              :disabled="!selected.editable || opening"
-              class="open-btn flex-none"
-              :class="!selected.editable || opening ? 'cursor-not-allowed' : 'cursor-pointer'"
-              :style="{ opacity: !selected.editable || opening ? 0.5 : 1 }"
-              @click="openInBuilder"
-            >
-              Open in builder
-            </button>
+
+          <!-- Preview pane -->
+          <div class="hidden min-[900px]:flex flex-col min-h-0 border-l" style="background: #fafaf9; border-color: #f0eeec;">
+            <template v-if="selected">
+              <div class="flex-1 min-h-0 overflow-auto p-5">
+                <p style="font: 600 11px 'Hanken Grotesk'; letter-spacing: .12em; text-transform: uppercase; color: #78716c;">
+                  Preview
+                </p>
+                <p class="mt-2" style="font: 600 18px 'Hanken Grotesk'; color: #292524;">
+                  {{ selected.name }}
+                </p>
+                <p class="break-all" style="font: 400 12px 'Hanken Grotesk'; color: #a8a29e;">
+                  {{ selected.path }}
+                </p>
+                <div class="flex gap-8 mt-4">
+                  <div>
+                    <p style="font: 500 11px 'Hanken Grotesk'; letter-spacing: .08em; text-transform: uppercase; color: #a8a29e;">
+                      Duration
+                    </p>
+                    <p class="tabular" style="font: 700 22px 'Hanken Grotesk'; color: #292524;">
+                      {{ fmtDuration(selected.durationSec) }}
+                    </p>
+                  </div>
+                  <div>
+                    <p style="font: 500 11px 'Hanken Grotesk'; letter-spacing: .08em; text-transform: uppercase; color: #a8a29e;">
+                      TSS
+                    </p>
+                    <p class="tabular" style="font: 700 22px 'Hanken Grotesk'; color: #292524;">
+                      {{ selected.tss }}
+                    </p>
+                  </div>
+                </div>
+                <div class="mt-4 bg-white rounded-xl p-3" style="border: 1px solid #f0eeec;">
+                  <WorkoutTimeline :segs="toSegs(selected)" :events="selected.timeline.ev" :total="selected.timeline.tot" :width="254" :height="120" :ftp="props.ftp" compact />
+                </div>
+              </div>
+              <div class="flex-none p-5 pt-4">
+                <button
+                  :disabled="!selected.editable || opening"
+                  class="open-btn w-full"
+                  :class="!selected.editable || opening ? 'cursor-not-allowed' : 'cursor-pointer'"
+                  :style="{ opacity: !selected.editable || opening ? 0.5 : 1 }"
+                  @click="openInBuilder"
+                >
+                  Open in builder
+                </button>
+                <p class="mt-2 text-center" style="font: 400 12px 'Hanken Grotesk'; color: #a8a29e;">
+                  {{ openHint }}
+                </p>
+              </div>
+            </template>
+            <div v-else class="flex-1 flex items-center justify-center p-5 text-center" style="font: 400 13px 'Hanken Grotesk'; color: #a8a29e;">
+              Select a workout to preview
+            </div>
           </div>
         </div>
       </aside>
@@ -418,7 +460,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   min-width: 0;
   border: 1.5px solid #e7e5e4;
   border-radius: 9px;
-  padding: 7px 9px;
+  padding: 9px;
   font: 500 14px 'Hanken Grotesk';
   font-variant-numeric: tabular-nums;
   color: #1c1917;
@@ -433,8 +475,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   color: #fff;
   background: #ea580c;
   border: none;
-  border-radius: 8px;
-  padding: 9px 16px;
+  border-radius: 9px;
+  padding: 11px 16px;
 }
 .open-btn:not(:disabled):hover { background: #c2410c; }
 </style>
