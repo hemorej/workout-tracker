@@ -21,12 +21,17 @@
         "zwift-sync": "node --experimental-strip-types scripts/zwift-sync.ts",
         "zwift-activities": "node --experimental-strip-types scripts/zwift-activities.ts"
     },
-    "dependencies": {
+    "devDependencies": {
+        "@adonisjs/hash": "^10.1.1",
         "@fontsource-variable/archivo": "^5.3.0",
         "@fontsource-variable/hanken-grotesk": "^5.3.0",
         "@fontsource/instrument-serif": "^5.3.0",
+        "@iconify-json/heroicons": "^1.2.3",
         "@nuxt/ui": "^4.11.3",
         "@pinia/nuxt": "^1.0.2",
+        "@types/node": "^26.6.4",
+        "@types/pg": "^8.23.1",
+        "drizzle-kit": "^0.31.11",
         "drizzle-orm": "0.45.3",
         "fit-file-parser": "^6.1.2",
         "nuxt": "^4.6.0",
@@ -34,18 +39,11 @@
         "pg": "8.23.1",
         "pinia": "^4.0.3",
         "tslog": "^5.2.0",
+        "typescript": "^5.7.0",
         "vue": "^3.5.43",
         "vue-router": "^5.4.0",
+        "vue-tsc": "^3.3.12",
         "zod": "^4.6.5",
         "zwift-data": "^2.1.0"
-    },
-    "devDependencies": {
-        "@adonisjs/hash": "^10.1.1",
-        "@iconify-json/heroicons": "^1.2.3",
-        "@types/node": "^26.6.4",
-        "@types/pg": "^8.23.1",
-        "drizzle-kit": "^0.31.11",
-        "typescript": "^5.7.0",
-        "vue-tsc": "^3.3.12"
     }
 }

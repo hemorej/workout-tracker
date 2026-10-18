@@ -65,10 +65,10 @@ export interface StravaSegmentEffort {
 
 async function stravaGet<T>(path: string, query?: Record<string, string | number>): Promise<T> {
   const accessToken = await getStravaAccessToken()
-  return $fetch(`${STRAVA_API}${path}`, {
+  return (await $fetch<unknown>(`${STRAVA_API}${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     query,
-  }) as Promise<T>
+  })) as T
 }
 
 // ── Fetchers ─────────────────────────────────────────────────────────────

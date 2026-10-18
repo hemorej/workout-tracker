@@ -1,7 +1,5 @@
 # Sprocket
 
-[![Laravel Forge Site Deployment Status](https://img.shields.io/endpoint?url=https%3A%2F%2Fforge.laravel.com%2Fsite-badges%2Fa0b639e9-8525-463d-afcd-29ef34240d2e&style=plastic)](https://forge.laravel.com/jerome-zpm/resilient-bird/3264841)
-
 A personal cycling training tracker built on the modern Nuxt 4 + Vue 3.5 + TypeScript stack.
 
 Track your daily sessions, visualise fitness and fatigue over time, and understand your "form" at a glance using industry-standard training load metrics. Also includes: a structured workout builder that exports Zwift `.zwo` files, a 4-week planner with live CTL/TSB projections, a single-user "mark planned workout as completed" flow that pulls the ride title from Strava and the real power/TSS numbers from a parsed FIT file (via Wahoo's Cloud API or manual upload), an AI coach that turns a written training plan into a structured workout (or a multi-week plan suggestion), a Wahoo webhook that auto-logs finished outdoor rides, a local daemon that auto-logs finished Zwift rides from their FIT files, a Strava-segment tracker, and a Zwift workout library that mirrors your local `.zwo` folder.
