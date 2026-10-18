@@ -34,3 +34,10 @@ overrides:
   nanoid: '>=3.3.18'
   devalue: '>=5.9.2'
   '@tiptap/core': '>=3.30.5'
+
+# Build/dev-time only transitive deps of nuxt > nitropack (listhen dev server,
+# globby file matching); neither ships in .output. Remove once patched upstream.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-86w9-cpqp-85rv # node-forge
+    - GHSA-vfj7-8cjw-p6xm # braces
