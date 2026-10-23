@@ -11,7 +11,7 @@ import { secretMatches } from './wahooWebhook'
 const log = getLogger('zwift')
 
 export const ZWIFT_ACTIVITY_LIMITS = {
-  /** A 4 h ride is ~1.2 MB; leave generous headroom. nginx must allow it too (infra/nginx.config). */
+  /** A 4 h ride is ~1.2 MB; leave generous headroom. nginx must allow it too (infra/nginx.conf). */
   maxBodyBytes: 8_000_000,
 } as const
 
