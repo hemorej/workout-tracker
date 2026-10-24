@@ -109,7 +109,7 @@ sprocket/
 
 ### 1. Prerequisites
 
-- Node.js 24.x
+- Node.js 26.x
 - pnpm 11+ (`npm install -g pnpm`)
 - PostgreSQL 18+ running locally (or a hosted instance)
 
@@ -516,7 +516,7 @@ NUXT_ZWIFT_SYNC_TOKEN=<token A>
 NUXT_ZWIFT_ACTIVITY_TOKEN=<token B>
 ```
 
-The activity upload needs `client_max_body_size 8m` (already in `infra/nginx.config`; deploy it, or add it to the Forge site's nginx config).
+The activity upload needs `client_max_body_size 8m` (already in `infra/nginx.conf`; deploy it, or add it to the Forge site's nginx config).
 
 ### 2. Local prerequisites
 

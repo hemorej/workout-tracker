@@ -1,0 +1,12 @@
+# Scheduled jobs for sprocket, as defined in Forge's Scheduler (user: forge).
+# Documentation only — nothing installs this file. Forge's scheduler did not show up in
+# `crontab -l` for forge or root on the droplet (checked 2026-10-23), so Forge runs these some
+# other way; leaving Forge means adding them to the forge user's crontab (`crontab -e`).
+#
+# NUXT_SEGMENTS_SYNC_TOKEN is the value in /home/forge/sprocket.jerome-arfouche.ca/.env.
+
+# segment reconcile — nightly backstop for the per-ride Strava segment pass (see CLAUDE.md)
+0 4 * * * curl -fsS -X POST https://sprocket.jerome-arfouche.ca/api/segments/reconcile -H "Authorization: Bearer <NUXT_SEGMENTS_SYNC_TOKEN>"
+
+# update-power-bests — DISABLED in Forge, kept there only as a fallback after the power-bests
+# refactor. Not needed; do not re-enable.
