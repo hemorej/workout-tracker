@@ -16,7 +16,7 @@
 import { useCoachStore } from '~/stores/coach'
 import { usePlanningStore } from '~/stores/planning'
 import { useZwiftLibraryStore, type LibraryPendingOpen, type LibraryVersion } from '~/stores/zwiftLibrary'
-import type { ZwoBlock, ZwoMeta } from '#shared/utils/zwo'
+import type { ZwoBlock, ZwoMeta, ZwoZoneName } from '#shared/utils/zwo'
 
 // ── Data model ───────────────────────────────────────────────────────────
 
@@ -51,6 +51,31 @@ const ZONE_CHIPS = [
 // ── State ────────────────────────────────────────────────────────────────
 
 const title = ref('')
+
+// Optional `zone:<Name>` tag written into the .zwo on download (the library's zone filter reads it).
+const ZONE_TYPES = [
+  { value: 'ActiveRecovery', label: 'Recovery', dot: '#9AA5B1' },
+  { value: 'Endurance', label: 'Endurance', dot: '#38BDF8' },
+  { value: 'Tempo', label: 'Tempo', dot: '#34D399' },
+  { value: 'SweetSpot', label: 'Sweet spot', dot: '#FBBF24' },
+  { value: 'Threshold', label: 'Threshold', dot: '#FBBF24' },
+  { value: 'VO2Max', label: 'VO2 max', dot: '#FB923C' },
+  { value: 'Anaerobic', label: 'Anaerobic', dot: '#F87171' },
+  { value: 'Sprint', label: 'Sprint', dot: '#F87171' },
+] as const satisfies readonly { value: ZwoZoneName, label: string, dot: string }[]
+
+const zoneType = ref<ZwoZoneName | null>(null)
+const zoneTypeSelected = computed(() => ZONE_TYPES.find(z => z.value === zoneType.value) ?? null)
+const zoneTypeItems = computed(() => [
+  ...ZONE_TYPES.map(z => ({
+    label: z.label,
+    value: z.value,
+    dot: z.dot,
+    selected: z.value === zoneType.value,
+    onSelect: () => { zoneType.value = z.value },
+  })),
+  { label: 'No type', value: null, dot: '', selected: zoneType.value === null, onSelect: () => { zoneType.value = null } },
+])
 const ftp = ref(240)
 
 // Seed FTP from the athlete's most recent logged value (same field HistoryTab
@@ -555,7 +580,7 @@ const hasDraft = ref(false)
 const stale = ref(false)
 const baselineSig = ref('')
 
-const editSig = computed(() => JSON.stringify({ t: title.value, b: blocks.value, e: events.value }))
+const editSig = computed(() => JSON.stringify({ t: title.value, z: zoneType.value, b: blocks.value, e: events.value }))
 const dirty = computed(() => !!editing.value && editSig.value !== baselineSig.value)
 
 const editingFileName = computed(() => editing.value?.path.split('/').pop() ?? '')
@@ -568,6 +593,7 @@ function stripId(b: Block): ZwoBlock {
 function loadVersion(v: { meta: ZwoMeta, blocks: ZwoBlock[], events: { at: number, text: string, attrs: Record<string, string> }[] }) {
   libraryMeta.value = v.meta
   title.value = v.meta.name
+  zoneType.value = zoneFromTags(v.meta.tags)
   blocks.value = v.blocks.map(b => ({ ...b, id: nextId.value++ }) as Block)
   events.value = v.events.map(e => ({ ...e, id: nextEventId.value++ }))
   selectedId.value = null
@@ -614,9 +640,13 @@ const confirmingRevert = ref(false)
 let confirmTimer: ReturnType<typeof setTimeout> | undefined
 
 function buildXml() {
-  const meta: ZwoMeta = libraryMeta.value
+  const base: ZwoMeta = libraryMeta.value
     ? { ...libraryMeta.value, name: title.value }
     : { name: title.value, author: '', description: '', sportType: 'bike', tags: [], extraMeta: {} }
+  // Replace any existing zone tag (even an invalid one) with the picked type; other tags ride along.
+  const tags = base.tags.filter(t => !t.startsWith('zone:'))
+  if (zoneType.value) tags.unshift(`zone:${zoneType.value}`)
+  const meta: ZwoMeta = { ...base, tags }
   const withEvents = attachTextEvents(blocks.value.map(stripId), events.value.map(({ at, text, attrs }) => ({ at, text, attrs })))
   return serializeZwo(meta, withEvents)
 }
@@ -732,9 +762,42 @@ function download() {
   <div class="space-y-6" style="font-family: 'Hanken Grotesk', sans-serif;">
     <!-- ── Row 1: name + library, stat cards ───────────────────────────── -->
     <!-- Narrower than the timeline card below — stays put while the timeline widens. -->
-    <div class="max-w-3xl mx-auto flex items-end gap-4 flex-wrap">
+    <div class="max-w-4xl mx-auto flex items-end gap-4 flex-wrap">
       <!-- Workout name + library entry -->
       <div class="flex items-end gap-3 flex-none">
+        <!-- Optional workout type → `zone:*` tag on download -->
+        <div class="flex-none">
+          <label class="block mb-[7px]" style="font: 600 12px 'Hanken Grotesk'; color: #78716c; letter-spacing: .04em; text-transform: uppercase;">
+            Type
+          </label>
+          <UDropdownMenu :items="zoneTypeItems" :content="{ align: 'start' }" :ui="{ content: 'w-44' }">
+            <button
+              type="button"
+              class="type-btn inline-flex items-center cursor-pointer"
+              style="gap: 8px; font: 600 15px 'Hanken Grotesk'; border: 1.5px solid #e7e5e4; border-radius: 10px; padding: 12px 12px 12px 14px; background: #fff;"
+              :style="{ color: zoneTypeSelected ? '#1c1917' : '#a8a29e' }"
+              aria-label="Workout type. Change"
+            >
+              <span
+                class="flex-none rounded-full"
+                :style="{ width: '10px', height: '10px', background: zoneTypeSelected?.dot ?? 'transparent', border: zoneTypeSelected ? 'none' : '1.5px dashed #d6d3d1' }"
+              />
+              <span style="min-width: 76px; text-align: left;">{{ zoneTypeSelected?.label ?? 'No type' }}</span>
+              <UIcon name="i-heroicons-chevron-down" style="width: 14px; height: 14px; color: #a8a29e;" />
+            </button>
+
+            <template #item-leading="{ item }">
+              <span
+                v-if="item.dot"
+                class="flex-none rounded-full"
+                :style="{ width: '10px', height: '10px', background: item.dot }"
+              />
+            </template>
+            <template #item-trailing="{ item }">
+              <UIcon v-if="item.selected" name="i-heroicons-check" class="w-3 h-3 text-stone-500" />
+            </template>
+          </UDropdownMenu>
+        </div>
         <div class="flex-none" style="width: 280px;">
           <label class="block mb-[7px]" style="font: 600 12px 'Hanken Grotesk'; color: #78716c; letter-spacing: .04em; text-transform: uppercase;">
             Workout name
@@ -1516,6 +1579,9 @@ function download() {
 </template>
 
 <style scoped>
+.type-btn:hover {
+  border-color: #fdba74 !important;
+}
 .library-pill {
   color: #57534e;
   background: #fff;
