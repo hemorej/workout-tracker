@@ -787,11 +787,13 @@ function download() {
             </button>
 
             <template #item-leading="{ item }">
-              <span
-                v-if="item.dot"
-                class="flex-none rounded-full"
-                :style="{ width: '10px', height: '10px', background: item.dot }"
-              />
+              <span class="flex-none inline-flex items-center justify-center" style="width: 10px; height: 20px;">
+                <span
+                  v-if="item.dot"
+                  class="rounded-full"
+                  :style="{ width: '10px', height: '10px', background: item.dot }"
+                />
+              </span>
             </template>
             <template #item-trailing="{ item }">
               <UIcon v-if="item.selected" name="i-heroicons-check" class="w-3 h-3 text-stone-500" />
