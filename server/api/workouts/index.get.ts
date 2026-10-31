@@ -33,7 +33,8 @@
  *   days: DayEntry[]          — paginated, newest first
  *   weeklyStats: { tssTotal, hoursTotal, kmTotal }
  *   todayMetrics: { ctl, atl, tsb }
- *   yesterdayMetrics: { ctl, atl, tsb } | null
+ *   ctlRange: { min, max } | null — trailing-year CTL extremes, for the fitness band label
+ *   weekAgoMetrics: { ctl, atl, tsb } | null — 7 days ago, for the CTL trend arrow
  *   pagination: { page, limit, totalDays, totalPages }
  * }
  */
@@ -96,8 +97,16 @@ export default defineEventHandler(async (event) => {
     ? { ctl: series.at(-1)!.ctl, atl: series.at(-1)!.atl, tsb: series.at(-1)!.tsb }
     : { ctl: 0, atl: 0, tsb: 0 }
 
-  const yesterdayMetrics = series.at(-2)
-    ? { ctl: series.at(-2)!.ctl, atl: series.at(-2)!.atl, tsb: series.at(-2)!.tsb }
+  const weekAgoMetrics = series.at(-8)
+    ? { ctl: series.at(-8)!.ctl, atl: series.at(-8)!.atl, tsb: series.at(-8)!.tsb }
+    : null
+
+  // Trailing-year CTL extremes drive the relative "fitness" band on the card.
+  // A year (not all-time) so the ramp-up from the seed value, or one career-best
+  // peak, doesn't pin the scale forever. Null when there's no history.
+  const recentCtl = series.slice(-365).map((d) => d.ctl)
+  const ctlRange = recentCtl.length
+    ? { min: Math.min(...recentCtl), max: Math.max(...recentCtl) }
     : null
 
   // ── Row shape shared by both branches ───────────────────────────────────────
@@ -256,7 +265,8 @@ export default defineEventHandler(async (event) => {
     days,
     weeklyStats,
     todayMetrics,
-    yesterdayMetrics,
+    weekAgoMetrics,
+    ctlRange,
     pagination: {
       page,
       limit,
