@@ -14,17 +14,13 @@
  * from Wahoo's own workout summary — the caller is expected to take the
  * activity *name* from Strava and everything else from here.
  *
- * As a side effect, upserts the computed bests into `wahoo_power_bests` and
- * prunes it back down to the all-time top-3 / trailing-8-week retention
- * window per duration (same as the old activities/[id] endpoint this
- * replaces).
- *
- * `powerBests` in the response is already narrowed to durations that beat the
- * athlete's trailing-8-week (or all-time) max as of that day
- * (`withNewBestEffortsOnly`); `wahoo_power_bests` still gets every duration.
+ * Read-only: nothing is written here. `powerBests` in the response is narrowed
+ * to PRs (strictly above the athlete's trailing-8-week max as of that day,
+ * `withNewBestEffortsOnly`); `powerCurve` carries the full curve, which the
+ * client passes back on save so it lands in `power_curve`.
  *
  * Returns:
- *   200 { ride: WahooRideSummary, tss, powerBests, durationSeconds, distanceMeters, fitData, laps }
+ *   200 { ride: WahooRideSummary, tss, powerBests, powerCurve, durationSeconds, distanceMeters, fitData, laps }
  *   400 for a missing/invalid date
  *   404 if no Wahoo workout matches that date
  *   422 if the matched workout has no FIT file yet, or the file has no power data
@@ -36,7 +32,7 @@ import { findRideByDate, fetchAndParseActivity } from '../../utils/wahoo'
 import { eq, and } from 'drizzle-orm'
 import { workouts } from '../../db/schema'
 import { getCurrentFtpWatts } from '../../utils/ftp'
-import { metricsToWorkoutFields, upsertWahooPowerBests, withNewBestEffortsOnly } from '../../utils/fitWorkout'
+import { metricsToWorkoutFields, withNewBestEffortsOnly } from '../../utils/fitWorkout'
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -93,17 +89,14 @@ export default defineEventHandler(async (event) => {
   const fields = metricsToWorkoutFields(metrics, ftpWatts)
   const achievedAt = ride.startDateLocal.slice(0, 10)
 
-  // Record the raw bests first-class, but prefill only genuine improvements.
-  // Must compute the filter *before* the upsert, and exclude this ride's own
-  // workout row on refresh (same-day wahoo rows are excluded by the filter).
+  // Prefill only genuine PRs (the full curve rides along as `powerCurve` and is
+  // stored on save). Exclude this ride's own workout row on refresh.
   const [existing] = await db
     .select({ id: workouts.id })
     .from(workouts)
     .where(and(eq(workouts.userId, user.id), eq(workouts.date, achievedAt)))
     .limit(1)
   const prefill = await withNewBestEffortsOnly(db, user.id, achievedAt, fields, existing?.id)
-
-  await upsertWahooPowerBests(db, match.id, fields.powerBests, achievedAt)
 
   getLogger('wahoo').info('wahoo.activity_parsed', {
     requestId: event.context.requestId,

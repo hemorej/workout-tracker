@@ -16,11 +16,11 @@
  * doesn't return them, so a manual edit can't echo them back); send `null` to clear. `stravaActivityId` is
  * not updatable here. A date already used by a different workout is a 409.
  *
- * powerBests, if provided, fully replaces the workout's existing power-best
- * rows (delete + reinsert) rather than merging — the simplest correct way to
- * handle both additions and removals from a freshly re-parsed file. As on
- * POST, only durations that beat the trailing 8-week (or all-time, as
- * fallback) max are actually re-inserted — see filterNewBestEfforts.
+ * powerBests, if provided, fully replaces the workout's existing PR rows
+ * (delete + reinsert); as on POST only entries strictly above the trailing
+ * 8-week max are kept — see filterNewBestEfforts. powerCurve, if provided,
+ * fully replaces the stored full curve (power_curve); omitted ⇒ untouched
+ * (a plain manual edit never sends it).
  *
  * Returns:
  *   200 { workout }  on success
@@ -30,11 +30,11 @@
  */
 
 import { eq, and, ne } from 'drizzle-orm'
-import { workouts, powerBests, POWER_BEST_DURATIONS, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
+import { workouts, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
 import { useDB } from '../../db'
 import { invalidateMetrics } from '../../utils/metricsCache'
 import { syncActivitySegmentEfforts } from '../../utils/stravaSegments'
-import { filterNewBestEfforts } from '../../utils/powerBests'
+import { parsePowerEntries, recordRidePowerBests } from '../../utils/powerBests'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -184,24 +184,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const validDurations = new Set(POWER_BEST_DURATIONS as readonly string[])
-  const pbInput: { duration: string; watts: number }[] = []
-  if (Array.isArray(body.powerBests)) {
-    for (const pb of body.powerBests) {
-      if (!pb.duration || !validDurations.has(pb.duration)) {
-        throw createError({ statusCode: 400, statusMessage: `Invalid power best duration: ${pb.duration}` })
-      }
-      const watts = Number(pb.watts)
-      if (!Number.isInteger(watts) || watts <= 0) {
-        throw createError({ statusCode: 400, statusMessage: 'Power best watts must be a positive integer.' })
-      }
-      pbInput.push({ duration: pb.duration, watts })
-    }
-    const durations = pbInput.map((p) => p.duration)
-    if (new Set(durations).size !== durations.length) {
-      throw createError({ statusCode: 400, statusMessage: 'Each power best duration must be unique.' })
-    }
-  }
+  const pbInput = Array.isArray(body.powerBests) ? parsePowerEntries(body.powerBests, 'power best') : undefined
+  const curveInput = Array.isArray(body.powerCurve) ? parsePowerEntries(body.powerCurve, 'power curve') : undefined
 
   // ── Update ────────────────────────────────────────────────────────────────
 
@@ -243,14 +227,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Workout not found.' })
   }
 
-  if (Array.isArray(body.powerBests)) {
-    await db.delete(powerBests).where(eq(powerBests.workoutId, id))
-    const bestEfforts = await filterNewBestEfforts(db, user.id, updatedWorkout.date, pbInput, id)
-    if (bestEfforts.length > 0) {
-      await db.insert(powerBests).values(
-        bestEfforts.map((pb) => ({ workoutId: id, duration: pb.duration, watts: pb.watts })),
-      )
-    }
+  if (pbInput || curveInput) {
+    await recordRidePowerBests(db, {
+      userId: user.id,
+      workoutId: id,
+      date: updatedWorkout.date,
+      curve: curveInput,
+      prCandidates: pbInput,
+    })
   }
 
   invalidateMetrics(user.id)

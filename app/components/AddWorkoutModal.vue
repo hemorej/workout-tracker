@@ -27,6 +27,8 @@ export interface WorkoutPrefill {
   stravaActivityId?: number | null
   /** Computed from a Wahoo FIT file's power-curve bests, if any. Still user-editable. */
   powerBests?: PowerBestEntry[] | null
+  /** Full parsed power curve from a FIT file; carried through untouched to the save call. */
+  powerCurve?: PowerBestEntry[] | null
   /** Only set by the "refresh ride data" flow, carrying the existing workout's notes/rpe/ftpWatts/fitData through. */
   notes?: string | null
   rpe?: number | null
@@ -84,6 +86,7 @@ const powerBestRows = ref<{ duration: string; watts: number | null }[]>(
 // Carried through from props.prefill by default, and overwritten by a manual
 // FIT upload below (see onFitFileSelected) — same fields the Strava/Wahoo
 // "Mark as completed" flow prefills, just sourced from a locally-picked file.
+const powerCurve = ref<PowerBestEntry[] | null>(props.prefill?.powerCurve ?? null)
 const fitData = ref<WorkoutFitData | null>(props.prefill?.fitData ?? null)
 const laps = ref<WorkoutLap[] | null>(props.prefill?.laps ?? null)
 
@@ -120,6 +123,7 @@ function reset() {
   ftpWatts.value = null
   rideType.value = null
   powerBestRows.value = []
+  powerCurve.value = null
   optionalExpanded.value = false
   validationError.value = null
   fitData.value = null
@@ -143,6 +147,7 @@ const validationError = ref<string | null>(null)
 interface ParsedFitUpload {
   tss: number
   powerBests: { duration: string; watts: number }[]
+  powerCurve: { duration: string; watts: number }[]
   durationSeconds: number
   distanceMeters: number
   fitData: WorkoutFitData
@@ -169,6 +174,7 @@ async function onFitFileSelected(event: Event) {
     form.distanceKm = parsed.distanceMeters > 0 ? Math.round((parsed.distanceMeters / 1000) * 10) / 10 : null
     form.tss = parsed.tss
     powerBestRows.value = parsed.powerBests.map((pb) => ({ duration: pb.duration, watts: pb.watts }))
+    powerCurve.value = parsed.powerCurve
     fitData.value = parsed.fitData
     laps.value = parsed.laps
     if (powerBestRows.value.length > 0) optionalExpanded.value = true
@@ -234,6 +240,7 @@ async function handleSubmit() {
     ftpWatts: ftpWatts.value ? Math.round(ftpWatts.value) : null,
     rideType: rideType.value,
     powerBests: validPowerBests.length > 0 ? validPowerBests : undefined,
+    powerCurve: powerCurve.value ?? undefined,
     fitData: fitData.value ?? undefined,
     laps: laps.value ?? undefined,
     stravaActivityId: props.prefill?.stravaActivityId ?? undefined,

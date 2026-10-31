@@ -103,7 +103,6 @@ export default defineEventHandler(async (event) => {
       rideDate,
       buf,
       source: 'wahoo',
-      wahooWorkoutId: workout.id,
       rideType: rideTypeForWorkoutType(workout.workout_type_id),
       fallbackName: workout.name?.trim() || 'Outdoor ride',
       nameLookup: { attempts: 3, delayMs: 5_000 },

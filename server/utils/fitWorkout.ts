@@ -7,27 +7,25 @@
  *
  * `metricsToWorkoutFields` returns the shape the first two endpoints send to
  * the client as the Add Workout form prefill (the webhook uses the same
- * fields to write the row directly). `powerBests` there are *all* parsed
- * durations; `withNewBestEffortsOnly` (prefill time) and `filterNewBestEfforts`
- * (save time, ./powerBests) narrow them to genuine improvements.
- *
- * `upsertWahooPowerBests` is the `wahoo_power_bests` upsert+prune shared by
- * by-date.get.ts and the webhook — it records whatever raw power any
- * Wahoo-sourced ride showed, pruned to the all-time top-3 / trailing-8-week
- * retention window per duration.
+ * fields to write the row directly). `powerCurve` is always the full parsed
+ * curve; `powerBests` starts as the same list and `withNewBestEffortsOnly`
+ * (prefill time) / `filterNewBestEfforts` (save time, ./powerBests) narrow it
+ * to genuine PRs.
  */
 
-import { sql } from 'drizzle-orm'
-import { wahooPowerBests, type WorkoutFitData, type WorkoutLap } from '../db/schema'
+import type { WorkoutFitData, WorkoutLap } from '../db/schema'
 import type { ParsedFitMetrics } from './fit'
 import type { useDB } from '../db'
-import { filterNewBestEfforts, EIGHT_WEEKS_MS } from './powerBests'
+import { filterNewBestEfforts } from './powerBests'
 
 export interface FitWorkoutFields {
   tss: number
   durationSeconds: number
   distanceMeters: number
+  /** PR candidates. Raw (all durations) from metricsToWorkoutFields; narrowed to genuine PRs by withNewBestEffortsOnly. */
   powerBests: { duration: string; watts: number }[]
+  /** The ride's full power curve (all parsed durations) — stored in `power_curve` on save. */
+  powerCurve: { duration: string; watts: number }[]
   fitData: WorkoutFitData
   laps: WorkoutLap[] | null
 }
@@ -39,11 +37,13 @@ export interface FitWorkoutFields {
  * Also the response shape of GET /api/wahoo/by-date and POST /api/fit/upload.
  */
 export function metricsToWorkoutFields(metrics: ParsedFitMetrics, ftpWatts: number): FitWorkoutFields {
+  const curve = Object.entries(metrics.bests).map(([duration, watts]) => ({ duration, watts: watts! }))
   return {
     tss: metrics.tss,
     durationSeconds: metrics.durationSeconds,
     distanceMeters: metrics.distanceMeters,
-    powerBests: Object.entries(metrics.bests).map(([duration, watts]) => ({ duration, watts: watts! })),
+    powerBests: curve,
+    powerCurve: curve,
     fitData: {
       avgPower: metrics.avgPower,
       maxPower: metrics.maxPower,
@@ -58,41 +58,6 @@ export function metricsToWorkoutFields(metrics: ParsedFitMetrics, ftpWatts: numb
     },
     laps: metrics.laps.length >= 2 ? metrics.laps : null,
   }
-}
-
-/**
- * Upserts the given power bests for a Wahoo activity id, then prunes rows
- * that are neither in the all-time top 3 nor within the trailing 8 weeks for
- * their duration. No-op when `powerBests` is empty.
- */
-export async function upsertWahooPowerBests(
-  db: ReturnType<typeof useDB>,
-  activityId: number,
-  powerBests: { duration: string; watts: number }[],
-  achievedAt: string,
-): Promise<void> {
-  if (powerBests.length === 0) return
-
-  await db
-    .insert(wahooPowerBests)
-    .values(powerBests.map((pb) => ({ activityId, duration: pb.duration, watts: pb.watts, achievedAt })))
-    .onConflictDoUpdate({
-      target: [wahooPowerBests.activityId, wahooPowerBests.duration],
-      set: { watts: sql`excluded.watts` },
-    })
-
-  const cutoff = new Date(Date.now() - EIGHT_WEEKS_MS).toISOString().slice(0, 10)
-  await db.execute(sql`
-    DELETE FROM wahoo_power_bests
-    WHERE id IN (
-      SELECT id FROM (
-        SELECT id, achieved_at,
-               RANK() OVER (PARTITION BY duration ORDER BY watts DESC) AS rank
-        FROM wahoo_power_bests
-      ) ranked
-      WHERE rank > 3 AND achieved_at < ${cutoff}
-    )
-  `)
 }
 
 /**

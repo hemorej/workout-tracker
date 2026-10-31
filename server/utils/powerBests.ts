@@ -1,45 +1,65 @@
 /**
- * Shared power-curve "best effort" logic — one source of truth for merging
- * the two candidate sources (`power_bests`, tied to a logged workout's date;
- * `wahoo_power_bests`, tied to a Wahoo activity's date) that both
- * GET /api/history's power-bests panel and the write-time filter below rank
- * against. Keeping the merge in one place means the panel's "Last 8 Weeks" /
- * "All Time" columns and what actually gets saved as a best effort can never
- * drift apart.
+ * Shared power-curve logic — one source of truth for what counts as a PR and
+ * for the candidate pool the History panel ranks.
+ *
+ * Data model:
+ *   - `power_curve`      every ride's FULL curve (14 durations). The source of
+ *                        truth for History's rolling 8-week max and all-time
+ *                        top 3, and the baseline PRs are judged against.
+ *   - `power_bests`      only the durations that were PRs (strictly above the
+ *                        trailing-8-week max) when the ride was logged — drives
+ *                        the workout card badges.
+ *   - `wahoo_power_bests` LEGACY, read-only. Kept in the pool so history from
+ *                        before `power_curve` existed isn't lost; nothing
+ *                        writes to it any more.
+ *
+ * The PR rule itself is pure and lives in shared/utils/powerBestRules.ts.
  */
 
 import { and, eq, ne } from 'drizzle-orm'
-import { powerBests, wahooPowerBests, workouts } from '../db/schema'
+import { powerBests, powerCurve, wahooPowerBests, workouts, POWER_BEST_DURATIONS } from '../db/schema'
 import { useDB } from '../db'
-
-/** Trailing window (56 days) behind the "Last 8 Weeks" bests and the best-effort filter. */
-export const EIGHT_WEEKS_MS = 56 * 24 * 60 * 60 * 1000
+import {
+  findNewBestEfforts,
+  type DatedPowerEffort,
+  type PowerEffort,
+} from '../../shared/utils/powerBestRules'
 
 /** One known best (duration → watts) with the date it was achieved. */
-export interface PowerBestCandidate {
-  duration: string
-  watts: number
-  date: string
-}
+export type PowerBestCandidate = DatedPowerEffort
 
-/** Top `n` distinct watt values, descending — ties collapse so the next-highest value fills the slot. */
-export function topDistinctWatts(values: number[], n = 3): number[] {
-  return [...new Set(values)].sort((a, b) => b - a).slice(0, n)
+/**
+ * Validates a client-supplied list of `{duration, watts}` entries (powerBests
+ * or powerCurve). Throws a 400 on bad input. `label` names the field in errors.
+ */
+export function parsePowerEntries(raw: unknown, label: string): PowerEffort[] {
+  const valid = new Set(POWER_BEST_DURATIONS as readonly string[])
+  const out: PowerEffort[] = []
+  if (!Array.isArray(raw)) return out
+  for (const pb of raw) {
+    if (!pb?.duration || !valid.has(pb.duration)) {
+      throw createError({ statusCode: 400, statusMessage: `Invalid ${label} duration: ${pb?.duration}` })
+    }
+    const watts = Number(pb.watts)
+    if (!Number.isInteger(watts) || watts <= 0) {
+      throw createError({ statusCode: 400, statusMessage: `${label} watts must be a positive integer.` })
+    }
+    out.push({ duration: pb.duration, watts })
+  }
+  if (new Set(out.map((p) => p.duration)).size !== out.length) {
+    throw createError({ statusCode: 400, statusMessage: `Each ${label} duration must be unique.` })
+  }
+  return out
 }
 
 /**
- * All power-best candidates for the (single) tracked athlete, from both
- * source tables, as a flat {duration, watts, date} list ready to sort/filter
- * by whoever calls this — the history panel groups them per duration for
- * top-3 + freshness, `filterNewBestEfforts` below just needs per-duration
- * maxima.
+ * Every known effort for the (single) tracked athlete as a flat
+ * {duration, watts, date} list: full curves + PR rows + legacy Wahoo rows.
+ * Duplicates are harmless — consumers take maxima / distinct values.
  *
- * `excludeWorkoutId` drops one workout's own `power_bests` rows from the
- * `power_bests` side of the merge — used when filtering that same workout's
- * candidates so its own (about-to-be-replaced) rows can't be their own
- * baseline. `excludeWahooDate` ("YYYY-MM-DD") does the same for the
- * `wahoo_power_bests` side: rows achieved on that day are treated as the same
- * ride and skipped.
+ * `excludeWorkoutId` drops one workout's own `power_curve`/`power_bests` rows
+ * so a ride can't be its own baseline. `excludeWahooDate` ("YYYY-MM-DD") does
+ * the same for legacy `wahoo_power_bests` rows achieved that day.
  */
 export async function getPowerBestCandidates(
   db: ReturnType<typeof useDB>,
@@ -47,83 +67,81 @@ export async function getPowerBestCandidates(
   excludeWorkoutId?: number,
   excludeWahooDate?: string,
 ): Promise<PowerBestCandidate[]> {
-  const ownPowerBests = await db
-    .select({ duration: powerBests.duration, watts: powerBests.watts, date: workouts.date })
-    .from(powerBests)
-    .innerJoin(workouts, eq(powerBests.workoutId, workouts.id))
-    .where(
-      excludeWorkoutId !== undefined
-        ? and(eq(workouts.userId, userId), ne(workouts.id, excludeWorkoutId))
-        : eq(workouts.userId, userId),
-    )
+  const scope = () =>
+    excludeWorkoutId !== undefined
+      ? and(eq(workouts.userId, userId), ne(workouts.id, excludeWorkoutId))
+      : eq(workouts.userId, userId)
 
-  // Not scoped by user — wahoo_power_bests is a single-user table (see
-  // CLAUDE.md's "Wahoo Cloud API" section).
-  const wahooBests = await db
-    .select({ duration: wahooPowerBests.duration, watts: wahooPowerBests.watts, date: wahooPowerBests.achievedAt })
-    .from(wahooPowerBests)
-    .where(excludeWahooDate !== undefined ? ne(wahooPowerBests.achievedAt, excludeWahooDate) : undefined)
+  const [curve, prs, legacy] = await Promise.all([
+    db
+      .select({ duration: powerCurve.duration, watts: powerCurve.watts, date: workouts.date })
+      .from(powerCurve)
+      .innerJoin(workouts, eq(powerCurve.workoutId, workouts.id))
+      .where(scope()),
+    db
+      .select({ duration: powerBests.duration, watts: powerBests.watts, date: workouts.date })
+      .from(powerBests)
+      .innerJoin(workouts, eq(powerBests.workoutId, workouts.id))
+      .where(scope()),
+    // Not scoped by user — wahoo_power_bests is a single-user table.
+    db
+      .select({ duration: wahooPowerBests.duration, watts: wahooPowerBests.watts, date: wahooPowerBests.achievedAt })
+      .from(wahooPowerBests)
+      .where(excludeWahooDate !== undefined ? ne(wahooPowerBests.achievedAt, excludeWahooDate) : undefined),
+  ])
 
-  return [...ownPowerBests, ...wahooBests]
+  return [...curve, ...prs, ...legacy]
 }
 
 /**
- * Filters raw parsed power-curve values down to genuine "best effort"
- * highlights for a logged workout.
- *
- * `metricsToWorkoutFields` (fitWorkout.ts) turns every one of the 14
- * `POWER_BEST_DURATIONS` a FIT file yields into a `powerBests` candidate —
- * that's just "the highest power sustained for N seconds/minutes in this
- * ride", not necessarily a best *ever*. Without this filter every logged
- * workout stores (and badges) all 14, which drowns out the durations that
- * actually improved.
- *
- * A duration only counts as a best effort when this workout's watts beat
- * the athlete's trailing-8-week maximum for that duration (the same window
- * as the "Last 8 Weeks" column in the /api/history power-bests panel),
- * falling back to the all-time maximum when there's no data in that window
- * (e.g. the first time a duration has been ridden in months, or ever).
- * A candidate that cracks the all-time top 3 for its duration also counts, so
- * a ride the panel's "All Time" column would show is never silently dropped
- * just because a slightly higher value sits inside the 8-week window.
+ * Narrows raw parsed power-curve values to the genuine PRs for a ride: those
+ * strictly above the trailing-8-week max before `workoutDate` (see
+ * findNewBestEfforts). The ride's own stored rows are excluded from the
+ * baseline via `excludeWorkoutId`; legacy same-day Wahoo rows via the date.
  */
 export async function filterNewBestEfforts(
   db: ReturnType<typeof useDB>,
   userId: number,
   workoutDate: string,
-  candidates: { duration: string; watts: number }[],
+  candidates: PowerEffort[],
   excludeWorkoutId?: number,
-): Promise<{ duration: string; watts: number }[]> {
+): Promise<PowerEffort[]> {
   if (candidates.length === 0) return []
-
-  const cutoff = new Date(new Date(workoutDate + 'T00:00').getTime() - EIGHT_WEEKS_MS)
-    .toISOString()
-    .slice(0, 10)
-
-  // The user logs one ride per day, so any wahoo_power_bests rows dated the
-  // workout's day are this same ride (written on by-date preview, before the
-  // workout was saved) — excluded so it can't be its own baseline.
   const existing = await getPowerBestCandidates(db, userId, excludeWorkoutId, workoutDate)
+  return findNewBestEfforts(existing, workoutDate, candidates)
+}
 
-  const last8w = new Map<string, number>()
-  const allTime = new Map<string, number>()
-  const allTimeWatts = new Map<string, number[]>()
+/**
+ * Persists a ride's power data in one go:
+ *   - `curve` (if given) fully replaces the workout's `power_curve` rows;
+ *   - `prCandidates` (if given) are filtered down to genuine PRs and fully
+ *     replace the workout's `power_bests` rows.
+ * Either left undefined ⇒ that table is untouched.
+ */
+export async function recordRidePowerBests(
+  db: ReturnType<typeof useDB>,
+  input: {
+    userId: number
+    workoutId: number
+    date: string
+    curve?: PowerEffort[]
+    prCandidates?: PowerEffort[]
+  },
+): Promise<void> {
+  const { userId, workoutId, date, curve, prCandidates } = input
 
-  for (const row of existing) {
-    if (row.watts > (allTime.get(row.duration) ?? 0)) allTime.set(row.duration, row.watts)
-    const list = allTimeWatts.get(row.duration)
-    if (list) list.push(row.watts)
-    else allTimeWatts.set(row.duration, [row.watts])
-    if (row.date >= cutoff && row.watts > (last8w.get(row.duration) ?? 0)) {
-      last8w.set(row.duration, row.watts)
+  if (curve) {
+    await db.delete(powerCurve).where(eq(powerCurve.workoutId, workoutId))
+    if (curve.length > 0) {
+      await db.insert(powerCurve).values(curve.map((pt) => ({ workoutId, duration: pt.duration, watts: pt.watts })))
     }
   }
 
-  return candidates.filter((c) => {
-    const baseline = last8w.get(c.duration) ?? allTime.get(c.duration)
-    if (baseline == null || c.watts > baseline) return true
-    // Mirrors the panel's all-time top 3 (history/index.get.ts).
-    const top3 = topDistinctWatts(allTimeWatts.get(c.duration) ?? [])
-    return !top3.includes(c.watts) && (top3.length < 3 || c.watts > top3[2]!)
-  })
+  if (prCandidates) {
+    await db.delete(powerBests).where(eq(powerBests.workoutId, workoutId))
+    const prs = await filterNewBestEfforts(db, userId, date, prCandidates, workoutId)
+    if (prs.length > 0) {
+      await db.insert(powerBests).values(prs.map((pb) => ({ workoutId, duration: pb.duration, watts: pb.watts })))
+    }
+  }
 }
