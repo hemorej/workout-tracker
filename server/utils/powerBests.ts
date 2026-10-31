@@ -22,6 +22,11 @@ export interface PowerBestCandidate {
   date: string
 }
 
+/** Top `n` distinct watt values, descending — ties collapse so the next-highest value fills the slot. */
+export function topDistinctWatts(values: number[], n = 3): number[] {
+  return [...new Set(values)].sort((a, b) => b - a).slice(0, n)
+}
+
 /**
  * All power-best candidates for the (single) tracked athlete, from both
  * source tables, as a flat {duration, watts, date} list ready to sort/filter
@@ -78,6 +83,9 @@ export async function getPowerBestCandidates(
  * as the "Last 8 Weeks" column in the /api/history power-bests panel),
  * falling back to the all-time maximum when there's no data in that window
  * (e.g. the first time a duration has been ridden in months, or ever).
+ * A candidate that cracks the all-time top 3 for its duration also counts, so
+ * a ride the panel's "All Time" column would show is never silently dropped
+ * just because a slightly higher value sits inside the 8-week window.
  */
 export async function filterNewBestEfforts(
   db: ReturnType<typeof useDB>,
@@ -99,9 +107,13 @@ export async function filterNewBestEfforts(
 
   const last8w = new Map<string, number>()
   const allTime = new Map<string, number>()
+  const allTimeWatts = new Map<string, number[]>()
 
   for (const row of existing) {
     if (row.watts > (allTime.get(row.duration) ?? 0)) allTime.set(row.duration, row.watts)
+    const list = allTimeWatts.get(row.duration)
+    if (list) list.push(row.watts)
+    else allTimeWatts.set(row.duration, [row.watts])
     if (row.date >= cutoff && row.watts > (last8w.get(row.duration) ?? 0)) {
       last8w.set(row.duration, row.watts)
     }
@@ -109,6 +121,9 @@ export async function filterNewBestEfforts(
 
   return candidates.filter((c) => {
     const baseline = last8w.get(c.duration) ?? allTime.get(c.duration)
-    return baseline == null || c.watts > baseline
+    if (baseline == null || c.watts > baseline) return true
+    // Mirrors the panel's all-time top 3 (history/index.get.ts).
+    const top3 = topDistinctWatts(allTimeWatts.get(c.duration) ?? [])
+    return !top3.includes(c.watts) && (top3.length < 3 || c.watts > top3[2]!)
   })
 }
