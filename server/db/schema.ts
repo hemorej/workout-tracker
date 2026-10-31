@@ -6,7 +6,8 @@
  *   - workouts              — one logged workout per user per calendar day (+ FIT-derived JSON)
  *   - power_bests           — per-workout "best effort" durations (see server/utils/powerBests.ts)
  *   - planned_workouts      — one planned session per user per day (Planning tab)
- *   - wahoo_power_bests     — power-curve bests auto-detected from Wahoo rides
+ *   - power_curve           — a ride's full power curve (all 14 durations); source for History
+ *   - wahoo_power_bests     — LEGACY power-curve bests auto-detected from Wahoo rides (read-only now)
  *   - wahoo_tokens          — the single rotating Wahoo OAuth refresh token
  *   - tracked_segments / segment_efforts — starred Strava segments and the athlete's efforts
  *   - zwift_workouts / zwift_workout_drafts — mirror of the local Zwift .zwo folder + web drafts
@@ -299,6 +300,32 @@ export const powerBests = pgTable(
   (table) => [
     uniqueIndex('power_bests_workout_id_duration_idx').on(table.workoutId, table.duration),
     check('pb_watts_positive', sql`${table.watts} > 0`),
+  ],
+)
+
+// ---------------------------------------------------------------------------
+// power_curve
+//
+// A ride's FULL power curve: the highest average power sustained for each of
+// the 14 POWER_BEST_DURATIONS. Unlike `power_bests` (only the efforts that
+// were PRs when the ride was logged — the workout card badges), this keeps
+// every duration, so History can compute a true rolling 8-week max and an
+// all-time top 3 across all rides, not just across past PRs.
+// ---------------------------------------------------------------------------
+
+export const powerCurve = pgTable(
+  'power_curve',
+  {
+    id: serial('id').primaryKey(),
+    workoutId: integer('workout_id')
+      .references(() => workouts.id, { onDelete: 'cascade' })
+      .notNull(),
+    duration: text('duration').notNull(),
+    watts: integer('watts').notNull(),
+  },
+  (table) => [
+    uniqueIndex('power_curve_workout_id_duration_idx').on(table.workoutId, table.duration),
+    check('pc_watts_positive', sql`${table.watts} > 0`),
   ],
 )
 
@@ -697,6 +724,7 @@ export type User = typeof users.$inferSelect
 export type Workout = typeof workouts.$inferSelect
 export type PlannedWorkout = typeof plannedWorkouts.$inferSelect
 export type PowerBest = typeof powerBests.$inferSelect
+export type PowerCurvePoint = typeof powerCurve.$inferSelect
 export type WahooPowerBest = typeof wahooPowerBests.$inferSelect
 export type WahooToken = typeof wahooTokens.$inferSelect
 export type TrackedSegment = typeof trackedSegments.$inferSelect
@@ -709,6 +737,7 @@ export type NewUser = typeof users.$inferInsert
 export type NewWorkout = typeof workouts.$inferInsert
 export type NewPlannedWorkout = typeof plannedWorkouts.$inferInsert
 export type NewPowerBest = typeof powerBests.$inferInsert
+export type NewPowerCurvePoint = typeof powerCurve.$inferInsert
 export type NewWahooPowerBest = typeof wahooPowerBests.$inferInsert
 export type NewWahooToken = typeof wahooTokens.$inferInsert
 export type NewTrackedSegment = typeof trackedSegments.$inferInsert

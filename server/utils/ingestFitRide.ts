@@ -11,18 +11,18 @@
  *   2. resolves the title (Strava → planned workout → fallback; rideName.ts),
  *   3. upserts the `workouts` row for (user, rideDate) — a new row, or a
  *      refresh of the FIT-derived fields keeping manual name/notes/rpe/ftp,
- *   4. replaces the workout's `power_bests` with genuine improvements,
- *   5. optionally records `wahoo_power_bests` (Wahoo-sourced rides only).
+ *   4. stores the ride's full `power_curve` and replaces its `power_bests`
+ *      with the genuine PRs (strictly above the trailing-8-week max).
  */
 
 import { eq, and } from 'drizzle-orm'
-import { workouts, powerBests } from '../db/schema'
+import { workouts } from '../db/schema'
 import { useDB } from '../db'
 import { invalidateMetrics } from './metricsCache'
 import { parseFitFile } from './fit'
 import { getCurrentFtpWatts } from './ftp'
-import { metricsToWorkoutFields, upsertWahooPowerBests } from './fitWorkout'
-import { filterNewBestEfforts } from './powerBests'
+import { metricsToWorkoutFields } from './fitWorkout'
+import { recordRidePowerBests } from './powerBests'
 import { resolveRideName, type RideNameSource } from './rideName'
 
 const log = getLogger('workouts')
@@ -39,8 +39,6 @@ export interface IngestFitRideInput {
   /** Ride type when the source knows it (Zwift ⇒ 'trainer'); else taken from the Strava match, default 'outdoor'. */
   rideType?: 'trainer' | 'outdoor'
   fallbackName: string
-  /** Wahoo workout id — set only for Wahoo-sourced rides; enables the wahoo_power_bests upsert. */
-  wahooWorkoutId?: number
   /** Strava lookup retry policy (Strava can lag the ride). */
   nameLookup?: { attempts: number, delayMs: number }
   requestId?: string
@@ -137,19 +135,15 @@ export async function ingestFitRide(input: IngestFitRideInput): Promise<IngestFi
     log.info('workouts.ingest_updated', { requestId, source, workoutId, tss: fields.tss })
   }
 
-  // Only durations that beat the trailing-8-week (or all-time) max are stored
-  // as best efforts — same filter as POST/PATCH /api/workouts.
-  await db.delete(powerBests).where(eq(powerBests.workoutId, workoutId))
-  const bestEfforts = await filterNewBestEfforts(db, userId, rideDate, fields.powerBests, workoutId)
-  if (bestEfforts.length > 0) {
-    await db.insert(powerBests).values(
-      bestEfforts.map(pb => ({ workoutId, duration: pb.duration, watts: pb.watts })),
-    )
-  }
-
-  if (input.wahooWorkoutId != null) {
-    await upsertWahooPowerBests(db, input.wahooWorkoutId, fields.powerBests, rideDate)
-  }
+  // Full curve → power_curve; only durations above the trailing-8-week max
+  // become PR rows (power_bests).
+  await recordRidePowerBests(db, {
+    userId,
+    workoutId,
+    date: rideDate,
+    curve: fields.powerCurve,
+    prCandidates: fields.powerBests,
+  })
 
   invalidateMetrics(userId)
 

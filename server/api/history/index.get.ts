@@ -4,16 +4,11 @@
  * Returns aggregated training history grouped by the requested period,
  * plus a power-bests panel (last 8 weeks vs all time) and current FTP.
  *
- * The power-bests panel merges two sources: the best efforts saved with a
- * logged workout (`power_bests` — FIT-derived, filtered to genuine
- * improvements, see server/utils/powerBests.ts), and bests derived from Wahoo FIT files
- * (`wahoo_power_bests`, populated by server/api/wahoo/by-date.get.ts
- * whenever an outdoor ride is previewed via the "Mark completed" picker —
- * indoor/virtual rides go through the manual-upload path in
- * server/api/fit/upload.post.ts instead, which does not write here). They're
- * kept as separate tables — computed values may not always match what the
- * user chooses to log — but shown together here as "best known value from
- * either source".
+ * The power-bests panel ranks every known effort — each ride's FULL power
+ * curve (`power_curve`), plus PR rows (`power_bests`) and legacy
+ * `wahoo_power_bests` for history that predates the curve table. "Last 8
+ * Weeks" is the true rolling max over the trailing 56 days; "All Time" is the
+ * top 3 DISTINCT values (ties skipped, the next-highest fills the slot).
  *
  * Response shape:
  * {
@@ -33,7 +28,8 @@
 import { eq, asc, sql } from 'drizzle-orm'
 import { workouts, users, POWER_BEST_DURATIONS } from '../../db/schema'
 import { useDB } from '../../db'
-import { getPowerBestCandidates, topDistinctWatts, EIGHT_WEEKS_MS } from '../../utils/powerBests'
+import { getPowerBestCandidates } from '../../utils/powerBests'
+import { EIGHT_WEEKS_MS, topDistinctWatts } from '../../../shared/utils/powerBestRules'
 
 type GroupBy = 'week' | 'month' | 'year'
 

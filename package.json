@@ -17,7 +17,7 @@
         "db:migrate": "drizzle-kit migrate",
         "start": "node .output/server/index.mjs",
         "reset-password": "pnpm dlx dotenv-cli -e .env -- node --experimental-strip-types scripts/reset-password.ts",
-        "test": "node --experimental-strip-types --test shared/utils/zwo.test.ts shared/utils/rideMatch.test.ts",
+        "test": "node --experimental-strip-types --test shared/utils/zwo.test.ts shared/utils/rideMatch.test.ts shared/utils/powerBestRules.test.ts",
         "zwift-sync": "node --experimental-strip-types scripts/zwift-sync.ts",
         "zwift-activities": "node --experimental-strip-types scripts/zwift-activities.ts"
     },

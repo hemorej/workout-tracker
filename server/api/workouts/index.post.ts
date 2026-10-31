@@ -14,10 +14,12 @@
  *   notes?:          string   — optional free text
  *   ftpWatts?:       number   — optional, positive integer (watts)
  *   rideType?:       string   — optional, 'trainer' | 'outdoor'
- *   powerBests?:     { duration: string; watts: number }[] — raw parsed candidates for
- *                      every duration; only the ones that beat the athlete's trailing
- *                      8-week (or all-time, as fallback) max for that duration are
- *                      actually stored — see filterNewBestEfforts in utils/powerBests.ts
+ *   powerBests?:     { duration: string; watts: number }[] — PR candidates; only those
+ *                      strictly above the athlete's trailing 8-week max for that
+ *                      duration are stored as PRs (power_bests) — see
+ *                      filterNewBestEfforts in utils/powerBests.ts
+ *   powerCurve?:     { duration: string; watts: number }[] — the ride's full parsed
+ *                      curve, stored as-is in power_curve (History's data source)
  *   fitData?:        WorkoutFitData — optional, extra stats from a parsed FIT file
  *   laps?:           WorkoutLap[] — optional, per-lap splits from a parsed FIT file
  *   stravaActivityId?: number — optional, set when created via the "Mark as
@@ -31,11 +33,11 @@
  */
 
 import { eq, and } from 'drizzle-orm'
-import { workouts, powerBests, POWER_BEST_DURATIONS, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
+import { workouts, type WorkoutFitData, type WorkoutLap } from '../../db/schema'
 import { useDB } from '../../db'
 import { invalidateMetrics } from '../../utils/metricsCache'
 import { syncActivitySegmentEfforts } from '../../utils/stravaSegments'
-import { filterNewBestEfforts } from '../../utils/powerBests'
+import { parsePowerEntries, recordRidePowerBests } from '../../utils/powerBests'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -186,25 +188,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const validDurations = new Set(POWER_BEST_DURATIONS as readonly string[])
-  const pbInput: { duration: string; watts: number }[] = []
-  if (Array.isArray(body.powerBests)) {
-    for (const pb of body.powerBests) {
-      if (!pb.duration || !validDurations.has(pb.duration)) {
-        throw createError({ statusCode: 400, statusMessage: `Invalid power best duration: ${pb.duration}` })
-      }
-      const watts = Number(pb.watts)
-      if (!Number.isInteger(watts) || watts <= 0) {
-        throw createError({ statusCode: 400, statusMessage: 'Power best watts must be a positive integer.' })
-      }
-      pbInput.push({ duration: pb.duration, watts })
-    }
-    // Reject duplicate durations in one submission
-    const durations = pbInput.map((p) => p.duration)
-    if (new Set(durations).size !== durations.length) {
-      throw createError({ statusCode: 400, statusMessage: 'Each power best duration must be unique.' })
-    }
-  }
+  const pbInput = parsePowerEntries(body.powerBests, 'power best')
+  const curveInput = Array.isArray(body.powerCurve) ? parsePowerEntries(body.powerCurve, 'power curve') : undefined
 
   // ── Duplicate check ───────────────────────────────────────────────────────
 
@@ -249,12 +234,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: 'Failed to create workout.' })
   }
 
-  const bestEfforts = await filterNewBestEfforts(db, user.id, date, pbInput)
-  if (bestEfforts.length > 0) {
-    await db.insert(powerBests).values(
-      bestEfforts.map((pb) => ({ workoutId: newWorkout.id, duration: pb.duration, watts: pb.watts })),
-    )
-  }
+  await recordRidePowerBests(db, {
+    userId: user.id,
+    workoutId: newWorkout.id,
+    date,
+    curve: curveInput,
+    prCandidates: pbInput,
+  })
 
   // Invalidate the metrics cache so the next GET recomputes with the new workout
   invalidateMetrics(user.id)

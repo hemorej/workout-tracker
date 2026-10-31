@@ -43,6 +43,7 @@ interface StravaRideSummary {
 interface ParsedFitPrefill {
   tss: number
   powerBests: { duration: string, watts: number }[]
+  powerCurve: { duration: string, watts: number }[]
   durationSeconds: number
   distanceMeters: number
   fitData: WorkoutFitData
@@ -374,6 +375,7 @@ function prefillFromParsedFit(activity: UploadTarget, parsed: ParsedFitPrefill):
     tss: parsed.tss,
     rideType: activity.rideType,
     powerBests: parsed.powerBests,
+    powerCurve: parsed.powerCurve,
     fitData: parsed.fitData,
     laps: parsed.laps,
     stravaActivityId: activity.id ?? null,

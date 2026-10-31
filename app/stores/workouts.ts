@@ -134,6 +134,8 @@ export interface NewWorkoutPayload {
   ftpWatts?: number | null
   rideType?: 'trainer' | 'outdoor' | null
   powerBests?: PowerBestEntry[]
+  /** Full parsed power curve (all durations) — stored server-side for History; only sent when a FIT file was parsed. */
+  powerCurve?: PowerBestEntry[]
   fitData?: WorkoutFitData | null
   laps?: WorkoutLap[] | null
   /** Strava activity this workout was created from, if any — see server/db/schema.ts. */
