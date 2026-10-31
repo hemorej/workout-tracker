@@ -926,8 +926,8 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
         :today-c-t-l="workouts.todayMetrics.ctl"
         :today-a-t-l="workouts.todayMetrics.atl"
         :today-t-s-b="workouts.todayMetrics.tsb"
-        :yesterday-c-t-l="workouts.yesterdayMetrics?.ctl"
-        :yesterday-t-s-b="workouts.yesterdayMetrics?.tsb"
+        :week-ago-c-t-l="workouts.weekAgoMetrics?.ctl"
+        :ctl-range="workouts.ctlRange"
         @open-history="openHistoryChart"
       />
 

@@ -5,10 +5,10 @@
  * Displays the headline stats at the top of the dashboard, grouped into
  * two sections:
  *   - "This week": weekly TSS total, weekly training hours, weekly distance (km)
- *   - "Form": CTL (Fitness), TSB (Form)
+ *   - "Form": CTL (Fitness) with a 7-day trend arrow, TSB (Form)
  *
- * Also shows a colour-coded "form zone" label for TSB to give the user
- * an at-a-glance interpretation of where they stand.
+ * Also shows a "form zone" label for TSB to give the user an at-a-glance
+ * interpretation of where they stand.
  *
  * Props are plain numbers passed down from the index page, which gets them
  * from the workouts store.
@@ -23,17 +23,16 @@ interface Props {
   todayCTL: number
   todayATL: number
   todayTSB: number
-  yesterdayCTL?: number | null
-  yesterdayTSB?: number | null
+  weekAgoCTL?: number | null
+  ctlRange?: { min: number, max: number } | null
 }
 
 const props = defineProps<Props>()
 
 const emit = defineEmits<{ (e: 'open-history'): void }>()
 
-/** Trend arrows (CTL/TSB vs. yesterday) shown next to the big numbers */
-const ctlTrend = computed(() => trendArrow(props.todayCTL, props.yesterdayCTL))
-const tsbTrend = computed(() => trendArrow(props.todayTSB, props.yesterdayTSB))
+/** CTL trend arrow (vs. 7 days ago) shown next to the big number */
+const ctlTrend = computed(() => trendArrow(props.todayCTL, props.weekAgoCTL))
 
 /**
  * Maps TSB to a form zone label + text colour class.
@@ -47,11 +46,26 @@ const tsbTrend = computed(() => trendArrow(props.todayTSB, props.yesterdayTSB))
  */
 const formZone = computed(() => {
   const tsb = props.todayTSB
-  if (tsb > 25)  return { label: 'Very fresh' }
-  if (tsb > 10)  return { label: 'Fresh' }
-  if (tsb > -10) return { label: 'Neutral' }
-  if (tsb > -30) return { label: 'Tired' }
-  return           { label: 'Very fatigued' }
+  if (tsb > 25)  return { label: 'Very fresh',   colorClass: 'text-sky-600' }
+  if (tsb > 10)  return { label: 'Fresh',        colorClass: 'text-emerald-600' }
+  if (tsb > -10) return { label: 'Neutral',      colorClass: 'text-stone-500' }
+  if (tsb > -30) return { label: 'Tired',        colorClass: 'text-amber-600' }
+  return           { label: 'Very fatigued', colorClass: 'text-red-600' }
+})
+
+/**
+ * Maps CTL to a fitness band relative to the athlete's own trailing-year
+ * range (from the API): the min..max span is split into five equal bands —
+ * Low, Building, Solid, High, Peak. No label when the range is too narrow
+ * (< 10 CTL points) for bands to mean anything, e.g. very little history.
+ */
+const MIN_CTL_SPAN = 10
+const FITNESS_BANDS = ['Low', 'Building', 'Solid', 'High', 'Peak']
+const fitnessLabel = computed(() => {
+  const range = props.ctlRange
+  if (!range || range.max - range.min < MIN_CTL_SPAN) return null
+  const pos = (props.todayCTL - range.min) / (range.max - range.min)
+  return FITNESS_BANDS[Math.min(4, Math.max(0, Math.floor(pos * 5)))]
 })
 
 /** Format TSB with a leading + for positive values */
@@ -127,17 +141,22 @@ const tsbDisplay = computed(() =>
             <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-emerald-600 mb-1.5">CTL</p>
             <p class="flex items-baseline gap-1.5">
               <span class="text-xl sm:text-[30px] font-bold text-stone-900 tabular">{{ todayCTL.toFixed(1) }}</span>
-              <span v-if="ctlTrend" class="text-[13px]" :class="ctlTrend.colorClass">{{ ctlTrend.symbol }}</span>
+              <span
+                v-if="ctlTrend"
+                class="inline-flex flex-col items-center text-[11px] leading-[0.75] self-center"
+                :class="ctlTrend.colorClass"
+              >
+                <span v-for="i in ctlTrend.count" :key="i">{{ ctlTrend.symbol }}</span>
+              </span>
             </p>
-            <p class="text-[11px] text-stone-500 mt-1">Fitness</p>
+            <p class="text-[11px] text-stone-500 mt-1">Fitness<template v-if="fitnessLabel"> · {{ fitnessLabel }}</template></p>
           </div>
           <div>
             <p class="text-[11px] font-medium uppercase tracking-[0.08em] text-amber-600 mb-1.5">TSB</p>
             <p class="flex items-baseline gap-1.5">
               <span class="text-xl sm:text-[30px] font-bold text-stone-900 tabular">{{ tsbDisplay }}</span>
-              <span v-if="tsbTrend" class="text-[13px]" :class="tsbTrend.colorClass">{{ tsbTrend.symbol }}</span>
             </p>
-            <p class="text-[11px] text-stone-500 mt-1">{{ formZone.label }}</p>
+            <p class="text-[11px] font-medium mt-1" :class="formZone.colorClass">{{ formZone.label }}</p>
           </div>
         </div>
       </button>
