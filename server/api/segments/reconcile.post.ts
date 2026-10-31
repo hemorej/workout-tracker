@@ -37,6 +37,18 @@ import {
 
 const log = getLogger('segments')
 
+// Strava's limit is 100 requests / 15 min with no Retry-After header, so a
+// short pause only rescues a momentary burst; a second 429 means the window is
+// spent and we stop instead of hammering the remaining segments.
+const RATE_LIMIT_PAUSE_MS = 30_000
+
+const statusOf = (err: unknown): number | undefined => {
+  const e = err as Record<string, any>
+  return e?.status ?? e?.response?.status
+}
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
 export default defineEventHandler(async (event) => {
   const requestId = event.context.requestId
   const config = useRuntimeConfig()
@@ -68,6 +80,30 @@ export default defineEventHandler(async (event) => {
   let effortsWritten = 0
   let failures = 0
   let unstarred = 0
+  let rateLimited = false
+  const failedSegments: { id: number; status?: number; err?: string }[] = []
+
+  const reconcileSegment = async (row: { id: number, lastSyncedAt: Date | null }) => {
+    const detail = await fetchSegmentDetail(row.id)
+    const detailFields = segmentDetailFields(detail)
+    const storedCount = await countStoredEfforts(db, row.id)
+    const stravaCount = detailFields.stravaEffortCount
+
+    const needsRepull = row.lastSyncedAt == null
+      || stravaCount == null
+      || stravaCount !== storedCount
+
+    if (needsRepull) {
+      const efforts = await fetchAllSegmentEfforts(row.id)
+      effortsWritten += await upsertSegmentEfforts(db, efforts, userId)
+      updated++
+    }
+
+    await db
+      .update(trackedSegments)
+      .set({ ...detailFields, lastSyncedAt: new Date() })
+      .where(eq(trackedSegments.id, row.id))
+  }
 
   try {
     const starred = await fetchStarredSegments()
@@ -82,38 +118,39 @@ export default defineEventHandler(async (event) => {
       .from(trackedSegments)
       .where(and(eq(trackedSegments.userId, userId), eq(trackedSegments.starred, true)))
 
-    for (const row of tracked) {
+    for (const [i, row] of tracked.entries()) {
       checked++
       try {
-        const detail = await fetchSegmentDetail(row.id)
-        const detailFields = segmentDetailFields(detail)
-        const storedCount = await countStoredEfforts(db, row.id)
-        const stravaCount = detailFields.stravaEffortCount
-
-        const needsRepull = row.lastSyncedAt == null
-          || stravaCount == null
-          || stravaCount !== storedCount
-
-        if (needsRepull) {
-          const efforts = await fetchAllSegmentEfforts(row.id)
-          effortsWritten += await upsertSegmentEfforts(db, efforts, userId)
-          updated++
+        try {
+          await reconcileSegment(row)
         }
-
-        await db
-          .update(trackedSegments)
-          .set({ ...detailFields, lastSyncedAt: new Date() })
-          .where(eq(trackedSegments.id, row.id))
+        catch (err: unknown) {
+          if (statusOf(err) !== 429) throw err
+          log.warn('segments.reconcile_rate_limited', { requestId, segmentId: row.id })
+          await sleep(RATE_LIMIT_PAUSE_MS)
+          await reconcileSegment(row)
+        }
       }
       catch (err: unknown) {
+        const status = statusOf(err)
         failures++
-        const e = err as Record<string, any>
+        failedSegments.push({ id: row.id, status, err: (err as Error)?.message })
         log.warn('segments.reconcile_segment_failed', {
           requestId,
           segmentId: row.id,
-          status: e?.status ?? e?.response?.status,
-          err: e?.message,
+          status,
+          err: (err as Error)?.message,
         })
+        if (status === 429) {
+          // Window exhausted — report the rest as failed rather than burn more calls.
+          rateLimited = true
+          for (const rest of tracked.slice(i + 1)) {
+            failures++
+            failedSegments.push({ id: rest.id, status: 429, err: 'skipped: rate limited' })
+          }
+          log.warn('segments.reconcile_aborted_rate_limited', { requestId, skipped: tracked.length - i - 1 })
+          break
+        }
       }
     }
   }
@@ -124,9 +161,9 @@ export default defineEventHandler(async (event) => {
       status: e?.status ?? e?.response?.status,
       err: e?.message,
     })
-    return { ok: false, checked, updated, effortsWritten, failures, unstarred }
+    return { ok: false, checked, updated, effortsWritten, failures, unstarred, rateLimited, failedSegments }
   }
 
-  log.info('segments.reconciled', { requestId, checked, updated, effortsWritten, failures, unstarred })
-  return { ok: true, checked, updated, effortsWritten, failures, unstarred }
+  log.info('segments.reconciled', { requestId, checked, updated, effortsWritten, failures, unstarred, rateLimited })
+  return { ok: true, checked, updated, effortsWritten, failures, unstarred, rateLimited, failedSegments }
 })

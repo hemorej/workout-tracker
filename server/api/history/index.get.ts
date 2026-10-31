@@ -33,7 +33,7 @@
 import { eq, asc, sql } from 'drizzle-orm'
 import { workouts, users, POWER_BEST_DURATIONS } from '../../db/schema'
 import { useDB } from '../../db'
-import { getPowerBestCandidates, EIGHT_WEEKS_MS } from '../../utils/powerBests'
+import { getPowerBestCandidates, topDistinctWatts, EIGHT_WEEKS_MS } from '../../utils/powerBests'
 
 type GroupBy = 'week' | 'month' | 'year'
 
@@ -182,7 +182,7 @@ export default defineEventHandler(async (event) => {
 
   for (const [duration, candidates] of candidatesByDuration) {
     const sorted = [...candidates].sort((a, b) => b.watts - a.watts)
-    allTimeTop3[duration] = sorted.slice(0, 3).map((c) => c.watts)
+    allTimeTop3[duration] = topDistinctWatts(sorted.map((c) => c.watts))
 
     const best8w = sorted.find((c) => c.date >= cutoffStr)
     if (best8w) last8wBests[duration] = best8w.watts
