@@ -48,6 +48,11 @@ const emit = defineEmits<{
  * Formats the date string for display.
  * Shows "Today" / "Yesterday" for recent days, full date otherwise.
  */
+/** Compact date for the mobile row, e.g. "Mon, Oct 30". */
+const shortDate = computed(() =>
+  new Date(`${props.day.date}T00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+)
+
 const formattedDate = computed(() => {
   // Parse as local date (add T00:00 to avoid UTC offset issues)
   const date = new Date(`${props.day.date}T00:00`)
@@ -253,7 +258,7 @@ function confirmDelete() {
           {{ mobileTitle }}
         </p>
         <p v-if="mobileDuration" class="text-xs text-stone-400 mt-0.5">
-          {{ mobileDuration }}<template v-if="distanceDisplay"> · {{ distanceDisplay }}</template>
+          {{ mobileDuration }}<template v-if="distanceDisplay"> · {{ distanceDisplay }}</template> · {{ shortDate }}
         </p>
       </div>
       <!-- Faint chevron hinting the row is swipeable — pure rest days have
