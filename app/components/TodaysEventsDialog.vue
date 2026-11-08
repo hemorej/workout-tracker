@@ -6,6 +6,7 @@ interface ClimbPortalEntry {
   distanceKm: number
   elevationM: number
   gradientPercent: number
+  veloviewerUrl: string | null
 }
 
 interface RaceEventEntry {
@@ -146,7 +147,17 @@ onBeforeUnmount(() => {
                   </span>
                 </div>
                 <p class="font-semibold text-stone-900 text-[14.5px] leading-tight text-pretty">
-                  {{ climb.name }}
+                  <a
+                    v-if="climb.veloviewerUrl"
+                    :href="climb.veloviewerUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="group inline-flex items-baseline gap-1 hover:text-primary"
+                  >
+                    {{ climb.name }}
+                    <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-3 h-3 shrink-0 self-center text-stone-300 group-hover:text-primary" />
+                  </a>
+                  <template v-else>{{ climb.name }}</template>
                 </p>
                 <div class="tabular flex gap-2.5 mt-2.5 pt-2.5 border-t border-[#f5f3f1]">
                   <span class="text-[12.5px] font-semibold text-stone-600">{{ climb.distanceKm.toFixed(1) }}<span class="text-[10.5px] font-medium text-stone-300"> km</span></span>

@@ -59,6 +59,8 @@ export interface ClimbPortalEntry {
   distanceKm: number
   elevationM: number
   gradientPercent: number
+  /** VeloViewer page for the climb's Zwift segment; null when it couldn't be found. */
+  veloviewerUrl: string | null
 }
 
 /**
@@ -180,6 +182,18 @@ async function fetchCachedHtml(cacheKey: string, url: string): Promise<string | 
 }
 
 /**
+ * Finds the VeloViewer segment page for a climb. Zwift Insider's
+ * `/portal/<slug>/` page embeds two VeloViewer widgets: `/segments/<id>/embed`
+ * (the Zwift segment) and `/embed2` (the real-life one). We want the former.
+ * Best-effort: any failure yields null and the UI just omits the link.
+ */
+async function fetchVeloviewerUrl(slug: string): Promise<string | null> {
+  const html = await fetchCachedHtml(`zi-portal-${slug}`, `https://zwiftinsider.com/portal/${slug}/`)
+  const id = html?.match(/veloviewer\.com\/segments\/(\d+)\/embed(?!\d)/)?.[1]
+  return id ? `https://veloviewer.com/segments/${id}` : null
+}
+
+/**
  * Fetches today's active Climb Portal climbs (Climb of the Month, Climb of
  * the Week, and the daily Watopia climb) with their stats, for the given
  * caller-local date.
@@ -194,16 +208,20 @@ export async function fetchClimbPortalSchedule(todayStr: string): Promise<ClimbP
   const todaysClimbs = parseTodaysClimbNames(scheduleHtml, todayStr)
   const statsByName = parseClimbStatsByName(statsHtml)
 
-  const entries: ClimbPortalEntry[] = []
-  for (const climb of todaysClimbs) {
+  const joined = todaysClimbs.flatMap((climb) => {
     const stats = statsByName.get(normalizeClimbName(climb.name))
     if (!stats) {
       getLogger('zwift').warn('zwift.climb_stats_not_found', { name: climb.name })
-      continue
+      return []
     }
-    entries.push({ portal: climb.portal, name: climb.name, ...stats })
-  }
-  return entries
+    return [{ climb, stats }]
+  })
+  return Promise.all(joined.map(async ({ climb, stats }) => ({
+    portal: climb.portal,
+    name: climb.name,
+    ...stats,
+    veloviewerUrl: await fetchVeloviewerUrl(stats.slug),
+  })))
 }
 
 // ---------------------------------------------------------------------------
