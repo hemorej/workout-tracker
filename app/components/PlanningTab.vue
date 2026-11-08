@@ -646,7 +646,7 @@ async function clearNote() {
             :key="day.date"
             data-plan-row
             :class="[
-              'group flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2',
+              'group relative flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2',
               day.isPast ? 'opacity-50' : '',
               dragDate === day.date ? 'opacity-40' : '',
               dragOverDate === day.date ? 'bg-orange-50 shadow-[inset_0_0_0_1.5px_var(--ui-primary)]' : '',
@@ -655,6 +655,11 @@ async function clearNote() {
             @dragleave="dragOverDate === day.date && (dragOverDate = null)"
             @drop="onDrop($event, day.date)"
           >
+            <!-- Today marker (same accent bar as the training-log cards) -->
+            <span
+              v-if="day.date === todayStr"
+              class="absolute left-0 top-2 bottom-2 w-[3px] bg-orange-600 rounded-full"
+            />
             <!-- Date label -->
             <span class="w-[52px] sm:w-16 shrink-0 text-sm text-stone-500 tabular whitespace-nowrap">
               <span class="sm:hidden">{{ formatDateShort(day.date) }}</span>
