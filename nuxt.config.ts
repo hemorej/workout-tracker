@@ -141,13 +141,15 @@ export default defineNuxtConfig({
         /**
          * nuxt-auth-utils session configuration.
          * maxAge controls how long the encrypted cookie lives (in seconds).
-         * password is read from NUXT_SESSION_PASSWORD at runtime — declared
-         * here only to satisfy h3's SessionConfig type (password is required).
+         * password is read from NUXT_SESSION_PASSWORD at runtime — nuxt-auth-utils
+         * now types `session` without `password`, so it must not be declared here.
          */
         session: {
             maxAge: 60 * 60 * 24 * 30, // 30 days — override with NUXT_SESSION_MAX_AGE
-            password: process.env.NUXT_SESSION_PASSWORD ?? '',
-        },
+            // password intentionally omitted (module reads NUXT_SESSION_PASSWORD).
+            // The cast papers over conflicting type declarations: h3's SessionConfig
+            // requires `password`, nuxt-auth-utils' runtime-config typing forbids it.
+        } as any,
     },
 
     /**
