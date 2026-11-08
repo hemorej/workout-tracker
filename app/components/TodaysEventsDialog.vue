@@ -184,7 +184,7 @@ onBeforeUnmount(() => {
                 <div
                   v-for="race in races"
                   :key="race.id"
-                  class="flex items-center gap-[13px] px-2.5 py-2.5 rounded-[10px] hover:bg-[#faf9f8] transition-colors"
+                  class="flex items-center gap-[13px] px-2.5 py-2.5 rounded-[10px] odd:bg-stone-50 hover:bg-orange-50/60 transition-colors"
                 >
                   <span
                     class="flex-none w-10 text-center text-[9.5px] font-bold uppercase tracking-[0.03em] rounded-full px-[7px] py-[3px]"
