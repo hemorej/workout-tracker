@@ -11,23 +11,27 @@
 
 interface CacheEntry {
   value: unknown
-  storedAt: number
+  expiresAt: number
 }
 
 const _store = new Map<string, CacheEntry>()
 
-const TTL_MS = 10 * 60 * 1_000
+const DEFAULT_TTL_MS = 10 * 60 * 1_000
 
 export function getCachedZwiftData(key: string): unknown | null {
   const entry = _store.get(key)
   if (!entry) return null
-  if (Date.now() - entry.storedAt > TTL_MS) {
+  if (Date.now() > entry.expiresAt) {
     _store.delete(key)
     return null
   }
   return entry.value
 }
 
-export function setCachedZwiftData(key: string, value: unknown): void {
-  _store.set(key, { value, storedAt: Date.now() })
+/** `ttlMs` overrides the 10-min default (e.g. the per-day climb result). */
+export function setCachedZwiftData(key: string, value: unknown, ttlMs = DEFAULT_TTL_MS): void {
+  const now = Date.now()
+  // Per-day keys would otherwise pile up forever — sweep expired entries on write.
+  for (const [k, e] of _store) if (now > e.expiresAt) _store.delete(k)
+  _store.set(key, { value, expiresAt: now + ttlMs })
 }

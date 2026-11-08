@@ -39,10 +39,10 @@
  * `fetchTodaysRaceEvents` takes no date — see its doc comment for why a
  * calendar-day filter doesn't apply cleanly there.
  *
- * Upstream fetches are cached raw (10 min, see zwiftEventsCache.ts) and
- * filtered/joined fresh per call — caching a *filtered* climb result per
- * date would either need per-day cache keys or risk serving yesterday's
- * climb for a few minutes after midnight.
+ * Upstream fetches are cached raw (10 min, see zwiftEventsCache.ts). The
+ * joined climb result is additionally cached for 6 h under a per-date key
+ * (`climbs-YYYY-MM-DD`), so it can't serve yesterday's climb after midnight;
+ * races are only ever raw-cached (the feed is a rolling window).
  */
 
 import { routes as zwiftDataRoutes } from 'zwift-data'
@@ -52,6 +52,8 @@ import { getCachedZwiftData, setCachedZwiftData } from './zwiftEventsCache'
 // Climb portals
 // ---------------------------------------------------------------------------
 
+const CLIMBS_TTL_MS = 6 * 60 * 60 * 1_000
+
 export interface ClimbPortalEntry {
   portal: string
   name: string
@@ -59,6 +61,8 @@ export interface ClimbPortalEntry {
   distanceKm: number
   elevationM: number
   gradientPercent: number
+  /** VeloViewer page for the climb's Zwift segment; null when it couldn't be found. */
+  veloviewerUrl: string | null
 }
 
 /**
@@ -180,11 +184,32 @@ async function fetchCachedHtml(cacheKey: string, url: string): Promise<string | 
 }
 
 /**
+ * Finds the VeloViewer segment page for a climb. Zwift Insider's
+ * `/portal/<slug>/` page embeds two VeloViewer widgets: `/segments/<id>/embed`
+ * (the Zwift segment) and `/embed2` (the real-life one). We want the former.
+ * Best-effort: any failure yields null and the UI just omits the link.
+ */
+async function fetchVeloviewerUrl(slug: string): Promise<string | null> {
+  const html = await fetchCachedHtml(`zi-portal-${slug}`, `https://zwiftinsider.com/portal/${slug}/`)
+  const id = html?.match(/veloviewer\.com\/segments\/(\d+)\/embed(?!\d)/)?.[1]
+  return id ? `https://veloviewer.com/segments/${id}` : null
+}
+
+/**
  * Fetches today's active Climb Portal climbs (Climb of the Month, Climb of
  * the Week, and the daily Watopia climb) with their stats, for the given
  * caller-local date.
  */
 export async function fetchClimbPortalSchedule(todayStr: string): Promise<ClimbPortalEntry[]> {
+  // The rotation only changes once per calendar day, so the *joined* result is
+  // cached per date (the key carries the day, so it can't serve yesterday's
+  // climb after midnight). Only complete results are kept this long — partial
+  // ones (a climb missing its VeloViewer link, a failed upstream) retry on the
+  // normal 10-min raw-HTML cadence instead of sticking for hours.
+  const cacheKey = `climbs-${todayStr}`
+  const cached = getCachedZwiftData(cacheKey)
+  if (cached) return cached as ClimbPortalEntry[]
+
   const [scheduleHtml, statsHtml] = await Promise.all([
     fetchCachedHtml('zi-climb-schedule', 'https://zwiftinsider.com/climb-portal-schedule/'),
     fetchCachedHtml('woz-climb-stats', 'https://whatsonzwift.com/climb-portals'),
@@ -194,14 +219,22 @@ export async function fetchClimbPortalSchedule(todayStr: string): Promise<ClimbP
   const todaysClimbs = parseTodaysClimbNames(scheduleHtml, todayStr)
   const statsByName = parseClimbStatsByName(statsHtml)
 
-  const entries: ClimbPortalEntry[] = []
-  for (const climb of todaysClimbs) {
+  const joined = todaysClimbs.flatMap((climb) => {
     const stats = statsByName.get(normalizeClimbName(climb.name))
     if (!stats) {
       getLogger('zwift').warn('zwift.climb_stats_not_found', { name: climb.name })
-      continue
+      return []
     }
-    entries.push({ portal: climb.portal, name: climb.name, ...stats })
+    return [{ climb, stats }]
+  })
+  const entries = await Promise.all(joined.map(async ({ climb, stats }) => ({
+    portal: climb.portal,
+    name: climb.name,
+    ...stats,
+    veloviewerUrl: await fetchVeloviewerUrl(stats.slug),
+  })))
+  if (entries.length > 0 && entries.length === todaysClimbs.length && entries.every((e) => e.veloviewerUrl)) {
+    setCachedZwiftData(cacheKey, entries, CLIMBS_TTL_MS)
   }
   return entries
 }

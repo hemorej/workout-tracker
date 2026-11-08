@@ -329,7 +329,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               <span class="tabular whitespace-nowrap" style="font: 400 12px 'Hanken Grotesk'; color: #a8a29e;">{{ filtered.length }} of {{ rows.length }}</span>
             </div>
 
-            <div class="flex-1 overflow-auto">
+            <div class="lib-scroll flex-1 overflow-auto">
               <div v-if="loading" class="flex justify-center py-14">
                 <BikeSpinner />
               </div>
@@ -468,8 +468,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   outline: none;
 }
 .range-input:focus { border-color: #ea580c; }
+.row:nth-child(odd) { background: #fafaf9; }
 .row:hover,
-.row-selected { background: #faf9f7; }
+.row-selected { background: #fff7ed; }
+
+/* Thin orange scrollbar — Firefox */
+.lib-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-primary) transparent;
+}
+/* Chrome/Safari */
+.lib-scroll::-webkit-scrollbar { width: 6px; }
+.lib-scroll::-webkit-scrollbar-track { background: transparent; }
+.lib-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--ui-primary);
+  border-radius: 9999px;
+}
 .open-btn {
   font: 600 14px 'Hanken Grotesk';
   color: #fff;
