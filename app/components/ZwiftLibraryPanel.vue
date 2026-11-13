@@ -122,6 +122,29 @@ const filtered = computed(() => {
   })
 })
 
+// ── Sorting ──────────────────────────────────────────────────────────────
+
+type SortKey = 'name' | 'duration' | 'tss'
+const SORT_OPTIONS: { value: SortKey, label: string }[] = [
+  { value: 'name', label: 'Name' },
+  { value: 'duration', label: 'Duration' },
+  { value: 'tss', label: 'TSS' },
+]
+const sortKey = ref<SortKey>('name')
+const sortDir = ref<'asc' | 'desc'>('asc')
+
+const sorted = computed(() => {
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  const key = sortKey.value
+  return [...filtered.value].sort((a, b) => {
+    const cmp = key === 'name'
+      ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+      : key === 'duration' ? a.durationSec - b.durationSec : a.tss - b.tss
+    // Tie-break by name so equal durations/TSS keep a stable, readable order.
+    return cmp !== 0 ? cmp * dir : a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+  })
+})
+
 // ── Display helpers ──────────────────────────────────────────────────────
 
 function fmtDuration(sec: number) {
@@ -198,7 +221,7 @@ function onKey(e: KeyboardEvent) {
   const inField = (e.target as HTMLElement | null)?.tagName === 'INPUT'
   if (inField) return
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    const list = filtered.value
+    const list = sorted.value
     if (!list.length) return
     e.preventDefault()
     const idx = list.findIndex(r => r.id === selectedId.value)
@@ -326,7 +349,29 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           <div class="flex flex-col min-h-0 min-w-0">
             <div class="flex-none flex items-baseline justify-between px-6 py-3" style="border-bottom: 1px solid #f0eeec;">
               <span style="font: 600 11px 'Hanken Grotesk'; letter-spacing: .12em; text-transform: uppercase; color: #78716c;">Workouts</span>
-              <span class="tabular whitespace-nowrap" style="font: 400 12px 'Hanken Grotesk'; color: #a8a29e;">{{ filtered.length }} of {{ rows.length }}</span>
+              <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1.5">
+                  <label for="lib-sort" style="font: 500 11px 'Hanken Grotesk'; letter-spacing: .08em; text-transform: uppercase; color: #a8a29e;">Sort by</label>
+                  <select
+                    id="lib-sort"
+                    v-model="sortKey"
+                    class="sort-select cursor-pointer"
+                  >
+                    <option v-for="o in SORT_OPTIONS" :key="o.value" :value="o.value">
+                      {{ o.label }}
+                    </option>
+                  </select>
+                  <button
+                    class="sort-dir cursor-pointer"
+                    :aria-label="sortDir === 'asc' ? 'Ascending, switch to descending' : 'Descending, switch to ascending'"
+                    :title="sortDir === 'asc' ? 'Ascending' : 'Descending'"
+                    @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
+                  >
+                    <UIcon :name="sortDir === 'asc' ? 'i-heroicons-arrow-up' : 'i-heroicons-arrow-down'" style="width: 14px; height: 14px;" />
+                  </button>
+                </div>
+                <span class="tabular whitespace-nowrap" style="font: 400 12px 'Hanken Grotesk'; color: #a8a29e;">{{ filtered.length }} of {{ rows.length }}</span>
+              </div>
             </div>
 
             <div class="lib-scroll flex-1 overflow-auto">
@@ -347,7 +392,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
               </div>
               <ul v-else class="list-none m-0 p-0">
                 <li
-                  v-for="r in filtered"
+                  v-for="r in sorted"
                   :key="r.id"
                   :data-lib-selected="r.id === selectedId"
                   class="relative grid grid-cols-[128px_minmax(0,1fr)_auto] items-center gap-[18px] px-6 py-[14px] cursor-pointer row"
@@ -469,6 +514,29 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 }
 .range-input:focus { border-color: #ea580c; }
 .row:nth-child(odd) { background: #fafaf9; }
+.sort-select {
+  height: 28px;
+  border: 1.5px solid #e7e5e4;
+  border-radius: 8px;
+  padding: 0 8px;
+  font: 600 12px 'Hanken Grotesk';
+  color: #57534e;
+  background: #fff;
+  outline: none;
+}
+.sort-select:focus { border-color: #ea580c; }
+.sort-dir {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid #e7e5e4;
+  border-radius: 8px;
+  color: #57534e;
+  background: #fff;
+}
+.sort-dir:hover { border-color: #fdba74; color: #ea580c; }
 .row:hover,
 .row-selected { background: #fff7ed; }
 
