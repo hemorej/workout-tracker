@@ -32,7 +32,23 @@ export default defineNuxtConfig({
         '@nuxt/ui',
         'nuxt-auth-utils',
         '@pinia/nuxt',
+        '@sentry/nuxt/module',
     ],
+
+    /**
+     * Sentry error/performance monitoring. Runtime init lives in
+     * sentry.client.config.ts / sentry.server.config.ts and is a no-op unless
+     * SENTRY_DSN is set. Sourcemaps are only generated + uploaded (then deleted
+     * from the output) when SENTRY_AUTH_TOKEN is present at build time.
+     */
+    sentry: {
+        org: process.env.SENTRY_ORG,
+        project: process.env.SENTRY_PROJECT,
+        authToken: process.env.SENTRY_AUTH_TOKEN,
+        // Without a token there is nothing to upload to: skip the plugin entirely.
+        sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+    },
+    sourcemap: { client: process.env.SENTRY_AUTH_TOKEN ? 'hidden' : false },
 
     /**
      * `@nuxt/icon` (pulled in by `@nuxt/ui`). Default behaviour bundles the
@@ -86,6 +102,12 @@ export default defineNuxtConfig({
      *   NUXT_ZWIFT_ACTIVITY_TOKEN → runtimeConfig.zwiftActivityToken
      */
     runtimeConfig: {
+        // The only `public` key: the Sentry DSN is write-only by design and the
+        // browser SDK needs it. Override at runtime with NUXT_PUBLIC_SENTRY_DSN.
+        public: {
+            sentry: { dsn: process.env.SENTRY_DSN },
+        },
+
         databaseUrl: process.env.DATABASE_URL,
 
         // Anthropic API access — AI coach workout generation. Static key,
@@ -290,9 +312,10 @@ export default defineNuxtConfig({
             gzip: true,
             brotli: true,
         },
-        // No Sentry or other sourcemap consumer wired up — skip the transform/write
-        // cost in production. Kept on locally in case you want to debug a build.
-        sourceMap: process.env.NODE_ENV !== 'production',
+        // Server sourcemaps are only needed in production when uploading to Sentry
+        // (SENTRY_AUTH_TOKEN set); otherwise skip the transform/write cost.
+        // Kept on locally in case you want to debug a build.
+        sourceMap: process.env.NODE_ENV !== 'production' || Boolean(process.env.SENTRY_AUTH_TOKEN),
     },
 
     /**
