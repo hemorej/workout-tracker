@@ -80,10 +80,15 @@ export default defineEventHandler(async (event) => {
   }
   catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
-    log.error('zwift.activity_process_failed', { requestId, rideDate, err: message })
     // Bad bytes are permanent (422 — the daemon won't retry); anything else
     // (DB, Strava, …) is 5xx so the daemon retries.
-    if (err instanceof FitParseError) throw createError({ statusCode: 422, statusMessage: message })
-    throw createError({ statusCode: 500, statusMessage: 'Processing failed.' })
+    if (err instanceof FitParseError) {
+      // Caller-side problem (e.g. a ride still being recorded), not a server fault.
+      log.warn('zwift.activity_process_failed', { requestId, rideDate, err: message })
+      throw createError({ statusCode: 422, statusMessage: message })
+    }
+    log.error('zwift.activity_process_failed', { requestId, rideDate, err: message, stack: err instanceof Error ? err.stack?.split('\n').slice(0, 8).join('\n') : undefined })
+    // `cause` lets the request logger report the real error on the 500 line.
+    throw createError({ statusCode: 500, statusMessage: 'Processing failed.', cause: err })
   }
 })
