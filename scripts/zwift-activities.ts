@@ -57,6 +57,11 @@ const MAX_BYTES = 8_000_000 // server cap
 // The server may spend up to ~40 s waiting for Strava to receive the ride.
 const REQUEST_TIMEOUT_MS = 120_000
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000]
+// Zwift rewrites the dated .fit repeatedly *during* a ride (without records yet),
+// each time looking "settled" — uploading those just earns a 422 per rewrite.
+// While inProgressActivity.fit is being written, the ride isn't finished: wait.
+const ACTIVE_MS = 3 * 60_000
+const RECHECK_MS = 60_000
 const NAME_RE = /^(\d{4}-\d{2}-\d{2})-\d{2}-\d{2}-\d{2}\.fit$/
 
 if (!SERVER || !TOKEN) {
@@ -157,9 +162,25 @@ async function readSettled(abs: string): Promise<Buffer | null> {
   }
 }
 
+/** True while Zwift is mid-ride (its live scratch file was touched in the last ACTIVE_MS). */
+async function rideInProgress(): Promise<boolean> {
+  try {
+    return Date.now() - (await stat(join(ROOT, 'inProgressActivity.fit'))).mtimeMs < ACTIVE_MS
+  }
+  catch {
+    return false
+  }
+}
+
 async function handleFile(name: string): Promise<void> {
   const m = NAME_RE.exec(name)
   if (!m) return
+  if (await rideInProgress()) {
+    // Left without a state entry, so the periodic reconcile also picks it up.
+    log(`${name}: ride still in progress — deferring`)
+    scheduleCheck(name, RECHECK_MS)
+    return
+  }
   const rideDate = m[1]!
   const abs = join(ROOT, name)
 
@@ -246,14 +267,18 @@ function enqueue(job: () => Promise<void>): void {
 
 const timers = new Map<string, NodeJS.Timeout>()
 
-function onFsEvent(filename: string | null) {
-  if (!filename || !NAME_RE.test(filename)) return
+function scheduleCheck(filename: string, delayMs: number) {
   clearTimeout(timers.get(filename))
   timers.set(filename, setTimeout(() => {
     timers.delete(filename)
     // A re-saved file (new hash) is re-sent; an unchanged one is a no-op.
     enqueue(() => handleFile(filename))
-  }, SETTLE_MS))
+  }, delayMs))
+}
+
+function onFsEvent(filename: string | null) {
+  if (!filename || !NAME_RE.test(filename)) return
+  scheduleCheck(filename, SETTLE_MS)
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────
