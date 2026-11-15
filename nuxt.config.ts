@@ -312,6 +312,10 @@ export default defineNuxtConfig({
             gzip: true,
             brotli: true,
         },
+        // Keep the pg chain bundled. @sentry/nuxt externalizes instrumented
+        // packages; left external, postgres-interval's extensionless
+        // `xtend/mutable` import fails under Node ESM and every request 500s.
+        externals: { inline: ['pg', 'pg-types', 'postgres-interval', 'xtend'] },
         // Server sourcemaps are only needed in production when uploading to Sentry
         // (SENTRY_AUTH_TOKEN set); otherwise skip the transform/write cost.
         // Kept on locally in case you want to debug a build.
