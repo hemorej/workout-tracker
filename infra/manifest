@@ -6,4 +6,4 @@ check /etc/nginx/sites-available/sprocket.jerome-arfouche.ca  nginx.conf
 check /etc/supervisor/conf.d/daemon-912439.conf                    supervisord.conf
 pull  /etc/nginx/forge-conf/3264841/site.conf                                            forge-conf/site.conf
 pull  /etc/nginx/forge-conf/3264841/sprocket.jerome-arfouche.ca/before/redirect.conf     forge-conf/before/redirect.conf
-pull  /etc/nginx/forge-conf/3264841/sprocket.jerome-arfouche.ca/before/ssl_redirect.conf forge-conf/before/ssl_redirect.conf
+check /etc/nginx/forge-conf/3264841/sprocket.jerome-arfouche.ca/before/ssl_redirect.conf forge-conf/before/ssl_redirect.conf
