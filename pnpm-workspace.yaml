@@ -11,30 +11,19 @@ allowBuilds:
 minimumReleaseAge: 4320
 # Exceptions for packages where we need to react fast (e.g. security
 # patches you've manually verified): add the package name here.
-minimumReleaseAgeExclude:
-  # GHSA-m8rv-5g2x-5cg5 / GHSA-jr45-8vmc-qm54 / GHSA-vc93-jrf9-p3g6 /
-  # GHSA-cj5m-c6f8-hqm6 / GHSA-cxrh-j4jr-qwg3 fixed in 8.9.0 (released
-  # 2026-08-03, same day as advisory disclosure)
-  - undici
-  # GHSA-2v37-7h3g-55p8 fixed in 3.3.18
-  - nanoid
+# minimumReleaseAgeExclude:
+#   - some-package
 
 overrides:
+  '@nuxt/schema': '^4.6.4'
   '@nuxt/devtools': '-'
-  shell-quote: '^1.11.0'
-  prosemirror-view: '^1.42.3'
-  source-map-js: '^1.2.2'
   undici: '>=8.10.2'
-  brace-expansion@2: '^2.1.7'
-  brace-expansion@5: '^5.0.12'
   esbuild: '>=0.28.1'
   node-forge: '>=1.4.1'
   tar: '>=7.5.21'
-  svgo: '>=4.1.0'
   postcss: '>=8.5.23'
-  nanoid: '>=3.3.18'
-  devalue: '>=5.9.2'
-  '@tiptap/core': '>=3.30.5'
+  glob@13: '^14.0.2'
+  minimatch@10: '^11.0.1'
 
 # Build/dev-time only transitive deps of nuxt > nitropack (listhen dev server,
 # globby file matching); neither ships in .output. Remove once patched upstream.
