@@ -22,7 +22,7 @@
  *                      curve, stored as-is in power_curve (History's data source)
  *   fitData?:        WorkoutFitData — optional, extra stats from a parsed FIT file
  *   laps?:           WorkoutLap[] — optional, per-lap splits from a parsed FIT file
- *   stravaActivityId?: number — optional, set when created via the "Mark as
+ *   stravaActivityId?: string — optional, set when created via the "Mark as
  *                      completed" picker
  * }
  *
@@ -101,12 +101,16 @@ export default defineEventHandler(async (event) => {
     rideType = body.rideType
   }
 
-  let stravaActivityId: number | null = null
+  // Strava activity ids are 64-bit — carried as a digit string (a number is still
+  // accepted from older clients, but only if it's exactly representable).
+  let stravaActivityId: string | null = null
   if (body.stravaActivityId !== undefined && body.stravaActivityId !== null) {
-    stravaActivityId = Number(body.stravaActivityId)
-    if (!Number.isInteger(stravaActivityId) || stravaActivityId <= 0) {
-      throw createError({ statusCode: 400, statusMessage: 'stravaActivityId must be a positive integer.' })
+    const raw = body.stravaActivityId
+    const asString = typeof raw === 'number' && Number.isSafeInteger(raw) ? String(raw) : raw
+    if (typeof asString !== 'string' || !/^[1-9]\d{0,17}$/.test(asString)) {
+      throw createError({ statusCode: 400, statusMessage: 'stravaActivityId must be a positive integer id.' })
     }
+    stravaActivityId = asString
   }
 
   let fitData: WorkoutFitData | null = null

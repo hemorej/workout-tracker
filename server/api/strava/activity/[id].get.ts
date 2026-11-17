@@ -33,7 +33,7 @@ import { useDB } from '../../../db'
  * calendar day (one ride per day, so same-day is a reliable match — the
  * same join the completed-workout picker uses).
  */
-async function findNormalizedPower(userId: number, activityId: number, startDateLocal: string): Promise<number | null> {
+async function findNormalizedPower(userId: number, activityId: string, startDateLocal: string): Promise<number | null> {
   const rideDate = startDateLocal.slice(0, 10)
   const rows = await useDB()
     .select({ fitData: workouts.fitData, stravaActivityId: workouts.stravaActivityId })
@@ -54,8 +54,8 @@ async function findNormalizedPower(userId: number, activityId: number, startDate
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
-  const activityId = Number(getRouterParam(event, 'id'))
-  if (!Number.isFinite(activityId)) {
+  const activityId = getRouterParam(event, 'id') ?? ''
+  if (!/^[1-9]\d{0,17}$/.test(activityId)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid activity id.' })
   }
 
