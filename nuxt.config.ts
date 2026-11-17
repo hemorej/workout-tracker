@@ -316,6 +316,10 @@ export default defineNuxtConfig({
         // packages; left external, postgres-interval's extensionless
         // `xtend/mutable` import fails under Node ESM and every request 500s.
         externals: { inline: ['pg', 'pg-types', 'postgres-interval', 'xtend'] },
+        // Nitro's esbuild pass defaults to es2019, which warns "Big integer literals are
+        // not available" for tailwind-variants' `0n` (via Nuxt UI) on every deploy build.
+        // The server runs on Node 26 (see `engines`), so a modern target is safe.
+        esbuild: { options: { target: 'es2022' } },
         // Server sourcemaps are only needed in production when uploading to Sentry
         // (SENTRY_AUTH_TOKEN set); otherwise skip the transform/write cost.
         // Kept on locally in case you want to debug a build.
