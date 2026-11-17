@@ -52,6 +52,7 @@ async function getAccessToken(): Promise<string> {
 
 interface StravaActivity {
   id: number
+  id_str: string
   name: string
   type: string
   start_date_local: string
@@ -148,7 +149,7 @@ async function main() {
       unmatched.push({ date: workout.date, name: workout.name })
       continue
     }
-    await pool.query('UPDATE workouts SET strava_activity_id = $1 WHERE id = $2', [ride.id, workout.id])
+    await pool.query('UPDATE workouts SET strava_activity_id = $1 WHERE id = $2', [ride.id_str, workout.id])
     matched += 1
   }
 
