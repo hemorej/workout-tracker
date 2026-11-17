@@ -28,7 +28,8 @@ import { secretMatches } from '../../utils/wahooWebhook'
 import {
   fetchStarredSegments,
   fetchSegmentDetail,
-  fetchAllSegmentEfforts,
+  fetchSegmentEfforts,
+  SEGMENT_EFFORTS_CAP,
   segmentDetailFields,
   applyStarredList,
   upsertSegmentEfforts,
@@ -89,12 +90,15 @@ export default defineEventHandler(async (event) => {
     const storedCount = await countStoredEfforts(db, row.id)
     const stravaCount = detailFields.stravaEffortCount
 
+    // Strava only returns the fastest SEGMENT_EFFORTS_CAP efforts, so a segment with more
+    // than that can never reach its lifetime count — compare both sides capped, or it
+    // would look "missing an effort" and be re-pulled every night.
     const needsRepull = row.lastSyncedAt == null
       || stravaCount == null
-      || stravaCount !== storedCount
+      || Math.min(stravaCount, SEGMENT_EFFORTS_CAP) !== Math.min(storedCount, SEGMENT_EFFORTS_CAP)
 
     if (needsRepull) {
-      const efforts = await fetchAllSegmentEfforts(row.id)
+      const efforts = await fetchSegmentEfforts(row.id)
       effortsWritten += await upsertSegmentEfforts(db, efforts, userId)
       updated++
     }

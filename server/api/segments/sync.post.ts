@@ -28,7 +28,7 @@ import { trackedSegments } from '../../db/schema'
 import {
   fetchStarredSegments,
   fetchSegmentDetail,
-  fetchAllSegmentEfforts,
+  fetchSegmentEfforts,
   segmentDetailFields,
   applyStarredList,
   upsertSegmentEfforts,
@@ -64,7 +64,7 @@ export default defineEventHandler(async (event) => {
   for (const s of toBackfill) {
     try {
       const detail = await fetchSegmentDetail(s.id)
-      const efforts = await fetchAllSegmentEfforts(s.id)
+      const efforts = await fetchSegmentEfforts(s.id)
       effortsWritten += await upsertSegmentEfforts(db, efforts, user.id)
       await db
         .update(trackedSegments)

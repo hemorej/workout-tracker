@@ -8,12 +8,14 @@
  * the next sync doesn't insert duplicates next to them. Everything is re-derived
  * from Strava, so nothing is lost.
  *
- * Per segment, in ONE transaction: fetch full history → clear the segment's
- * rows → insert the fetched ones. A fetch failure leaves that segment untouched.
- * A segment is also skipped (and reported) if Strava returns FEWER efforts than
- * we currently store. Idempotent — safe to re-run.
+ * Per segment (ONE API call each), in ONE transaction: fetch the fastest 200
+ * efforts (all Strava will return — it ignores `page`, and the UI only shows the
+ * top 5) → clear the segment's rows → insert the fetched ones. A segment with
+ * more than 200 efforts therefore ends up with its fastest 200. A fetch failure
+ * leaves that segment untouched, and a segment is skipped (and reported) if
+ * Strava returns FEWER efforts than we store (capped at 200). Idempotent.
  *
- * Strava allows 100 requests / 15 min. The script reads the rate-limit headers
+ * Strava allows 100 read requests / 15 min (200 overall). The script reads the rate-limit headers
  * and sleeps to the next quarter-hour window when it gets close (or on a 429),
  * so a full run can take a few windows. Don't overlap it with the 04:00
  * `segment reconcile` job.
@@ -30,8 +32,8 @@ import { Pool } from 'pg'
 import { parseJsonExactIds } from '../shared/utils/exactIds.ts'
 
 const DRY_RUN = process.env.DRY_RUN === '1'
-const PER_PAGE = 200
-const MAX_PAGES = 40
+/** Strava ignores `page` and caps /segment_efforts at the fastest 200 — one call per segment (same as the app). */
+const EFFORTS_CAP = 200
 const STRAVA_API = 'https://www.strava.com/api/v3'
 
 for (const k of ['DATABASE_URL', 'STRAVA_CLIENT_ID', 'STRAVA_CLIENT_SECRET', 'STRAVA_REFRESH_TOKEN']) {
@@ -91,23 +93,23 @@ async function stravaGetText(token: string, path: string): Promise<string> {
     }
     if (!res.ok) throw new Error(`Strava ${res.status} on ${path}`)
     const text = await res.text()
-    const usage = Number(res.headers.get('x-ratelimit-usage')?.split(',')[0])
-    const limit = Number(res.headers.get('x-ratelimit-limit')?.split(',')[0])
-    if (usage && limit && usage >= limit - 2) await waitForNextWindow()
+    // Reads have their own, tighter 15-min budget (100) than the overall one (200) — watch both.
+    const nearLimit = (usageHeader: string, limitHeader: string) => {
+      const usage = Number(res.headers.get(usageHeader)?.split(',')[0])
+      const limit = Number(res.headers.get(limitHeader)?.split(',')[0])
+      return usage > 0 && limit > 0 && usage >= limit - 2
+    }
+    if (nearLimit('x-ratelimit-usage', 'x-ratelimit-limit') || nearLimit('x-readratelimit-usage', 'x-readratelimit-limit')) {
+      await waitForNextWindow()
+    }
     return text
   }
   throw new Error(`Strava rate limit not clearing on ${path}`)
 }
 
-async function fetchAllEfforts(token: string, segmentId: number): Promise<Effort[]> {
-  const out: Effort[] = []
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const text = await stravaGetText(token, `/segment_efforts?segment_id=${segmentId}&page=${page}&per_page=${PER_PAGE}`)
-    const batch = parseJsonExactIds(text) as Effort[]
-    out.push(...batch)
-    if (batch.length < PER_PAGE) break
-  }
-  return out
+async function fetchEfforts(token: string, segmentId: number): Promise<Effort[]> {
+  const text = await stravaGetText(token, `/segment_efforts?segment_id=${segmentId}&per_page=${EFFORTS_CAP}`)
+  return parseJsonExactIds(text) as Effort[]
 }
 
 const COLS = [
@@ -142,10 +144,11 @@ try {
     const segId = Number(seg.id)
     try {
       const { rows: stored } = await pool.query<{ id: string }>('SELECT id FROM segment_efforts WHERE segment_id = $1', [seg.id])
-      const fetched = await fetchAllEfforts(token, segId)
+      const fetched = await fetchEfforts(token, segId)
       const unique = new Map(fetched.map((e) => [String(e.id), e]))
 
-      if (unique.size < stored.length) {
+      // Segments with more than EFFORTS_CAP efforts keep only the fastest EFFORTS_CAP (the extras drop off).
+      if (unique.size < Math.min(stored.length, EFFORTS_CAP)) {
         problems.push(`${seg.name} (${seg.id}): Strava returned ${unique.size} efforts but ${stored.length} are stored — skipped`)
         continue
       }
@@ -198,10 +201,10 @@ try {
     const { rows: mismatches } = await pool.query<{ name: string, stored: string, expected: number }>(
       `SELECT t.name, COUNT(e.id)::text AS stored, t.strava_effort_count AS expected
          FROM tracked_segments t LEFT JOIN segment_efforts e ON e.segment_id = t.id
-        GROUP BY t.id HAVING COUNT(e.id) <> COALESCE(t.strava_effort_count, COUNT(e.id))`,
+        GROUP BY t.id HAVING COUNT(e.id) <> LEAST(COALESCE(t.strava_effort_count, COUNT(e.id)), ${EFFORTS_CAP})`,
     )
     console.log(mismatches.length === 0
-      ? 'Verify: every segment\'s stored count matches strava_effort_count.'
+      ? 'Verify: every segment\'s stored count matches strava_effort_count (capped at 200).'
       : `Verify: ${mismatches.length} segment(s) differ from strava_effort_count:`)
     for (const m of mismatches) console.log(`  ${m.name}: stored ${m.stored}, expected ${m.expected}`)
   }
