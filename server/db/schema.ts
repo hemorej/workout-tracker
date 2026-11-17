@@ -30,8 +30,19 @@ import {
   uniqueIndex,
   index,
   check,
+  customType,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
+
+/**
+ * A Postgres `bigint` surfaced as a JS string. Drizzle's own bigint modes are
+ * `number` (lossy above 2^53) and `bigint` (not JSON-serialisable); pg already
+ * returns int8 as a string, so this just keeps it that way end to end.
+ * Same column type, so no migration. Used for Strava's 64-bit activity ids.
+ */
+const bigintString = customType<{ data: string, driverData: string }>({
+  dataType: () => 'bigint',
+})
 
 export const POWER_BEST_DURATIONS = [
   '5sec', '15sec', '30sec', '1min', '2min', '3min', '5min',
@@ -214,7 +225,7 @@ export const workouts = pgTable(
      * picker). Null for manually-entered workouts or ones logged before this
      * field existed.
      */
-    stravaActivityId: bigint('strava_activity_id', { mode: 'number' }),
+    stravaActivityId: bigintString('strava_activity_id'),
 
     /**
      * Extra stats from a parsed FIT file (avg/max power, NP, IF, avg/max HR,
@@ -517,7 +528,7 @@ export const segmentEfforts = pgTable(
   'segment_efforts',
   {
     /** Strava's own segment-effort id. */
-    id: bigint('id', { mode: 'number' }).primaryKey(),
+    id: bigintString('id').primaryKey(),
 
     segmentId: bigint('segment_id', { mode: 'number' })
       .references(() => trackedSegments.id, { onDelete: 'cascade' })
@@ -528,7 +539,7 @@ export const segmentEfforts = pgTable(
       .notNull(),
 
     /** The Strava activity this effort belongs to. */
-    stravaActivityId: bigint('strava_activity_id', { mode: 'number' }).notNull(),
+    stravaActivityId: bigintString('strava_activity_id').notNull(),
 
     /** Elapsed time in seconds — what efforts are ranked on. */
     elapsedTime: integer('elapsed_time').notNull(),

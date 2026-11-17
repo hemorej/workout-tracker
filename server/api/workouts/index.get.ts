@@ -123,7 +123,7 @@ export default defineEventHandler(async (event) => {
     ftpWatts: number | null
     rideType: string | null
     hasFitData: boolean
-    stravaActivityId: number | null
+    stravaActivityId: string | null
   }
 
   async function powerBestsByWorkoutId(workoutIds: number[]) {
