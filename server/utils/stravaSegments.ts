@@ -60,7 +60,8 @@ export interface StravaSegmentEffort {
   average_cadence: number | null
   pr_rank: number | null
   segment: { id: number }
-  activity: { id: number }
+  /** `id_str` is exact; the numeric `id` can lose precision for 64-bit activity ids. */
+  activity: { id: number, id_str: string }
 }
 
 async function stravaGet<T>(path: string, query?: Record<string, string | number>): Promise<T> {
@@ -111,7 +112,7 @@ export async function fetchAllSegmentEfforts(segmentId: number): Promise<StravaS
 }
 
 /** The segment efforts attached to one activity (Strava matches them asynchronously). */
-export async function fetchActivitySegmentEfforts(activityId: number): Promise<StravaSegmentEffort[]> {
+export async function fetchActivitySegmentEfforts(activityId: string): Promise<StravaSegmentEffort[]> {
   const activity = await stravaGet<{ segment_efforts?: StravaSegmentEffort[] }>(
     `/activities/${activityId}`,
     { include_all_efforts: 'true' },
@@ -151,7 +152,7 @@ export function effortToRow(e: StravaSegmentEffort, userId: number): NewSegmentE
     id: e.id,
     segmentId: e.segment.id,
     userId,
-    stravaActivityId: e.activity.id,
+    stravaActivityId: e.activity.id_str,
     elapsedTime: e.elapsed_time,
     movingTime: e.moving_time ?? null,
     distanceMeters: e.distance ?? null,
@@ -269,7 +270,7 @@ export async function applyStarredList(
 export async function syncActivitySegmentEfforts(
   db: DB,
   userId: number,
-  stravaActivityId: number,
+  stravaActivityId: string,
   requestId?: string,
 ): Promise<void> {
   const log = getLogger('segments')

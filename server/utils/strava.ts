@@ -67,7 +67,8 @@ export async function getStravaAccessToken(): Promise<string> {
 }
 
 export interface StravaRideSummary {
-  id: number
+  /** Strava activity id as a string (`id_str`) — 64-bit ids can exceed Number.MAX_SAFE_INTEGER. */
+  id: string
   name: string
   /** Local start time, ISO-ish "YYYY-MM-DDTHH:mm:ssZ" per Strava's summary_activity schema */
   startDateLocal: string
@@ -86,6 +87,8 @@ export interface StravaRideSummary {
 
 interface StravaActivity {
   id: number
+  /** Same value as `id`, but exact — always read this one. */
+  id_str: string
   name: string
   type: string
   start_date_local: string
@@ -141,7 +144,7 @@ function downsampleStream(arr: number[], max = 400): number[] {
  * rather than the full-resolution `polyline` — smaller payload, plenty
  * precise for a photo overlay rendered at typical canvas sizes.
  */
-export async function fetchStravaActivityOverlayData(activityId: number): Promise<StravaActivityOverlayData> {
+export async function fetchStravaActivityOverlayData(activityId: string): Promise<StravaActivityOverlayData> {
   const accessToken = await getStravaAccessToken()
 
   const activity = await $fetch<StravaActivityDetail>(`https://www.strava.com/api/v3/activities/${activityId}`, {
@@ -206,7 +209,7 @@ export async function fetchRecentStravaRides(limit = 3): Promise<StravaRideSumma
     .filter((a) => a.type === 'Ride' || a.type === 'VirtualRide')
     .slice(0, limit)
     .map((a) => ({
-      id: a.id,
+      id: a.id_str,
       name: a.name,
       startDateLocal: a.start_date_local,
       startDate: a.start_date,

@@ -27,7 +27,7 @@ export type RideNameSource = 'strava' | 'planned' | 'fallback'
 export interface ResolvedRideName {
   name: string
   source: RideNameSource
-  stravaActivityId: number | null
+  stravaActivityId: string | null
   /** Ride type per the matched Strava activity, if any. */
   stravaRideType: 'trainer' | 'outdoor' | null
 }
