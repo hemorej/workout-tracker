@@ -446,6 +446,9 @@ function blockXml(b: ZwoBlock): string {
       break
   }
 
+  // Zwift ERG-mode bug workaround: force FlatRoad="1" on every block (FreeRide already set it above).
+  if (b.type !== 'freeride') open += ' FlatRoad="1"'
+
   if (!b.textEvents?.length) return `    ${open}/>\n`
   let out = `    ${open}>\n`
   for (const ev of b.textEvents) {
