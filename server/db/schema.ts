@@ -214,7 +214,7 @@ export const workouts = pgTable(
      * picker). Null for manually-entered workouts or ones logged before this
      * field existed.
      */
-    stravaActivityId: bigint('strava_activity_id', { mode: 'number' }),
+    stravaActivityId: bigint('strava_activity_id', { mode: 'string' }),
 
     /**
      * Extra stats from a parsed FIT file (avg/max power, NP, IF, avg/max HR,
@@ -528,7 +528,7 @@ export const segmentEfforts = pgTable(
       .notNull(),
 
     /** The Strava activity this effort belongs to. */
-    stravaActivityId: bigint('strava_activity_id', { mode: 'number' }).notNull(),
+    stravaActivityId: bigint('strava_activity_id', { mode: 'string' }).notNull(),
 
     /** Elapsed time in seconds — what efforts are ranked on. */
     elapsedTime: integer('elapsed_time').notNull(),
