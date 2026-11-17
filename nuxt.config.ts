@@ -316,6 +316,10 @@ export default defineNuxtConfig({
         // packages; left external, postgres-interval's extensionless
         // `xtend/mutable` import fails under Node ESM and every request 500s.
         externals: { inline: ['pg', 'pg-types', 'postgres-interval', 'xtend'] },
+        // Nitro's esbuild pass defaults to es2019, which warns "Big integer literals are
+        // not available" for tailwind-variants' `0n` (via Nuxt UI) on every deploy build.
+        // The server runs on Node 26 (see `engines`), so a modern target is safe.
+        esbuild: { options: { target: 'es2022' } },
         // Server sourcemaps are only needed in production when uploading to Sentry
         // (SENTRY_AUTH_TOKEN set); otherwise skip the transform/write cost.
         // Kept on locally in case you want to debug a build.
@@ -323,9 +327,10 @@ export default defineNuxtConfig({
     },
 
     /**
-     * Route-level caching. The login page has no per-user data, so it can
-     * be prerendered to a static file at build time. Everything else stays
-     * dynamic — the dashboard (/) is per-user and must not be cached.
+     * Route-level caching. Pages stay server-rendered (the dashboard (/) is
+     * per-user and must not be cached). `/login` used to be prerendered, but that
+     * cost ~1 min per deploy (a throwaway Nitro bundle + Sentry upload) to save
+     * milliseconds on a single-user app's login page.
      *
      * The icon files under `public/` have no content hash in their filename
      * (unlike `_nuxt/` assets), so unlike the self-hosted fonts they don't
@@ -335,7 +340,6 @@ export default defineNuxtConfig({
      * stick around for a year like `immutable` would.
      */
     routeRules: {
-        '/login': { prerender: true },
         '/favicon.svg': { headers: { 'cache-control': 'public, max-age=604800' } },
         '/apple-touch-icon.png': { headers: { 'cache-control': 'public, max-age=604800' } },
         '/site.webmanifest': { headers: { 'cache-control': 'public, max-age=604800' } },
