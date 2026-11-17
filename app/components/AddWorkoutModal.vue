@@ -24,7 +24,7 @@ export interface WorkoutPrefill {
   /** Pre-filled from a matched Wahoo activity's type, if any. */
   rideType?: 'trainer' | 'outdoor' | null
   /** The Strava activity this workout was created from, if picked via "Mark as completed". */
-  stravaActivityId?: number | null
+  stravaActivityId?: string | null
   /** Computed from a Wahoo FIT file's power-curve bests, if any. Still user-editable. */
   powerBests?: PowerBestEntry[] | null
   /** Full parsed power curve from a FIT file; carried through untouched to the save call. */

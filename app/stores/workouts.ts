@@ -72,7 +72,7 @@ export interface WorkoutDetail {
   /** Per-lap splits, if the FIT file had 2+ laps — see server/db/schema.ts. Loaded on demand with fitData. */
   laps?: WorkoutLap[] | null
   /** Strava activity this workout was created from, if any — see server/db/schema.ts. */
-  stravaActivityId: number | null
+  stravaActivityId: string | null
   powerBests: PowerBestEntry[]
 }
 
@@ -139,7 +139,7 @@ export interface NewWorkoutPayload {
   fitData?: WorkoutFitData | null
   laps?: WorkoutLap[] | null
   /** Strava activity this workout was created from, if any — see server/db/schema.ts. */
-  stravaActivityId?: number | null
+  stravaActivityId?: string | null
 }
 
 // ── Store ───────────────────────────────────────────────────────────────────

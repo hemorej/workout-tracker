@@ -26,7 +26,7 @@ interface SegmentEffort {
   averageCadence: number | null
   prRank: number | null
   startDate: string
-  stravaActivityId: number
+  stravaActivityId: string
 }
 
 interface TrackedSegment {

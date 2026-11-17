@@ -30,7 +30,7 @@ import { useCoachStore, type CoachWorkout } from '~/stores/coach'
 import type { WorkoutPrefill } from '~/components/AddWorkoutModal.vue'
 
 interface StravaRideSummary {
-  id: number
+  id: string
   name: string
   startDateLocal: string
   startDate: string
@@ -262,7 +262,7 @@ const recentRides = ref<StravaRideSummary[]>([])
 // Set to the ride being resolved (Wahoo FIT download + parse) while the user
 // waits to enter the Add Workout modal — used to show a per-row loading
 // state and block picking a second ride mid-fetch.
-const resolvingActivityId = ref<number | null>(null)
+const resolvingActivityId = ref<string | null>(null)
 
 // Picker switches into this mode when an indoor/virtual ride is picked —
 // Wahoo has no FIT file for it, so we need the user to upload their local one.
@@ -274,7 +274,7 @@ interface UploadTarget {
   rideType: 'trainer' | 'outdoor'
   startDateLocal: string
   /** Absent for the "refresh ride data" flow, which synthesizes an UploadTarget with no Strava activity. */
-  id?: number
+  id?: string
 }
 const pendingUploadActivity = ref<UploadTarget | null>(null)
 const isUploadingFit = ref(false)
