@@ -48,7 +48,12 @@ export default defineNuxtConfig({
         // Without a token there is nothing to upload to: skip the plugin entirely.
         sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
     },
-    sourcemap: { client: process.env.SENTRY_AUTH_TOKEN ? 'hidden' : false },
+    // Sourcemaps (client AND server) only when uploading to Sentry. The Vite SSR build
+    // otherwise emits maps for every chunk, which Nitro's rollup pass then re-reads.
+    sourcemap: {
+        client: process.env.SENTRY_AUTH_TOKEN ? 'hidden' : false,
+        server: process.env.SENTRY_AUTH_TOKEN ? 'hidden' : false,
+    },
 
     /**
      * `@nuxt/icon` (pulled in by `@nuxt/ui`). Default behaviour bundles the
@@ -310,7 +315,9 @@ export default defineNuxtConfig({
     nitro: {
         compressPublicAssets: {
             gzip: true,
-            brotli: true,
+            // nginx has no ngx_brotli (brotli_static is commented out in infra/nginx.conf),
+            // so .br files would never be served; skip the slow compression pass.
+            brotli: false,
         },
         // Keep the pg chain bundled. @sentry/nuxt externalizes instrumented
         // packages; left external, postgres-interval's extensionless

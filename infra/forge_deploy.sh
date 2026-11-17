@@ -25,4 +25,10 @@ sudo supervisorctl restart daemon-912439:daemon-912439_00
 # Free store files no longer linked by any release (old releases were just rotated
 # out). The store is shared by every site on this server; pnpm only removes files
 # nothing references. Last and non-fatal so it can never block the restart above.
-$PNPM_PATH store prune || true
+# Prune at most weekly: `store prune` also wipes pnpm's cached registry metadata and
+# evicts packages the next release re-downloads, which made every install re-fetch
+# metadata (10s+ per request) for the supply-chain check. A marker file gates it.
+PRUNE_MARKER="$HOME/.pnpm-store-pruned"
+if [ -z "$(find "$PRUNE_MARKER" -mtime -7 2>/dev/null)" ]; then
+  $PNPM_PATH store prune && touch "$PRUNE_MARKER" || true
+fi
