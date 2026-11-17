@@ -18,6 +18,13 @@ import { parseJsonExactIds } from '../../shared/utils/exactIds'
 
 const STRAVA_API = 'https://www.strava.com/api/v3'
 const PER_PAGE = 200
+/**
+ * GET /segment_efforts ignores `page` and caps a response at 200 rows, fastest
+ * first. We deliberately don't work around that (it would take date-window
+ * splitting and many extra calls): the UI only shows each segment's top 5, and
+ * the all-time top 5 are always inside the fastest 200.
+ */
+export const SEGMENT_EFFORTS_CAP = 200
 /** Defensive ceiling on pagination — 200 * 40 = 8000 efforts, far past anything realistic. */
 const MAX_PAGES = 40
 
@@ -110,21 +117,15 @@ export function fetchSegmentDetail(segmentId: number): Promise<StravaDetailedSeg
 }
 
 /**
- * Every effort the athlete has ever recorded on one segment (paginated).
- * Requires a Strava subscription — returns 4xx for a free account.
+ * The athlete's fastest efforts on one segment — at most SEGMENT_EFFORTS_CAP,
+ * in a single call (see the cap's note). Requires a Strava subscription —
+ * returns 4xx for a free account.
  */
-export async function fetchAllSegmentEfforts(segmentId: number): Promise<StravaSegmentEffort[]> {
-  const out: StravaSegmentEffort[] = []
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const batch = await stravaGetExactIds<StravaSegmentEffort[]>('/segment_efforts', {
-      segment_id: segmentId,
-      page,
-      per_page: PER_PAGE,
-    })
-    out.push(...batch)
-    if (batch.length < PER_PAGE) break
-  }
-  return out
+export function fetchSegmentEfforts(segmentId: number): Promise<StravaSegmentEffort[]> {
+  return stravaGetExactIds<StravaSegmentEffort[]>('/segment_efforts', {
+    segment_id: segmentId,
+    per_page: SEGMENT_EFFORTS_CAP,
+  })
 }
 
 /** The segment efforts attached to one activity (Strava matches them asynchronously). */
