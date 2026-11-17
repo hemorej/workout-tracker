@@ -31,3 +31,4 @@ auditConfig:
   ignoreGhsas:
     - GHSA-86w9-cpqp-85rv # node-forge
     - GHSA-vfj7-8cjw-p6xm # braces
+    - GHSA-fc5q-39xc-vjpf # picomatch ReDoS (extglobs) — no patched release exists yet (latest 4.0.7); only fed fixed glob patterns by build tooling, never user input. Drop once >=4.0.8 ships.
