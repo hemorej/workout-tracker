@@ -528,7 +528,7 @@ export const segmentEfforts = pgTable(
   'segment_efforts',
   {
     /** Strava's own segment-effort id. */
-    id: bigint('id', { mode: 'number' }).primaryKey(),
+    id: bigintString('id').primaryKey(),
 
     segmentId: bigint('segment_id', { mode: 'number' })
       .references(() => trackedSegments.id, { onDelete: 'cascade' })

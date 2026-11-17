@@ -14,6 +14,7 @@ import { and, eq, notInArray, sql } from 'drizzle-orm'
 import type { useDB } from '../db'
 import { trackedSegments, segmentEfforts, type NewSegmentEffort } from '../db/schema'
 import { getStravaAccessToken } from './strava'
+import { parseJsonExactIds } from '../../shared/utils/exactIds'
 
 const STRAVA_API = 'https://www.strava.com/api/v3'
 const PER_PAGE = 200
@@ -48,7 +49,8 @@ export interface StravaDetailedSegment extends StravaSummarySegment {
 
 /** A DetailedSegmentEffort, as returned by GET /segment_efforts and nested in an activity. */
 export interface StravaSegmentEffort {
-  id: number
+  /** Exact digit string when past 2^53 (see parseJsonExactIds); a number otherwise. Always run through String(). */
+  id: string | number
   elapsed_time: number
   moving_time: number | null
   start_date: string
@@ -70,6 +72,20 @@ async function stravaGet<T>(path: string, query?: Record<string, string | number
     headers: { Authorization: `Bearer ${accessToken}` },
     query,
   })) as T
+}
+
+/**
+ * Like stravaGet, but parses the body with parseJsonExactIds so 64-bit
+ * segment-effort ids (which have no `id_str`) aren't rounded by JSON.parse.
+ */
+async function stravaGetExactIds<T>(path: string, query?: Record<string, string | number>): Promise<T> {
+  const accessToken = await getStravaAccessToken()
+  const text = await $fetch<string>(`${STRAVA_API}${path}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    query,
+    responseType: 'text',
+  })
+  return parseJsonExactIds(text) as T
 }
 
 // ── Fetchers ─────────────────────────────────────────────────────────────
@@ -100,7 +116,7 @@ export function fetchSegmentDetail(segmentId: number): Promise<StravaDetailedSeg
 export async function fetchAllSegmentEfforts(segmentId: number): Promise<StravaSegmentEffort[]> {
   const out: StravaSegmentEffort[] = []
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const batch = await stravaGet<StravaSegmentEffort[]>('/segment_efforts', {
+    const batch = await stravaGetExactIds<StravaSegmentEffort[]>('/segment_efforts', {
       segment_id: segmentId,
       page,
       per_page: PER_PAGE,
@@ -113,7 +129,7 @@ export async function fetchAllSegmentEfforts(segmentId: number): Promise<StravaS
 
 /** The segment efforts attached to one activity (Strava matches them asynchronously). */
 export async function fetchActivitySegmentEfforts(activityId: string): Promise<StravaSegmentEffort[]> {
-  const activity = await stravaGet<{ segment_efforts?: StravaSegmentEffort[] }>(
+  const activity = await stravaGetExactIds<{ segment_efforts?: StravaSegmentEffort[] }>(
     `/activities/${activityId}`,
     { include_all_efforts: 'true' },
   )
@@ -149,7 +165,7 @@ export function segmentDetailFields(d: StravaDetailedSegment) {
 
 export function effortToRow(e: StravaSegmentEffort, userId: number): NewSegmentEffort {
   return {
-    id: e.id,
+    id: String(e.id),
     segmentId: e.segment.id,
     userId,
     stravaActivityId: e.activity.id_str,
