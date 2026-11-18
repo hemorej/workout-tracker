@@ -446,8 +446,9 @@ function blockXml(b: ZwoBlock): string {
       break
   }
 
-  // Zwift ERG-mode bug workaround: force FlatRoad="1" on every block (FreeRide already set it above).
-  if (b.type !== 'freeride') open += ' FlatRoad="1"'
+  // Zwift ERG-mode bug workaround: force FlatRoad="1" on steady and interval blocks only.
+  // Zwift ignores it on Warmup/Cooldown ramps, and FreeRide already set it above.
+  if (b.type === 'steady' || b.type === 'interval') open += ' FlatRoad="1"'
 
   if (!b.textEvents?.length) return `    ${open}/>\n`
   let out = `    ${open}>\n`
