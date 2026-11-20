@@ -119,8 +119,14 @@ const cardContent = computed(() => ({
   collisionPadding: 12,
   // A hover-opened card must not steal focus; a pinned one is meant to be used.
   onOpenAutoFocus: (e: Event) => { if (!pinned.value) e.preventDefault() },
+  // The ride-stats overlay sits on top of the card: interacting with it (or
+  // pressing Esc to close it) must not dismiss the pinned card underneath.
+  onInteractOutside: (e: Event) => { if (rideStatsOpen()) e.preventDefault() },
+  onEscapeKeyDown: (e: Event) => { if (rideStatsOpen()) e.preventDefault() },
   onCloseAutoFocus: (e: Event) => e.preventDefault(),
 }))
+
+const rideStatsOpen = () => !!document.querySelector('[role="dialog"][aria-label="Ride stats"]')
 
 const cellOf = (e: Event) => (e.target as HTMLElement).closest<HTMLElement>('[data-date]')
 
@@ -330,6 +336,13 @@ async function buildFuelling(date: string) {
 
 async function onAction(action: DayAction) {
   if (action.type === 'fuelling') return buildFuelling(action.date)
+  if (action.type === 'open-fit') {
+    // Keep the card open (pinned) behind the ride-stats overlay.
+    clearTimeout(closeTimer)
+    pinned.value = true
+    emit('action', action)
+    return
+  }
   closeCard()
   if (action.type === 'edit-note') openNote(action.date)
   else if (action.type === 'move') await swapPlans(action.date, action.to)
