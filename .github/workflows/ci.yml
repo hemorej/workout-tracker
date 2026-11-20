@@ -1,8 +1,9 @@
 name: CI
 
-# Pushes to main are deploys, so title them that way (with the short SHA)
-# instead of GitHub's default, the head commit message ("Merge pull request #…").
-run-name: "${{ github.event_name == 'push' && format('Deploy to production ({0})', substring(github.sha, 0, 7)) || format('CI: {0}', github.event.pull_request.title) }}"
+# Pushes to main are deploys, so title them that way instead of GitHub's
+# default, the head commit message ("Merge pull request #…"). Expressions have
+# no substring(), so a short SHA isn't possible here; run_number is used instead.
+run-name: "${{ github.event_name == 'push' && format('Deploy to production (#{0})', github.run_number) || format('CI: {0}', github.event.pull_request.title) }}"
 
 # Gate for deploys: tests and typechecks only. Dependency audits run
 # separately (audit.yml) so a newly disclosed advisory can't block an
