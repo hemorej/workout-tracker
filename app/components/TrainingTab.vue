@@ -346,14 +346,14 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
 
 <template>
   <div class="flex flex-col gap-3.5" :style="{ '--training-search-h': `${searchBarH}px` }">
+
+    <!-- Metrics strip + search stay pinned under the app header while the weeks scroll -->
+    <div ref="searchBar" class="sticky z-[6] -mx-1 flex flex-col gap-3.5 bg-[#fafaf9] px-1 py-1.5" style="top: var(--app-sticky-h, 0px)">
     <TrainingMetricsStrip :summary="training.summary" :totals="strip" @open-history="emit('openHistory')" @open-events="emit('openEvents')">
       <template #actions>
         <PlanSuggest />
       </template>
     </TrainingMetricsStrip>
-
-    <!-- Stays pinned under the app header while the weeks scroll -->
-    <div ref="searchBar" class="sticky z-[6] -mx-1 flex flex-col gap-3.5 bg-[#fafaf9] px-1 py-1.5" style="top: var(--app-sticky-h, 0px)">
     <TrainingToolbar class="max-sm:hidden" @add-workout="emit('action', { type: 'add-workout', date: localDateIso() })" />
 
     <!-- Mobile: tap-to-search bar + add -->
