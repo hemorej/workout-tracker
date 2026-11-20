@@ -2,7 +2,7 @@
  * PUT /api/planned-workouts/batch
  *
  * Upserts many planned workouts and/or deletes some, in one transaction.
- * Backs the Planning tab's "Suggest plan" Apply and its Undo.
+ * Backs the Training tab's "Suggest plan" Apply and its Undo.
  *
  * Body: { entries?: Array<{ date, name?, type?, tss?, durationMinutes?, notes? }>, deleteDates?: string[] }
  *

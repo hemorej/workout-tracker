@@ -1,7 +1,7 @@
 /**
  * GET /api/zwift/today?date=YYYY-MM-DD
  *
- * Powers the Planning tab's "Today's events" dialog: today's Climb Portal
+ * Powers the Training tab's "Today's events" dialog: today's Climb Portal
  * rotation plus upcoming Time Trial / crit races. See
  * server/utils/zwiftEvents.ts for the (undocumented) upstream sources —
  * each half is fetched independently and degrades to an empty array on

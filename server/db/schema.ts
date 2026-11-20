@@ -5,7 +5,7 @@
  *   - users                 — login credentials, CTL/ATL seeds, training plan, weight
  *   - workouts              — one logged workout per user per calendar day (+ FIT-derived JSON)
  *   - power_bests           — per-workout "best effort" durations (see server/utils/powerBests.ts)
- *   - planned_workouts      — one planned session per user per day (Planning tab)
+ *   - planned_workouts      — one planned session per user per day (Training tab)
  *   - power_curve           — a ride's full power curve (all 14 durations); source for History
  *   - wahoo_power_bests     — LEGACY power-curve bests auto-detected from Wahoo rides (read-only now)
  *   - wahoo_tokens          — the single rotating Wahoo OAuth refresh token

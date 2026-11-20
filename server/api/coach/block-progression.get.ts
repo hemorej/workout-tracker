@@ -3,7 +3,7 @@
  *
  * Returns whether the user has a stored training plan and, if so, the weekly
  * TSS progression of one training block parsed from it (e.g. [380, 430, 480, 250]).
- * The Planning tab's block-position detection falls back to matching a week's
+ * The Training tab's block-position detection falls back to matching a week's
  * TSS total against this when no "w1:"-style marker is found in workout names.
  *
  * Parsing is one small LLM call, cached in-process per user keyed by a hash of

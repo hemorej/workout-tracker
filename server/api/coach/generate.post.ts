@@ -16,10 +16,10 @@
  * Query params (both optional):
  *  - `date` (YYYY-MM-DD) — the planned day to build for. Defaults to today.
  *    Used by both the Training Log's "Auto" button (today only) and the
- *    Planning tab's per-row build actions (any planned day).
+ *    Training tab's per-row build actions (any planned day).
  *  - `mode` — `'full'` (default) returns a complete workout (blocks + fuelling
  *    guide). `'fuelling'` skips the block structure and returns only the
- *    fuelling guide, for the Planning tab's fuelling-only row action.
+ *    fuelling guide, for the Training tab's fuelling-only row action.
  */
 
 import { eq, and } from 'drizzle-orm'

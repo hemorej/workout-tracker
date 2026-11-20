@@ -3,7 +3,7 @@
  *
  * Returns a plain daily CTL/TSB series for the last `weeks` weeks (default 8,
  * clamped to 1–52), for charting. Reuses the same cached metrics series as
- * /api/workouts and /api/planned-workouts — see server/utils/metricsCache.ts.
+ * /api/training/days — see server/utils/metricsCache.ts.
  *
  * The `weeks` param keeps this endpoint modular: a future range-selector UI
  * only needs to change the query param, no server changes required.

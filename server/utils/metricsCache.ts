@@ -13,12 +13,12 @@
  *
  * ── How invalidation works ───────────────────────────────────────────────────
  *
- *   • GET /api/workouts  → check cache first; compute & store on miss
+ *   • GET /api/training/days → check cache first; compute & store on miss
  *   • POST /api/workouts, PATCH /api/workouts/:id, DELETE /api/workouts/:id,
  *     and the Wahoo webhook's auto-upsert → invalidate after the write (next
  *     GET recomputes). Anything else that changes a workout's date/TSS/duration/
  *     distance must call `invalidateMetrics` too.
- *   • GET /api/planned-workouts, /api/metrics/series and the coach plan
+ *   • /api/training/search, /api/metrics/series and the coach plan
  *     endpoint read through `getMetricsSeries` as well
  *
  * A short TTL (5 minutes) is also applied as a safety net so the series
