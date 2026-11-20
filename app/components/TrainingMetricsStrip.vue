@@ -49,7 +49,7 @@ const fitnessLabel = computed(() => {
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center gap-x-7 gap-y-3 rounded-[14px] border border-[#f0eeec] bg-white px-4 py-3 sm:flex-nowrap sm:px-[22px] sm:py-3.5">
+  <div class="flex flex-wrap items-center gap-x-7 gap-y-3 rounded-[14px] border border-[#f0eeec] bg-white px-4 py-3 sm:flex-nowrap sm:gap-x-6 sm:px-[22px] sm:py-3.5">
     <span class="w-full text-xl font-bold tabular sm:w-auto"><span class="text-primary">{{ weekday }}</span> {{ dateRest }}</span>
     <span class="hidden h-7 w-px bg-[#e7e5e0] sm:block" />
 
@@ -87,7 +87,7 @@ const fitnessLabel = computed(() => {
     </div>
 
     <span class="hidden flex-1 sm:block" />
-    <div class="flex items-center gap-4">
+    <div class="flex shrink-0 items-center gap-4 whitespace-nowrap">
       <slot name="actions" />
       <button
         type="button"
@@ -95,7 +95,7 @@ const fitnessLabel = computed(() => {
         @click="emit('openEvents')"
       >
         <MountainIcon class="size-[15px]" />
-        Today's Zwift events
+        Zwift events
       </button>
     </div>
   </div>

@@ -105,7 +105,7 @@ const ariaLabel = computed(() => {
         v-if="day.isToday"
         class="rounded-full bg-orange-600 px-[7px] py-px text-[11px] font-bold leading-4 text-white tabular sm:text-xs"
       ><span class="sm:hidden">{{ dayNumber }}</span><span class="hidden sm:inline">Today</span></span>
-      <span v-else class="text-[11px] font-semibold tabular text-stone-600 sm:text-xs">{{ dateLabel }}</span>
+      <span v-else class="text-[11px] font-semibold tabular text-stone-600 sm:text-xs"><span class="sm:hidden">{{ dayNumber }}</span><span class="hidden sm:inline">{{ dateLabel }}</span></span>
       <span class="flex-1" />
       <UIcon v-if="notes" name="i-heroicons-bars-3-bottom-left" class="hidden size-3 text-amber-600 sm:block" />
       <span v-if="hasPowerBest" class="hidden text-[11px] font-bold text-[#3F6212] sm:inline" aria-hidden="true">★</span>
