@@ -1,5 +1,10 @@
 name: CI
 
+# Pushes to main are deploys, so title them that way instead of GitHub's
+# default, the head commit message ("Merge pull request #…"). Expressions have
+# no substring(), so a short SHA isn't possible here; run_number is used instead.
+run-name: "${{ github.event_name == 'push' && format('Deploy to production (#{0})', github.run_number) || format('CI: {0}', github.event.pull_request.title) }}"
+
 # Gate for deploys: tests and typechecks only. Dependency audits run
 # separately (audit.yml) so a newly disclosed advisory can't block an
 # unrelated deploy. Frozen-lockfile install so CI can never silently
@@ -38,6 +43,7 @@ jobs:
   # which just makes Forge deploy its configured branch. The URL lives in the
   # `production` Environment (restricted to main), not in repo-level secrets.
   deploy:
+    name: Deploy to production
     needs: checks
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
