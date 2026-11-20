@@ -86,11 +86,14 @@ const strip = computed(() => weekTotals(training.currentWeek))
 const HOVER_OPEN_MS = 150
 const HOVER_CLOSE_MS = 120
 
+/** Mobile search overlay (M4); the desktop toolbar is hidden below `sm`. */
+const searchOverlay = ref(false)
 const isMobile = ref(false)
 onMounted(() => {
   const query = window.matchMedia('(max-width: 639px)')
   isMobile.value = query.matches
-  const update = (e: MediaQueryListEvent) => { isMobile.value = e.matches; closeCard() }
+  if (query.matches && search.isActive) searchOverlay.value = true
+  const update = (e: MediaQueryListEvent) => { isMobile.value = e.matches; closeCard(); if (!e.matches) searchOverlay.value = false }
   query.addEventListener('change', update)
   onBeforeUnmount(() => query.removeEventListener('change', update))
 })
@@ -342,7 +345,28 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
       </template>
     </TrainingMetricsStrip>
 
-    <TrainingToolbar @add-workout="emit('action', { type: 'add-workout', date: localDateIso() })" />
+    <TrainingToolbar class="max-sm:hidden" @add-workout="emit('action', { type: 'add-workout', date: localDateIso() })" />
+
+    <!-- Mobile: tap-to-search bar + add -->
+    <div class="flex items-center gap-2.5 sm:hidden">
+      <button
+        type="button"
+        class="flex h-[42px] min-w-0 flex-1 items-center gap-2 rounded-xl border-[1.5px] bg-stone-50 px-3.5 text-left text-[15px]"
+        :class="searching ? 'border-orange-300 text-stone-900' : 'border-stone-200 text-stone-400'"
+        @click="searchOverlay = true"
+      >
+        <span class="text-[15px]">⌕</span>
+        <span class="truncate">{{ search.q || 'Search workouts and plans…' }}</span>
+      </button>
+      <button
+        type="button"
+        class="flex size-[42px] shrink-0 items-center justify-center rounded-full bg-orange-600 text-white shadow-sm shadow-orange-600/20"
+        aria-label="Add workout"
+        @click="emit('action', { type: 'add-workout', date: localDateIso() })"
+      >
+        <UIcon name="i-heroicons-plus" class="size-5" />
+      </button>
+    </div>
 
     <!-- Search summary: count, one pill per active filter, Clear all -->
     <div v-if="searching" class="flex flex-wrap items-center gap-2">
@@ -491,6 +515,13 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
         </div>
       </template>
     </UPopover>
+
+    <TrainingSearchOverlay
+      v-if="searchOverlay"
+      :days="listDays"
+      @select="d => { openDate = d; pinned = true }"
+      @close="searchOverlay = false"
+    />
 
     <!-- Day sheet (touch) -->
     <UDrawer v-model:open="sheetOpen" :ui="{ content: 'rounded-t-[22px]' }">
