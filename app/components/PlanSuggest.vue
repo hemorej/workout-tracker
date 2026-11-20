@@ -322,7 +322,7 @@ const fmtDay = (date: string) =>
 </script>
 
 <template>
-  <div ref="root" class="relative">
+  <div ref="root" class="relative flex">
     <button
       type="button"
       :disabled="!hasPlan || (phase !== 'idle' && phase !== 'config')"
