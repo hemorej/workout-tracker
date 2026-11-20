@@ -257,17 +257,6 @@ export const workouts = pgTable(
     uniqueIndex('workouts_user_id_date_idx').on(table.userId, table.date),
 
     /**
-     * Composite indexes backing the training-log filter bar's "minimum X"
-     * boundary filters (tss/distance/duration) and the ride-type chip, so
-     * those queries stay index-scans instead of full table scans as the
-     * log grows.
-     */
-    index('workouts_user_id_tss_idx').on(table.userId, table.tss),
-    index('workouts_user_id_distance_km_idx').on(table.userId, table.distanceKm),
-    index('workouts_user_id_duration_minutes_idx').on(table.userId, table.durationMinutes),
-    index('workouts_user_id_ride_type_idx').on(table.userId, table.rideType),
-
-    /**
      * CHECK constraint: RPE must be between 1 and 10 when provided.
      */
     check('rpe_range', sql`${table.rpe} IS NULL OR (${table.rpe} >= 1 AND ${table.rpe} <= 10)`),

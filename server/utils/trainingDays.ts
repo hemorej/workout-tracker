@@ -13,11 +13,11 @@
  * Used by GET /api/training/days and GET /api/training/search.
  */
 
-import { and, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-orm'
+import { and, eq, gte, lte, sql, type SQL } from 'drizzle-orm'
 import { plannedWorkouts, powerBests, users, workouts } from '../db/schema'
 import { useDB } from '../db'
 import { getMetricsSeries } from './metricsCache'
-import type { FormMetrics, PlanEntry, TrainingDay, TrainingSummary, WorkoutDetail } from '#shared/types/training'
+import type { FormMetrics, PlanEntry, PowerBestEntry, TrainingDay, TrainingSummary, WorkoutDetail } from '#shared/types/training'
 
 const CTL_DECAY = 1 / 42
 const ATL_DECAY = 1 / 7
@@ -48,25 +48,16 @@ export function selectRides(where: SQL | undefined) {
   return useDB().select(rideColumns).from(workouts).where(where)
 }
 
-export type RideRow = Awaited<ReturnType<typeof selectRides>>[number]
-
-/** Attaches each ride's PR power bests in one query. */
-export async function attachPowerBests(rides: RideRow[]): Promise<Map<string, WorkoutDetail>> {
-  const byDate = new Map<string, WorkoutDetail>()
-  if (rides.length === 0) return byDate
-
-  const rows = await useDB()
-    .select({ workoutId: powerBests.workoutId, duration: powerBests.duration, watts: powerBests.watts })
-    .from(powerBests)
-    .where(inArray(powerBests.workoutId, rides.map(r => r.id)))
-
-  const bestsById = new Map<number, { duration: string, watts: number }[]>()
-  for (const pb of rows) {
-    const list = bestsById.get(pb.workoutId)
-    if (list) list.push({ duration: pb.duration, watts: pb.watts })
-    else bestsById.set(pb.workoutId, [{ duration: pb.duration, watts: pb.watts }])
+/** Rides keyed by date, each carrying its PR power bests. */
+function ridesByDate(rides: Awaited<ReturnType<typeof selectRides>>, bests: { workoutId: number, duration: string, watts: number }[]): Map<string, WorkoutDetail> {
+  const bestsById = new Map<number, PowerBestEntry[]>()
+  for (const { workoutId, duration, watts } of bests) {
+    const list = bestsById.get(workoutId)
+    if (list) list.push({ duration, watts })
+    else bestsById.set(workoutId, [{ duration, watts }])
   }
 
+  const byDate = new Map<string, WorkoutDetail>()
   for (const r of rides) {
     const { date, ...rest } = r
     byDate.set(date, { ...rest, rideType: r.rideType as WorkoutDetail['rideType'], powerBests: bestsById.get(r.id) ?? [] })
@@ -82,7 +73,7 @@ export async function buildTrainingDays(userId: number, from: string, to: string
   const db = useDB()
   const today = localDateIso()
 
-  const [series, planRows, rideRows] = await Promise.all([
+  const [series, planRows, rideRows, bestRows] = await Promise.all([
     getMetricsSeries(userId),
     db.select().from(plannedWorkouts).where(and(
       eq(plannedWorkouts.userId, userId),
@@ -90,11 +81,16 @@ export async function buildTrainingDays(userId: number, from: string, to: string
       lte(plannedWorkouts.date, to),
     )),
     selectRides(and(eq(workouts.userId, userId), gte(workouts.date, from), lte(workouts.date, to))),
+    // Joined on the same window so it runs alongside the rides query instead of after it.
+    db.select({ workoutId: powerBests.workoutId, duration: powerBests.duration, watts: powerBests.watts })
+      .from(powerBests)
+      .innerJoin(workouts, eq(powerBests.workoutId, workouts.id))
+      .where(and(eq(workouts.userId, userId), gte(workouts.date, from), lte(workouts.date, to))),
   ])
 
   const seriesByDate = new Map(series.map(d => [d.date, d]))
   const planByDate = new Map(planRows.map(r => [r.date, toPlanEntry(r)]))
-  const rideByDate = await attachPowerBests(rideRows)
+  const rideByDate = ridesByDate(rideRows, bestRows)
 
   // Carry = form at the end of the day before `from`; falls back to the user's
   // seed values when the series doesn't reach that far back.

@@ -78,7 +78,10 @@ export const useTrainingStore = defineStore('training', () => {
   const previewBaseLength = ref<number | null>(null)
 
   const currentMonday = computed(() => mondayOf(days.value.find(d => d.isToday)?.date ?? localDateIso()))
-  const currentWeek = computed(() => days.value.filter(d => mondayOf(d.date) === currentMonday.value))
+  const currentWeek = computed(() => {
+    const sunday = addDaysIso(currentMonday.value, 6)
+    return days.value.filter(d => d.date >= currentMonday.value && d.date <= sunday)
+  })
 
   // ── Loading ────────────────────────────────────────────────────────────────
 

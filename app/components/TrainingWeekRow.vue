@@ -30,7 +30,8 @@ const isPast = computed(() => !isCurrent.value && props.week.days[6]!.isPast)
 function planFor(day: TrainingWeek['days'][number]) {
   return (!isActualDay(day) && props.draft?.[day.date]) || day.plan
 }
-const shownDays = computed(() => props.week.days.map(d => ({ ...d, plan: planFor(d) })))
+// Without a draft the store's own day objects are passed through, so a cell whose day didn't change doesn't re-render.
+const shownDays = computed(() => (props.draft ? props.week.days.map(d => ({ ...d, plan: planFor(d) })) : props.week.days))
 const totals = computed(() => weekTotals(shownDays.value))
 const savedPlannedTss = computed(() => weekTotals(props.week.days).plannedTss)
 const progress = computed(() => (totals.value.plannedTss ? Math.min(1, totals.value.doneTss / totals.value.plannedTss) : 0))
