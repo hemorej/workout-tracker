@@ -327,11 +327,11 @@ const fmtDay = (date: string) =>
       type="button"
       :disabled="!hasPlan || (phase !== 'idle' && phase !== 'config')"
       :title="hasPlan ? undefined : 'Add a training plan in Settings first'"
-      class="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[13px] font-semibold text-orange-700 transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
-      :class="phase === 'config' ? 'border-orange-300 bg-orange-50' : 'border-stone-200 bg-white hover:bg-orange-50'"
+      class="inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold text-orange-700 hover:text-orange-800 cursor-pointer disabled:cursor-default disabled:opacity-50"
+      :class="phase === 'config' ? 'text-orange-800' : ''"
       @click="phase === 'config' ? cancelConfig() : openConfig()"
     >
-      <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5" />
+      <UIcon name="i-heroicons-sparkles" class="size-[15px]" />
       Suggest plan
     </button>
 

@@ -685,13 +685,14 @@ onUnmounted(() => stickyBarObserver?.disconnect())
       </header>
 
       <!-- Tab navigation — full-width justified bar -->
-      <nav class="grid grid-cols-3 bg-white border-b border-stone-100">
+      <nav class="grid bg-white border-b border-stone-100 max-lg:grid-cols-2 lg:grid-cols-3">
         <button
           v-for="(tab, i) in tabs"
           :key="tab.id"
           class="px-2 py-3.5 text-center text-[13px] sm:text-[15px] whitespace-nowrap border-b-[3px] transition-colors"
           :class="[
             i > 0 ? 'border-l border-l-[#f5f4f2]' : '',
+            tab.id === 'builder' ? 'max-lg:hidden' : '',
             activeTab === tab.id
               ? 'font-bold text-stone-900 border-b-orange-600'
               : 'font-medium text-stone-500 border-b-transparent hover:text-stone-700',
