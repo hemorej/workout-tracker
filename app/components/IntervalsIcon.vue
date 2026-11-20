@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Planning row action — "build complete workout". `class` falls through
- * from the call site (PlanningTab.vue's build column).
+ * from the call site (TrainingDayDetail.vue).
  */
 </script>
 

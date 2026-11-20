@@ -10,13 +10,13 @@
  *   close — user pressed Cancel; parent should close the modal
  */
 
-import type { NewWorkoutPayload, PowerBestEntry, WorkoutFitData, WorkoutLap } from '~/stores/workouts'
-import { useWorkoutsStore } from '~/stores/workouts'
+import type { NewWorkoutPayload, PowerBestEntry, WorkoutFitData, WorkoutLap } from '#shared/types/training'
+import { useTrainingStore } from '~/stores/training'
 
 export interface WorkoutPrefill {
   date: string
-  name: string
-  durationMinutes: number
+  name?: string
+  durationMinutes?: number
   /** Pre-filled from a matched Wahoo activity's distance, if any. */
   distanceKm?: number | null
   /** Pre-filled from the day's planned workout TSS, or computed from a Wahoo FIT file. */
@@ -49,7 +49,7 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const workoutsStore = useWorkoutsStore()
+const training = useTrainingStore()
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -248,11 +248,11 @@ async function handleSubmit() {
 
   try {
     if (props.editWorkoutId) {
-      await workoutsStore.updateWorkout(props.editWorkoutId, payload)
+      await training.updateWorkout(props.editWorkoutId, payload)
       toast.add({ title: 'Workout updated', color: 'success' })
     }
     else {
-      await $fetch('/api/workouts', { method: 'POST', body: payload })
+      await training.addWorkout(payload)
       toast.add({ title: 'Workout logged!', color: 'success' })
     }
     emit('saved')

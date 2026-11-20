@@ -3,29 +3,27 @@
  * Dashboard shell — the app's only authenticated page.
  *
  * Matches `/` and `/:tab` (optional catch-all), so the URL drives the active
- * tab: Training log (`/`), Planning (`/planning`), Workout builder
- * (`/builder`), History (`/history`). Alt/Option+1..4 jump between tabs.
- * Switching tabs remounts the page, which is why cross-tab hand-offs go
+ * tab: Training (`/`), Workout builder (`/builder`), History (`/history`).
+ * Alt/Option+1..3 jump between tabs; the retired `/planning` slug redirects to
+ * `/`. Switching tabs remounts the page, which is why cross-tab hand-offs go
  * through Pinia stores (`coach`, `zwiftLibrary`).
  *
- * This file owns the Training log tab itself plus the flows launched from it:
- *  - MetricsSummary + paginated WorkoutCard list (days incl. rest days), with
- *    the filter bar (name/type/TSS/distance/duration/date) pushed to the
- *    workouts store, which switches GET /api/workouts to its filtered mode
+ * The Training tab is the TrainingTab component; this file owns the flows it
+ * launches (it emits `DayAction`s):
  *  - "Mark as completed" — Strava activity picker → FIT from Wahoo (outdoor)
- *    or manual upload (indoor) → AddWorkoutModal prefill; per-row "Refresh
- *    ride data" re-runs that for an existing workout (PATCH)
- *  - "Auto-build" — AI coach (POST /api/coach/generate) → builder tab
+ *    or manual upload (indoor) → AddWorkoutModal prefill; "Refresh ride data"
+ *    re-runs that for an existing workout (PATCH)
+ *  - "Build workout" — AI coach (POST /api/coach/generate) → builder tab
  *  - ride-stats overlay (fitData/laps loaded on demand), CTL/TSB history
  *    chart modal, user settings modal
  *
- * The other tabs are components (PlanningTab, WorkoutBuilderTab, HistoryTab).
- * The initial load (first workouts page + planning grid) runs during SSR.
+ * The other tabs are components (WorkoutBuilderTab, HistoryTab). The initial
+ * training load runs during SSR when the Training tab is the one being opened.
  */
 
 import { useAuthStore } from '~/stores/auth'
-import { useWorkoutsStore, type LogFilters, type WorkoutDetail, type WorkoutFitData, type WorkoutLap, type DayEntry } from '~/stores/workouts'
-import { usePlanningStore } from '~/stores/planning'
+import { useTrainingStore } from '~/stores/training'
+import type { TrainingDay, WorkoutDetail, WorkoutFitData, WorkoutLap } from '#shared/types/training'
 import { useCoachStore, type CoachWorkout } from '~/stores/coach'
 import type { WorkoutPrefill } from '~/components/AddWorkoutModal.vue'
 
@@ -59,67 +57,53 @@ definePageMeta({ middleware: 'auth' })
 
 // ── Tab navigation ────────────────────────────────────────────────────────
 // This page matches both `/` and `/:tab` (optional catch-all route file
-// `[[tab]].vue`), so the active tab is driven by the URL — `/planning` loads
-// straight into the planning tab, and clicking a tab pushes a matching URL.
+// `[[tab]].vue`), so the active tab is driven by the URL — `/builder` loads
+// straight into the builder, and clicking a tab pushes a matching URL.
 const tabs = [
-  { id: 'log', label: 'Training log', title: 'Training Log' },
-  { id: 'planning', label: 'Planning', title: 'Planning' },
-  { id: 'builder', label: 'Workout builder', title: 'Workout Builder' },
-  { id: 'history', label: 'History', title: 'History' },
+  { id: 'training', label: 'Training', mobileLabel: 'Training', title: 'Training' },
+  { id: 'builder', label: 'Workout builder', mobileLabel: 'Builder', title: 'Workout Builder' },
+  { id: 'history', label: 'History', mobileLabel: 'History', title: 'History' },
 ] as const
 
 type TabId = typeof tabs[number]['id']
 const tabIds = tabs.map(t => t.id)
 
 const route = useRoute()
-const routeTab = computed<TabId>(() => {
+const routeParam = computed(() => {
   const param = route.params.tab
-  const value = Array.isArray(param) ? param[0] : param
-  return tabIds.includes(value as TabId) ? (value as TabId) : 'log'
+  return Array.isArray(param) ? param[0] : param
 })
+const routeTab = computed<TabId>(() => (tabIds.includes(routeParam.value as TabId) ? routeParam.value as TabId : 'training'))
+
+// The old Planning (and explicit Training log) slugs now live in the Training tab.
+if (routeParam.value === 'planning' || routeParam.value === 'log') await navigateTo({ path: '/', query: route.query }, { replace: true })
 
 const activeTab = ref<TabId>(routeTab.value)
 watch(routeTab, (tab) => { activeTab.value = tab })
 
 const showTodaysEvents = ref(false)
 
+/** Content column width per tab (also used by the header so it lines up). */
+const contentWidth = computed(() => ({
+  training: 'max-w-[1040px]',
+  builder: 'max-w-6xl',
+  history: 'max-w-3xl',
+})[activeTab.value])
+
 useHead({
-  title: computed(() => tabs.find(t => t.id === activeTab.value)?.title ?? 'Training Log'),
+  title: computed(() => tabs.find(t => t.id === activeTab.value)?.title ?? 'Training'),
 })
 
-/** Sets the active tab and pushes the matching URL (`/` for the default log tab) */
+/** Sets the active tab and pushes the matching URL (`/` for the default Training tab) */
 function setTab(id: TabId) {
   activeTab.value = id
-  navigateTo(id === 'log' ? '/' : `/${id}`)
+  navigateTo(id === 'training' ? '/' : `/${id}`)
 }
 
 const auth = useAuthStore()
-const workouts = useWorkoutsStore()
-const planning = usePlanningStore()
+const training = useTrainingStore()
 const coach = useCoachStore()
 const toast = useToast()
-
-// Today's date as YYYY-MM-DD (local time, matches DayEntry.date format)
-const todayStr = computed(() => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-})
-
-/** Today's date split for the fixed date cell: weekday ("Mon") + rest (", Aug 31") */
-const todayWeekday = computed(() =>
-  new Date().toLocaleDateString('en-US', { weekday: 'short' }),
-)
-const todayDatePart = computed(() =>
-  new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-)
-
-// Today's planned day entry (null if nothing planned or plan is a rest day)
-// Pass the full PlannedDay so WorkoutCard can use projected CTL/TSB values
-const todayPlan = computed(() => {
-  const entry = planning.plans.find(p => p.date === todayStr.value)
-  if (!entry?.plan || entry.plan.type === 'rest') return null
-  return entry
-})
 
 // ── Add-workout modal ────────────────────────────────────────────────────
 // UModal lives here (same component that owns the open state) — this matches
@@ -151,13 +135,13 @@ const fitOverlayWorkout = ref<WorkoutDetail | null>(null)
 
 // The list omits the heavy fitData/laps JSONB, so fetch them on demand and
 // open the overlay once they're in (a single-row lookup, so near-instant).
-async function openFitOverlay(day: DayEntry) {
-  if (!day.workout) return
+async function openFitOverlay(day: TrainingDay) {
+  if (!day.ride) return
   try {
     const detail = await $fetch<{ fitData: WorkoutFitData | null, laps: WorkoutLap[] | null }>(
-      `/api/workouts/${day.workout.id}`,
+      `/api/workouts/${day.ride.id}`,
     )
-    fitOverlayWorkout.value = { ...day.workout, ...detail }
+    fitOverlayWorkout.value = { ...day.ride, ...detail }
   }
   catch {
     toast.add({ title: 'Couldn\'t load ride stats', color: 'error' })
@@ -200,14 +184,13 @@ function preventUnloadDuringAutoBuild(e: BeforeUnloadEvent) {
   e.preventDefault()
 }
 
-async function onAutoBuild(date?: string) {
-  if (window.innerWidth < 1024) return
+async function onAutoBuild(date: string) {
   isAutoBuilding.value = true
   window.addEventListener('beforeunload', preventUnloadDuringAutoBuild)
   try {
     const workout = await $fetch<CoachWorkout>('/api/coach/generate', {
       method: 'POST',
-      query: date ? { date } : undefined,
+      query: { date },
     })
     coach.setPendingWorkout(workout)
     // Don't set activeTab.value = 'builder' here: `/` and `/builder` are separate
@@ -230,14 +213,9 @@ async function onAutoBuild(date?: string) {
   }
 }
 
-/** "Build complete workout" action on a Planning tab row — same generator as
- * the Training Log's "Auto" button, just for the picked date instead of today. */
-function onBuildPlannedWorkout(date: string) {
-  onAutoBuild(date)
-}
-
-function openAddWorkout() {
-  pendingPrefill.value = null
+/** Opens the Add workout form, optionally on a given day. */
+function openAddWorkout(date?: string) {
+  pendingPrefill.value = date ? { date } : null
   editingWorkoutId.value = null
   showAddWorkout.value = true
 }
@@ -360,7 +338,7 @@ function fallbackPrefillFromStrava(activity: StravaRideSummary): WorkoutPrefill 
     name: activity.name,
     durationMinutes: Math.round(activity.movingTimeSeconds / 60),
     distanceKm: activity.distanceMeters > 0 ? Math.round((activity.distanceMeters / 1000) * 10) / 10 : null,
-    tss: todayPlan.value?.plan?.tss ?? null,
+    tss: training.days.find(d => d.date === activity.startDateLocal.slice(0, 10))?.plan?.tss ?? null,
     rideType: activity.rideType,
     stravaActivityId: activity.id,
   }
@@ -476,8 +454,8 @@ function skipUploadAndEnterManually() {
  * Skips the Strava activity-list step entirely — the workout's own date and
  * rideType already tell us what to fetch, no need to pick which activity.
  */
-async function onRefreshRideData(day: DayEntry, opts: { forceUpload?: boolean } = {}) {
-  const workout = day.workout
+async function onRefreshRideData(day: TrainingDay, opts: { forceUpload?: boolean } = {}) {
+  const workout = day.ride
   if (!workout) return
 
   pickerPurpose.value = 'refresh'
@@ -545,8 +523,8 @@ function openEditModalFromRefresh(parsedPrefill: WorkoutPrefill) {
  * the title, TSS, or any other field by hand. fitData/laps/stravaActivityId
  * ride through the prefill untouched (PATCH ignores stravaActivityId).
  */
-function onEditWorkout(day: DayEntry) {
-  const w = day.workout
+function onEditWorkout(day: TrainingDay) {
+  const w = day.ride
   if (!w) return
 
   pendingPrefill.value = {
@@ -570,41 +548,33 @@ function onEditWorkout(day: DayEntry) {
 }
 
 /** "Re-upload FIT file" — the manual-upload branch of the refresh flow for any ride type. */
-function onReuploadFit(day: DayEntry) {
+function onReuploadFit(day: TrainingDay) {
   return onRefreshRideData(day, { forceUpload: true })
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────────────
 
-// Initial load runs during SSR so the dashboard's first paint already has
-// data — no client-side loading flash, no extra round trips after hydration.
-// useRequestFetch() forwards the incoming request's session cookie, which
-// plain $fetch doesn't do automatically in a server context.
-const requestFetch = useRequestFetch()
-await useAsyncData('dashboard-initial-load', async () => {
-  await Promise.all([
-    workouts.fetchPage(1, requestFetch),
-    planning.fetchPlans(requestFetch),
-  ])
-  return true
-})
+// The Training tab's first load runs during SSR so its first paint already has
+// data. useRequestFetch() forwards the incoming request's session cookie, which
+// plain $fetch doesn't do in a server context. Other tabs load their own data.
+if (routeTab.value === 'training') {
+  const requestFetch = useRequestFetch()
+  await useAsyncData('training-initial-load', async () => {
+    await training.fetchInitial(requestFetch)
+    return true
+  })
+}
 
 // ── Actions ──────────────────────────────────────────────────────────────
 
-/** Called after the form saves a workout — close modal and refresh list */
-async function onWorkoutSaved() {
-  // AddWorkoutModal's own submit already refetches via workoutsStore
-  // (updateWorkout stays on the current page; the plain POST path below
-  // still needs an explicit refresh since it calls $fetch directly).
-  const wasEdit = editingWorkoutId.value !== null
+/** The add/edit form saved a ride — the store already refreshed, so just close it. */
+function onWorkoutSaved() {
   closeAddWorkout()
-  if (!wasEdit) await workouts.fetchPage(1)
 }
 
-/** Called by WorkoutCard's delete event */
 async function onDeleteWorkout(id: number) {
   try {
-    await workouts.deleteWorkout(id)
+    await training.deleteWorkout(id)
     toast.add({ title: 'Workout deleted', color: 'success' })
   }
   catch {
@@ -612,146 +582,22 @@ async function onDeleteWorkout(id: number) {
   }
 }
 
-/** Pagination handler */
-async function onPageChange(page: number) {
-  await workouts.goToPage(page)
-  // Scroll to top of list on page change
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-// ── Training log filter bar — local UI state, pushed to the workouts store below ──
-type LogFilterType = 'all' | 'zwift' | 'outdoor'
-type LogPanel = null | 'type' | 'tss' | 'dist' | 'dur' | 'dates'
-
-const logSearch = ref('')
-const logFilterType = ref<LogFilterType>('all')
-const logMinTSS = ref(0)
-const logMinDistance = ref(0)
-const logMinDuration = ref(0)
-const logDateFrom = ref('')
-const logDateTo = ref('')
-
-const activeLogPanel = ref<LogPanel>(null)
-const logFilterGroupRef = ref<HTMLElement | null>(null)
-const draftMinTSS = ref(0)
-const draftMinDistance = ref(0)
-const draftMinDuration = ref(0)
-const draftDateFrom = ref('')
-const draftDateTo = ref('')
-
-const hasActiveLogFilters = computed(() =>
-  logSearch.value !== ''
-  || logFilterType.value !== 'all'
-  || logMinTSS.value > 0
-  || logMinDistance.value > 0
-  || logMinDuration.value > 0
-  || logDateFrom.value !== ''
-  || logDateTo.value !== '',
-)
-
-function formatChipDate(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-const typeChipLabel = computed(() => {
-  if (logFilterType.value === 'zwift') return 'Zwift'
-  if (logFilterType.value === 'outdoor') return 'Outdoor'
-  return 'Type'
-})
-const tssChipLabel = computed(() => logMinTSS.value > 0 ? `≥${logMinTSS.value} TSS` : 'TSS')
-const distChipLabel = computed(() => logMinDistance.value > 0 ? `≥${logMinDistance.value} km` : 'Distance')
-const durChipLabel = computed(() => logMinDuration.value > 0 ? `≥${logMinDuration.value} min` : 'Duration')
-const datesChipLabel = computed(() => {
-  if (logDateFrom.value && logDateTo.value) return `${formatChipDate(logDateFrom.value)} – ${formatChipDate(logDateTo.value)}`
-  if (logDateFrom.value) return `From ${formatChipDate(logDateFrom.value)}`
-  if (logDateTo.value) return `Until ${formatChipDate(logDateTo.value)}`
-  return 'Dates'
-})
-
-const draftTSSLabel = computed(() => draftMinTSS.value > 0 ? `${draftMinTSS.value} TSS` : 'Any')
-const draftDistLabel = computed(() => draftMinDistance.value > 0 ? `${draftMinDistance.value} km` : 'Any')
-const draftDurLabel = computed(() => draftMinDuration.value > 0 ? `${draftMinDuration.value} min` : 'Any')
-
-/** Opens a chip's panel, seeding its draft from the currently applied values; toggles closed if already open */
-function toggleLogPanel(panel: Exclude<LogPanel, null>) {
-  if (activeLogPanel.value === panel) {
-    activeLogPanel.value = null
-    return
-  }
-  draftMinTSS.value = logMinTSS.value
-  draftMinDistance.value = logMinDistance.value
-  draftMinDuration.value = logMinDuration.value
-  draftDateFrom.value = logDateFrom.value
-  draftDateTo.value = logDateTo.value
-  activeLogPanel.value = panel
-}
-
-function closeLogPanel() {
-  activeLogPanel.value = null
-}
-
-/** Type filter commits and closes immediately — no draft/Apply step */
-function setLogType(type: LogFilterType) {
-  logFilterType.value = type
-  activeLogPanel.value = null
-  applyLogFiltersToStore()
-}
-
-function applyLogPanel() {
-  if (activeLogPanel.value === 'tss') logMinTSS.value = draftMinTSS.value
-  else if (activeLogPanel.value === 'dist') logMinDistance.value = draftMinDistance.value
-  else if (activeLogPanel.value === 'dur') logMinDuration.value = draftMinDuration.value
-  else if (activeLogPanel.value === 'dates') {
-    logDateFrom.value = draftDateFrom.value
-    logDateTo.value = draftDateTo.value
-  }
-  activeLogPanel.value = null
-  applyLogFiltersToStore()
-}
-
-function resetTSSDraft() {
-  draftMinTSS.value = 0
-}
-
-function resetDistDraft() {
-  draftMinDistance.value = 0
-}
-
-function resetDurDraft() {
-  draftMinDuration.value = 0
-}
-
-function resetDatesDraft() {
-  draftDateFrom.value = ''
-  draftDateTo.value = ''
-}
-
-/** Clears every filter (search text, type, TSS, distance, duration, dates) and closes any open panel */
-function clearLogFilters() {
-  logSearch.value = ''
-  logFilterType.value = 'all'
-  logMinTSS.value = 0
-  logMinDistance.value = 0
-  logMinDuration.value = 0
-  logDateFrom.value = ''
-  logDateTo.value = ''
-  activeLogPanel.value = null
-  applyLogFiltersToStore()
-}
-
-/** Closes an open filter panel when the user clicks anywhere outside the chip group */
-function onDocumentClickForLogPanel(event: MouseEvent) {
-  if (activeLogPanel.value === null) return
-  if (logFilterGroupRef.value && !logFilterGroupRef.value.contains(event.target as Node)) {
-    activeLogPanel.value = null
+/** Day-card actions that need this page's modals and flows. */
+function onDayAction(action: PageAction) {
+  switch (action.type) {
+    case 'open-fit': return openFitOverlay(action.day)
+    case 'edit': return onEditWorkout(action.day)
+    case 'reupload-fit': return onReuploadFit(action.day)
+    case 'refresh-ride': return onRefreshRideData(action.day)
+    case 'delete-ride': return onDeleteWorkout(action.day.ride!.id)
+    case 'mark-completed': return onMarkCompleted()
+    case 'add-workout': return openAddWorkout(action.date)
+    case 'build-workout': return onAutoBuild(action.date)
   }
 }
 
-onMounted(() => document.addEventListener('click', onDocumentClickForLogPanel))
-onUnmounted(() => document.removeEventListener('click', onDocumentClickForLogPanel))
-
-// ── Keyboard shortcut: Alt/Option+1..4 jumps to the matching tab ────────────
-// Cmd/Ctrl+1..4 is reserved by Chrome/Safari for switching browser tabs and
+// ── Keyboard shortcut: Alt/Option+1..3 jumps to the matching tab ────────────
+// Cmd/Ctrl+1..3 is reserved by Chrome/Safari for switching browser tabs and
 // can't be reliably intercepted from page JS, so Alt is used instead.
 function onKeydownTabShortcut(event: KeyboardEvent) {
   if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
@@ -772,7 +618,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydownTabShortcut))
 
 // ── Sticky header height ─────────────────────────────────────────────────────
 // Exposes the pinned header+tab-nav bar's height as a CSS var so other sticky
-// elements further down the page (e.g. planning week labels) can offset below it.
+// elements further down the page (e.g. the Training grid's day header) can offset below it.
 
 const stickyBar = ref<HTMLElement | null>(null)
 let stickyBarObserver: ResizeObserver | undefined
@@ -789,36 +635,6 @@ onMounted(() => {
   if (stickyBar.value) stickyBarObserver.observe(stickyBar.value)
 })
 onUnmounted(() => stickyBarObserver?.disconnect())
-
-// ── Push the filter bar's applied state to the store — this drives the ──────
-// live list update. Search text is debounced so we don't hit the API on
-// every keystroke; every other filter commits immediately (type on select,
-// TSS/distance/duration/dates on Apply, everything on reset-all).
-function currentLogFilters(): LogFilters {
-  return {
-    name: logSearch.value.trim(),
-    type: logFilterType.value,
-    minTss: logMinTSS.value,
-    minDistance: logMinDistance.value,
-    minDuration: logMinDuration.value,
-    dateFrom: logDateFrom.value,
-    dateTo: logDateTo.value,
-  }
-}
-
-function applyLogFiltersToStore() {
-  workouts.setFilters(currentLogFilters())
-}
-
-const SEARCH_DEBOUNCE_MS = 300
-let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined
-
-watch(logSearch, () => {
-  clearTimeout(searchDebounceTimer)
-  searchDebounceTimer = setTimeout(applyLogFiltersToStore, SEARCH_DEBOUNCE_MS)
-})
-
-onUnmounted(() => clearTimeout(searchDebounceTimer))
 </script>
 
 <template>
@@ -846,7 +662,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
     <div ref="stickyBar" class="sticky top-0 z-10">
       <!-- Header — minimal, borderless top bar -->
       <header class="bg-white border-b border-stone-100">
-        <div class="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div class="mx-auto px-6 py-4 flex items-center justify-between" :class="contentWidth">
           <span class="flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-stone-900">
             <BikeLogo :size="26" class="shrink-0 text-orange-600" />
             Sprocket
@@ -868,17 +684,13 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
         </div>
       </header>
 
-      <!-- Tab navigation — full-width justified bar. Workout builder needs
-           real screen space for its timeline, so it's dropped below `lg`
-           (covers phones in both portrait and landscape); the remaining
-           3 tabs re-space evenly via grid-cols-3, going to 4-up at lg+. -->
-      <nav class="grid grid-cols-3 lg:grid-cols-4 bg-white border-b border-stone-100">
+      <!-- Tab navigation — full-width justified bar -->
+      <nav class="grid grid-cols-3 bg-white border-b border-stone-100">
         <button
           v-for="(tab, i) in tabs"
           :key="tab.id"
           class="px-2 py-3.5 text-center text-[13px] sm:text-[15px] whitespace-nowrap border-b-[3px] transition-colors"
           :class="[
-            tab.id === 'builder' ? 'hidden lg:block' : '',
             i > 0 ? 'border-l border-l-[#f5f4f2]' : '',
             activeTab === tab.id
               ? 'font-bold text-stone-900 border-b-orange-600'
@@ -886,460 +698,27 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
           ]"
           @click="setTab(tab.id)"
         >
-          {{ tab.label }}
+          <span class="sm:hidden">{{ tab.mobileLabel }}</span><span class="hidden sm:inline">{{ tab.label }}</span>
         </button>
       </nav>
     </div>
 
     <!-- ── Main content ────────────────────────────────────────────── -->
-    <!-- Workout builder gets a wider container so its timeline can be wider
-         than the other tabs' content column; the tab itself re-narrows its
-         name/stat row and toolbar row back down to match. -->
-    <main
-      class="mx-auto px-6 py-10 space-y-10"
-      :class="activeTab === 'builder' ? 'max-w-6xl' : activeTab === 'planning' ? 'max-w-[860px]' : 'max-w-3xl'"
-    >
-
-      <!-- ── Planning tab ────────────────────────────────────────── -->
-      <!-- `Lazy` prefix + `v-if`: each non-default tab's chunk is only
-           fetched the first time that tab is opened, keeping the initial
-           dashboard (the `log` tab) payload small. WorkoutBuilderTab in
-           particular is ~1.3k lines. -->
-      <template v-if="activeTab === 'planning'">
-      <LazyPlanningTab @open-todays-events="showTodaysEvents = true" @build-workout="onBuildPlannedWorkout" />
-      </template>
-
-      <!-- ── Workout builder tab ──────────────────────────────────── -->
-      <LazyWorkoutBuilderTab v-if="activeTab === 'builder'" />
-
-      <!-- ── History tab ────────────────────────────────────────── -->
-      <LazyHistoryTab v-if="activeTab === 'history'" />
-
-      <!-- ── Training log tab ────────────────────────────────────── -->
-      <template v-if="activeTab === 'log'">
-
-      <!-- Headline metrics strip -->
-      <MetricsSummary
-        :today-weekday="todayWeekday"
-        :today-date-part="todayDatePart"
-        :weekly-tss="workouts.weeklyStats.tssTotal"
-        :weekly-hours="workouts.weeklyStats.hoursTotal"
-        :weekly-km="workouts.weeklyStats.kmTotal"
-        :today-c-t-l="workouts.todayMetrics.ctl"
-        :today-a-t-l="workouts.todayMetrics.atl"
-        :today-t-s-b="workouts.todayMetrics.tsb"
-        :week-ago-c-t-l="workouts.weekAgoMetrics?.ctl"
-        :ctl-range="workouts.ctlRange"
+    <!-- The Training grid and the workout builder get wider containers than the
+         History column; the builder re-narrows its own name/stat row and toolbar. -->
+    <main class="mx-auto px-6 py-6 sm:py-10" :class="contentWidth">
+      <!-- `Lazy` prefix + `v-if`: each non-default tab's chunk is only fetched
+           the first time that tab is opened. WorkoutBuilderTab in particular
+           is ~1.3k lines. -->
+      <TrainingTab
+        v-if="activeTab === 'training'"
+        :refreshing-ride-id="refreshingWorkoutId"
+        @action="onDayAction"
         @open-history="openHistoryChart"
+        @open-events="showTodaysEvents = true"
       />
-
-
-      <!-- Section header + Add button, and the content directly below it —
-           grouped so their shared spacing can be tightened on narrow/vertical
-           screens independently of the rest of main's space-y-10 rhythm. -->
-      <div class="!mt-4 sm:!mt-10 space-y-4 sm:space-y-10">
-        
-      <!-- Filter bar: search + filter chips + Add workout button.
-           On narrow/vertical screens this stacks into two rows: search + Add
-           workout on row 1, filter chips evenly spaced on row 2. From `sm`
-           up it collapses back into a single row via `sm:contents`. -->
-      <div class="flex flex-col gap-2.5 sm:flex-row sm:flex-nowrap sm:items-center" style="margin: 32px 0 16px;">
-        <div class="flex items-center gap-2.5 sm:contents">
-          <div class="relative min-w-0 flex-1 basis-[160px] sm:order-1">
-            <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-stone-400">⌕</span>
-            <input
-              v-model="logSearch"
-              type="text"
-              placeholder="Search workouts…"
-              class="w-full rounded-xl border-[1.5px] border-stone-200 bg-stone-50 py-3 pl-10 pr-4 text-[15px] text-stone-900 outline-none"
-            >
-          </div>
-
-          <button
-            class="shrink-0 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-orange-600/20 transition-colors hover:bg-orange-700 sm:order-3"
-            @click="openAddWorkout"
-          >
-            Add workout
-          </button>
-        </div>
-
-        <div ref="logFilterGroupRef" class="relative flex w-full items-center justify-between gap-2 sm:order-2 sm:w-auto sm:flex-wrap sm:justify-start">
-          <button
-            type="button"
-            :title="typeChipLabel"
-            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border-[1.5px]"
-            :class="logFilterType !== 'all'
-              ? 'border-orange-300 bg-orange-50 text-orange-600'
-              : 'border-stone-200 bg-white text-stone-600'"
-            @click="toggleLogPanel('type')"
-          >
-            <UIcon name="i-heroicons-tag" class="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            :title="tssChipLabel"
-            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border-[1.5px]"
-            :class="logMinTSS > 0
-              ? 'border-orange-300 bg-orange-50 text-orange-600'
-              : 'border-stone-200 bg-white text-stone-600'"
-            @click="toggleLogPanel('tss')"
-          >
-            <UIcon name="i-heroicons-bolt" class="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            :title="distChipLabel"
-            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border-[1.5px]"
-            :class="logMinDistance > 0
-              ? 'border-orange-300 bg-orange-50 text-orange-600'
-              : 'border-stone-200 bg-white text-stone-600'"
-            @click="toggleLogPanel('dist')"
-          >
-            <UIcon name="i-heroicons-map-pin" class="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            :title="durChipLabel"
-            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border-[1.5px]"
-            :class="logMinDuration > 0
-              ? 'border-orange-300 bg-orange-50 text-orange-600'
-              : 'border-stone-200 bg-white text-stone-600'"
-            @click="toggleLogPanel('dur')"
-          >
-            <UIcon name="i-heroicons-clock" class="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            :title="datesChipLabel"
-            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border-[1.5px]"
-            :class="(logDateFrom || logDateTo)
-              ? 'border-orange-300 bg-orange-50 text-orange-600'
-              : 'border-stone-200 bg-white text-stone-600'"
-            @click="toggleLogPanel('dates')"
-          >
-            <UIcon name="i-heroicons-calendar-days" class="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            title="Reset all filters"
-            class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[#f5f4f2]"
-            :class="hasActiveLogFilters ? 'text-stone-600' : 'text-[#cbc8c4]'"
-            @click="clearLogFilters"
-          >
-            <UIcon name="i-heroicons-arrow-path" class="h-4 w-4" />
-          </button>
-
-          <!-- Type panel — commits and closes immediately, no draft step -->
-          <div
-            v-if="activeLogPanel === 'type'"
-            class="absolute left-0 top-[calc(100%+8px)] z-20 w-[260px] rounded-2xl border border-[#f0eeec] bg-white p-3.5 shadow-[0_16px_40px_rgba(28,25,23,.18)]"
-          >
-            <button
-              type="button"
-              class="mb-0.5 block w-full rounded-[10px] px-3 py-2.5 text-left text-[13px] font-semibold"
-              :class="logFilterType === 'all' ? 'bg-[#faf9f7] text-orange-600' : 'text-stone-600'"
-              @click="setLogType('all')"
-            >
-              All
-            </button>
-            <button
-              type="button"
-              class="mb-0.5 block w-full rounded-[10px] px-3 py-2.5 text-left text-[13px] font-semibold"
-              :class="logFilterType === 'zwift' ? 'bg-[#faf9f7] text-orange-600' : 'text-stone-600'"
-              @click="setLogType('zwift')"
-            >
-              Zwift
-            </button>
-            <button
-              type="button"
-              class="block w-full rounded-[10px] px-3 py-2.5 text-left text-[13px] font-semibold"
-              :class="logFilterType === 'outdoor' ? 'bg-[#faf9f7] text-orange-600' : 'text-stone-600'"
-              @click="setLogType('outdoor')"
-            >
-              Outdoor
-            </button>
-          </div>
-
-          <!-- TSS panel -->
-          <div
-            v-if="activeLogPanel === 'tss'"
-            class="absolute left-0 top-[calc(100%+8px)] z-20 w-[300px] rounded-2xl border border-[#f0eeec] bg-white p-5 shadow-[0_16px_40px_rgba(28,25,23,.18)]"
-          >
-            <p class="mb-1 text-[15px] font-bold text-stone-900">
-              Minimum TSS
-            </p>
-            <p class="mb-[18px] text-sm font-semibold text-orange-600">
-              {{ draftTSSLabel }}
-            </p>
-            <input
-              v-model.number="draftMinTSS"
-              type="range"
-              min="0"
-              max="150"
-              step="5"
-              class="mb-5 w-full accent-orange-600"
-            >
-            <div class="flex items-center justify-between">
-              <button
-                type="button"
-                class="rounded-[9px] border-[1.5px] border-orange-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-orange-600"
-                @click="resetTSSDraft"
-              >
-                Reset
-              </button>
-              <div class="flex gap-2.5">
-                <button
-                  type="button"
-                  class="rounded-[9px] bg-[#f5f4f2] px-4 py-2.5 text-[13px] font-semibold text-stone-500"
-                  @click="closeLogPanel"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  class="rounded-[9px] bg-orange-600 px-[18px] py-2.5 text-[13px] font-bold text-white"
-                  @click="applyLogPanel"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Distance panel -->
-          <div
-            v-if="activeLogPanel === 'dist'"
-            class="absolute left-0 top-[calc(100%+8px)] z-20 w-[300px] rounded-2xl border border-[#f0eeec] bg-white p-5 shadow-[0_16px_40px_rgba(28,25,23,.18)]"
-          >
-            <p class="mb-1 text-[15px] font-bold text-stone-900">
-              Minimum distance
-            </p>
-            <p class="mb-[18px] text-sm font-semibold text-orange-600">
-              {{ draftDistLabel }}
-            </p>
-            <input
-              v-model.number="draftMinDistance"
-              type="range"
-              min="0"
-              max="60"
-              step="1"
-              class="mb-5 w-full accent-orange-600"
-            >
-            <div class="flex items-center justify-between">
-              <button
-                type="button"
-                class="rounded-[9px] border-[1.5px] border-orange-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-orange-600"
-                @click="resetDistDraft"
-              >
-                Reset
-              </button>
-              <div class="flex gap-2.5">
-                <button
-                  type="button"
-                  class="rounded-[9px] bg-[#f5f4f2] px-4 py-2.5 text-[13px] font-semibold text-stone-500"
-                  @click="closeLogPanel"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  class="rounded-[9px] bg-orange-600 px-[18px] py-2.5 text-[13px] font-bold text-white"
-                  @click="applyLogPanel"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Duration panel -->
-          <div
-            v-if="activeLogPanel === 'dur'"
-            class="absolute left-0 top-[calc(100%+8px)] z-20 w-[300px] rounded-2xl border border-[#f0eeec] bg-white p-5 shadow-[0_16px_40px_rgba(28,25,23,.18)]"
-          >
-            <p class="mb-1 text-[15px] font-bold text-stone-900">
-              Minimum duration
-            </p>
-            <p class="mb-[18px] text-sm font-semibold text-orange-600">
-              {{ draftDurLabel }}
-            </p>
-            <input
-              v-model.number="draftMinDuration"
-              type="range"
-              min="0"
-              max="150"
-              step="5"
-              class="mb-5 w-full accent-orange-600"
-            >
-            <div class="flex items-center justify-between">
-              <button
-                type="button"
-                class="rounded-[9px] border-[1.5px] border-orange-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-orange-600"
-                @click="resetDurDraft"
-              >
-                Reset
-              </button>
-              <div class="flex gap-2.5">
-                <button
-                  type="button"
-                  class="rounded-[9px] bg-[#f5f4f2] px-4 py-2.5 text-[13px] font-semibold text-stone-500"
-                  @click="closeLogPanel"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  class="rounded-[9px] bg-orange-600 px-[18px] py-2.5 text-[13px] font-bold text-white"
-                  @click="applyLogPanel"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Dates panel -->
-          <div
-            v-if="activeLogPanel === 'dates'"
-            class="absolute left-0 top-[calc(100%+8px)] z-20 w-[300px] rounded-2xl border border-[#f0eeec] bg-white p-5 shadow-[0_16px_40px_rgba(28,25,23,.18)]"
-          >
-            <p class="mb-4 text-[15px] font-bold text-stone-900">
-              Date range
-            </p>
-            <div class="mb-5 flex flex-col gap-3">
-              <div>
-                <label class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-stone-400">From</label>
-                <input
-                  v-model="draftDateFrom"
-                  type="date"
-                  class="w-full rounded-[9px] border-[1.5px] border-stone-200 bg-stone-50 px-2.5 py-2.5 text-sm text-stone-900 outline-none"
-                >
-              </div>
-              <div>
-                <label class="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-stone-400">To</label>
-                <input
-                  v-model="draftDateTo"
-                  type="date"
-                  class="w-full rounded-[9px] border-[1.5px] border-stone-200 bg-stone-50 px-2.5 py-2.5 text-sm text-stone-900 outline-none"
-                >
-              </div>
-            </div>
-            <div class="flex items-center justify-between">
-              <button
-                type="button"
-                class="rounded-[9px] border-[1.5px] border-orange-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-orange-600"
-                @click="resetDatesDraft"
-              >
-                Reset
-              </button>
-              <div class="flex gap-2.5">
-                <button
-                  type="button"
-                  class="rounded-[9px] bg-[#f5f4f2] px-4 py-2.5 text-[13px] font-semibold text-stone-500"
-                  @click="closeLogPanel"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  class="rounded-[9px] bg-orange-600 px-[18px] py-2.5 text-[13px] font-bold text-white"
-                  @click="applyLogPanel"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Loading state ─────────────────────────────────────────── -->
-      <div v-if="workouts.isLoading" class="flex justify-center py-16">
-        <BikeSpinner :size="24" class="text-stone-300" />
-      </div>
-
-      <!-- ── Error state ───────────────────────────────────────────── -->
-      <UAlert
-        v-else-if="workouts.error"
-        color="error"
-        variant="subtle"
-        title="Failed to load workouts"
-        :description="workouts.error"
-      />
-
-      <!-- ── Empty state — no matches for the active filters ──────────── -->
-      <div
-        v-else-if="workouts.days.length === 0 && hasActiveLogFilters"
-        class="text-center py-20"
-      >
-        <p class="text-sm font-medium text-stone-500">No workouts match these filters</p>
-        <p class="text-xs text-stone-400 mt-1.5">
-          Try widening your date range or clearing a filter.
-        </p>
-      </div>
-
-      <!-- ── Empty state — no workouts logged at all ──────────────────── -->
-      <div
-        v-else-if="workouts.days.length === 0"
-        class="text-center py-20"
-      >
-        <p class="text-stone-300 text-4xl mb-4">○</p>
-        <p class="text-sm font-medium text-stone-500">No workouts yet</p>
-        <p class="text-xs text-stone-400 mt-1.5">
-          Click "Add workout" to log your first session.
-        </p>
-      </div>
-
-      <!-- ── Day list — rendered as a seamless list, not individual cards ── -->
-      <div v-else class="bg-white rounded-xl border border-stone-100 overflow-hidden divide-y divide-[#f7f5f3]">
-        <WorkoutCard
-          v-for="day in workouts.days"
-          :key="day.date"
-          :day="day"
-          :planned-workout="day.date === todayStr ? todayPlan : null"
-          :is-refreshing-ride-data="refreshingWorkoutId !== null && day.workout?.id === refreshingWorkoutId"
-          @delete="onDeleteWorkout"
-          @mark-completed="onMarkCompleted"
-          @open-fit-overlay="openFitOverlay(day)"
-          @refresh-ride-data="onRefreshRideData(day)"
-          @edit="onEditWorkout(day)"
-          @reupload-fit="onReuploadFit(day)"
-        />
-      </div>
-
-      </div>
-
-      <!-- ── Pagination ────────────────────────────────────────────── -->
-      <div
-        v-if="workouts.pagination.totalPages > 1"
-        class="flex items-center justify-center gap-6"
-      >
-        <button
-          class="text-sm text-stone-400 hover:text-stone-700 disabled:opacity-30 transition-colors"
-          :disabled="workouts.pagination.page <= 1"
-          @click="onPageChange(workouts.pagination.page - 1)"
-        >
-          ← Newer
-        </button>
-        <span class="text-sm text-stone-300">
-          {{ workouts.pagination.page }} / {{ workouts.pagination.totalPages }}
-        </span>
-        <button
-          class="text-sm text-stone-400 hover:text-stone-700 disabled:opacity-30 transition-colors"
-          :disabled="workouts.pagination.page >= workouts.pagination.totalPages"
-          @click="onPageChange(workouts.pagination.page + 1)"
-        >
-          Older →
-        </button>
-      </div>
-
-      <!-- Footer formula note -->
-      <p class="text-center text-xs text-stone-300">
-        CTL = 42-day avg &nbsp;·&nbsp; ATL = 7-day avg &nbsp;·&nbsp; TSB = CTL − ATL
-      </p>
-
-      </template><!-- end training log tab -->
-
+      <LazyWorkoutBuilderTab v-else-if="activeTab === 'builder'" />
+      <LazyHistoryTab v-else-if="activeTab === 'history'" />
     </main>
 
     <!-- ── Add Workout Modal ─────────────────────────────────────── -->
@@ -1611,7 +990,7 @@ onUnmounted(() => clearTimeout(searchDebounceTimer))
       @close="closeFitOverlay"
     />
 
-    <!-- ── Today's Zwift events dialog (Planning tab) ─────────────────── -->
+    <!-- ── Today's Zwift events dialog (Training tab) ─────────────────── -->
     <LazyTodaysEventsDialog v-if="showTodaysEvents" open @close="showTodaysEvents = false" />
 
   </div>

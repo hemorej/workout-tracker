@@ -1,38 +1,25 @@
 <script setup lang="ts">
 /**
  * "Suggest plan" — generates 1–4 weeks of planned workouts, previews them as a
- * draft overlay in the Planning grid (state lives in the planning store so the
+ * draft overlay in the Training grid (state lives in the training store so the
  * grid can render it), and applies them on approval with an overwrite prompt
  * and Undo. Flow: idle → config → generating → preview → (confirm) → idle.
  */
-import { usePlanningStore } from '~/stores/planning'
-import type { ApplySnapshot, PlanEntry } from '~/stores/planning'
+import type { PlanEntry } from '#shared/types/training'
+import { hasContent, useTrainingStore, type ApplySnapshot } from '~/stores/training'
 
-const emit = defineEmits<{ changed: [dates: string[]] }>()
-
-const planning = usePlanningStore()
+const training = useTrainingStore()
 const toast = useToast()
 
 // ── Dates ────────────────────────────────────────────────────────────────────
-
-function localToday() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function addDays(date: string, n: number) {
-  const d = new Date(`${date}T00:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + n)
-  return d.toISOString().slice(0, 10)
-}
 
 function short(date: string) {
   return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
-const today = computed(localToday)
-const gridMonday = computed(() => planning.plans[0]?.date ?? today.value)
-const gridEnd = computed(() => planning.plans.at(-1)?.date ?? today.value)
+const today = computed(() => localDateIso())
+const gridMonday = computed(() => training.currentMonday)
+const gridEnd = computed(() => training.days.at(-1)?.date ?? today.value)
 
 // ── Availability (needs a stored training plan) ──────────────────────────────
 
@@ -54,24 +41,17 @@ const guidance = ref('')
 const progression = ref<number[] | null>(null)
 const progressionLoaded = ref(false)
 
-const phase = computed(() => planning.suggestPhase)
+const phase = computed(() => training.suggestPhase)
 const blockLength = computed(() => progression.value?.length ?? 4)
 
-const weekGroups = computed(() => {
-  const out: { monday: string, days: typeof planning.plans }[] = []
-  for (let i = 0; i < planning.plans.length; i += 7) {
-    out.push({ monday: planning.plans[i]!.date, days: planning.plans.slice(i, i + 7) })
-  }
-  return out
-})
+const weekGroups = computed(() => groupWeeks(training.days))
 
-const hasContent = (p: PlanEntry | null) => !!p && !!(p.name || p.type || p.tss != null || p.durationMinutes != null || p.notes)
 const plannedCount = (monday: string) =>
   weekGroups.value.find(w => w.monday === monday)?.days.filter(d => hasContent(d.plan)).length ?? 0
 
 /** Current week through current+5. */
 const weekOptions = computed(() => Array.from({ length: 6 }, (_, i) => {
-  const monday = addDays(gridMonday.value, i * 7)
+  const monday = addDaysIso(gridMonday.value, i * 7)
   const beyond = monday > gridEnd.value
   let meta: string
   if (i === 0) {
@@ -90,11 +70,11 @@ function defaultStart() {
 
 // ── Block-position detection ─────────────────────────────────────────────────
 
-function summarize(w: { monday: string, days: typeof planning.plans }): WeekSummary {
+function summarize(w: TrainingWeek): WeekSummary {
   return {
     monday: w.monday,
     names: w.days.flatMap(d => (d.plan?.name ? [d.plan.name] : [])),
-    tss: w.days.reduce((sum, d) => sum + (d.isPast ? (d.actual?.tss ?? 0) : (d.plan?.tss ?? 0)), 0),
+    tss: w.days.reduce((sum, d) => sum + (isActualDay(d) ? (d.ride?.tss ?? 0) : (d.plan?.tss ?? 0)), 0),
   }
 }
 
@@ -124,12 +104,12 @@ const slots = computed(() => Array.from({ length: blockLength.value }, (_, j) =>
   const items: { label: string, generated: boolean, planned: boolean }[] = []
   const behind = position.value - j
   if (behind > 0) {
-    const monday = addDays(startMonday.value, -behind * 7)
+    const monday = addDaysIso(startMonday.value, -behind * 7)
     items.push({ label: short(monday), generated: false, planned: plannedCount(monday) > 0 })
   }
   for (let i = 0; i < count.value; i++) {
     if ((position.value + i) % blockLength.value === j) {
-      items.push({ label: short(addDays(startMonday.value, i * 7)), generated: true, planned: true })
+      items.push({ label: short(addDaysIso(startMonday.value, i * 7)), generated: true, planned: true })
     }
   }
   return items
@@ -137,19 +117,19 @@ const slots = computed(() => Array.from({ length: blockLength.value }, (_, j) =>
 
 // ── Range ────────────────────────────────────────────────────────────────────
 
-const rangeEnd = computed(() => addDays(startMonday.value, count.value * 7 - 1))
+const rangeEnd = computed(() => addDaysIso(startMonday.value, count.value * 7 - 1))
 const rangeText = computed(() => `${short(startMonday.value)} – ${short(rangeEnd.value)}`)
 const finishCount = computed(() => blockLength.value - position.value)
 const showFinish = computed(() => finishCount.value >= 1 && finishCount.value <= 4 && count.value !== finishCount.value)
 
 const rangeDays = computed(() => {
   const out: string[] = []
-  for (let d = startMonday.value; d <= rangeEnd.value; d = addDays(d, 1)) if (d >= today.value) out.push(d)
+  for (let d = startMonday.value; d <= rangeEnd.value; d = addDaysIso(d, 1)) if (d >= today.value) out.push(d)
   return out
 })
 const occupied = computed(() => rangeDays.value.filter((d) => {
-  const day = planning.plans.find(p => p.date === d)
-  return day && !day.isPast && hasContent(day.plan)
+  const day = training.days.find(p => p.date === d)
+  return day && !isActualDay(day) && hasContent(day.plan)
 }).length)
 const extraWeeks = computed(() => rangeEnd.value > gridEnd.value
   ? Math.ceil((new Date(`${rangeEnd.value}T00:00:00Z`).getTime() - new Date(`${gridEnd.value}T00:00:00Z`).getTime()) / 86_400_000 / 7)
@@ -167,7 +147,7 @@ async function openConfig() {
   startMonday.value = defaultStart()
   count.value = 1
   override.value = null
-  planning.suggestPhase = 'config'
+  training.suggestPhase = 'config'
   if (!progressionLoaded.value) {
     try {
       progression.value = (await $fetch<{ weeklyTss: number[] | null }>('/api/coach/block-progression')).weeklyTss
@@ -178,7 +158,7 @@ async function openConfig() {
 }
 
 function cancelConfig() {
-  if (phase.value === 'config') planning.suggestPhase = 'idle'
+  if (phase.value === 'config') training.suggestPhase = 'idle'
 }
 
 function onPointerDown(e: PointerEvent) {
@@ -217,39 +197,39 @@ function startGenerate() {
 
 async function runGenerate() {
   const req = lastRequest!
-  planning.suggestWeeks = Array.from({ length: req.weeks }, (_, i) => ({
-    monday: addDays(req.startDate, i * 7),
+  training.suggestWeeks = Array.from({ length: req.weeks }, (_, i) => ({
+    monday: addDaysIso(req.startDate, i * 7),
     label: slotName(req.blockPosition + i),
   }))
-  planning.suggestPhase = 'generating'
+  training.suggestPhase = 'generating'
   generating.value = true
   // Regenerate keeps the grid extension from the first run; hide the old draft meanwhile.
-  const base = planning.plans.length
-  if (planning.draft) planning.setDraft({}, base)
+  const base = training.days.length
+  if (training.draft) training.setDraft({}, base)
   try {
     const res = await $fetch<{ weeks: { days: ({ date: string } & PlanEntry)[] }[] }>('/api/coach/generate-plan', {
       method: 'POST',
-      body: { ...req, today: localToday() },
+      body: { ...req, today: localDateIso() },
     })
-    const end = addDays(req.startDate, req.weeks * 7 - 1)
-    planning.extendTo(end)
+    const end = addDaysIso(req.startDate, req.weeks * 7 - 1)
+    training.extendTo(end)
     const entries: Record<string, PlanEntry> = {}
     for (const w of res.weeks) {
       for (const d of w.days) {
-        const day = planning.plans.find(p => p.date === d.date)
-        if (!day || day.isPast || (!d.name && !d.type && d.tss == null && d.durationMinutes == null)) continue
+        const day = training.days.find(p => p.date === d.date)
+        if (!day || isActualDay(day) || (!d.name && !d.type && d.tss == null && d.durationMinutes == null)) continue
         entries[d.date] = {
           name: d.name ?? null, type: d.type ?? null, tss: d.tss ?? null,
           durationMinutes: d.durationMinutes ?? null, notes: d.notes ?? null,
         }
       }
     }
-    planning.setDraft(entries, base)
-    planning.suggestPhase = 'preview'
+    training.setDraft(entries, base)
+    training.suggestPhase = 'preview'
   }
   catch {
-    planning.discardDraft()
-    planning.suggestPhase = 'error'
+    training.discardDraft()
+    training.suggestPhase = 'error'
   }
   finally {
     generating.value = false
@@ -258,14 +238,14 @@ async function runGenerate() {
 
 // ── Preview action bar ───────────────────────────────────────────────────────
 
-const draftEntries = computed(() => Object.entries(planning.draft ?? {}))
+const draftEntries = computed(() => Object.entries(training.draft ?? {}))
 const draftTss = computed(() => draftEntries.value.reduce((sum, [, e]) => sum + (e.tss ?? 0), 0))
-const conflicts = computed(() => (phase.value === 'preview' ? planning.draftConflicts() : []))
+const conflicts = computed(() => (phase.value === 'preview' ? training.draftConflicts() : []))
 
 const barTitle = computed(() => {
   const req = lastRequest
   if (!req) return ''
-  const range = `${short(req.startDate)} – ${short(addDays(req.startDate, req.weeks * 7 - 1))}`
+  const range = `${short(req.startDate)} – ${short(addDaysIso(req.startDate, req.weeks * 7 - 1))}`
   const first = req.blockPosition + 1
   const last = req.blockPosition + req.weeks
   const where = last > req.blockLength
@@ -276,10 +256,10 @@ const barTitle = computed(() => {
 
 const barMeta = computed(() => {
   const req = lastRequest
-  if (!req || !planning.draft) return ''
-  const end = addDays(req.startDate, req.weeks * 7 - 1)
-  const before = planning.projectCtl(null)[end]
-  const after = planning.projectCtl(planning.draft)[end]
+  if (!req || !training.draft) return ''
+  const end = addDaysIso(req.startDate, req.weeks * 7 - 1)
+  const before = training.project(null)[end]?.ctl
+  const after = training.project(training.draft)[end]?.ctl
   const parts = [`${req.weeks} week${req.weeks > 1 ? 's' : ''}`, `${draftTss.value} TSS`]
   if (before != null && after != null) parts.push(`CTL ${Math.round(before)} → ${Math.round(after)} by ${short(end)}`)
   if (conflicts.value.length) parts.push(`${conflicts.value.length} replaced`)
@@ -287,7 +267,7 @@ const barMeta = computed(() => {
 })
 
 function discard() {
-  planning.discardDraft()
+  training.discardDraft()
 }
 
 // ── Confirm + apply + undo ───────────────────────────────────────────────────
@@ -311,9 +291,8 @@ async function apply(mode: 'replace' | 'fill') {
   applying.value = true
   const weeksApplied = lastRequest?.weeks ?? 0
   try {
-    const { updated, ...snapshot } = await planning.applyDraft(mode)
+    const { updated, ...snapshot } = await training.applyDraft(mode)
     confirmOpen.value = false
-    emit('changed', snapshot.changes.map(c => c.date))
     toast.add({
       title: `Applied ${weeksApplied} week${weeksApplied === 1 ? '' : 's'} · ${updated} day${updated === 1 ? '' : 's'} updated`,
       duration: 8000,
@@ -330,8 +309,7 @@ async function apply(mode: 'replace' | 'fill') {
 
 async function undo(snapshot: ApplySnapshot) {
   try {
-    await planning.undoApply(snapshot)
-    emit('changed', snapshot.changes.map(c => c.date))
+    await training.undoApply(snapshot)
   }
   catch {
     toast.add({ title: "Couldn't undo", description: 'Your plan was left as applied.', color: 'error' })
@@ -377,7 +355,7 @@ const fmtDay = (date: string) =>
               :class="[
                 opt.monday === startMonday
                   ? 'border-orange-400 bg-orange-50 text-orange-800'
-                  : opt.monday > startMonday && opt.monday <= addDays(startMonday, (count - 1) * 7)
+                  : opt.monday > startMonday && opt.monday <= addDaysIso(startMonday, (count - 1) * 7)
                     ? 'border-orange-200 bg-orange-50 text-orange-800'
                     : 'border-transparent text-stone-700 hover:bg-stone-50',
               ]"
@@ -483,12 +461,12 @@ const fmtDay = (date: string) =>
       >
         <template v-if="phase === 'generating'">
           <UIcon name="i-heroicons-arrow-path" class="animate-spin w-4 h-4 text-orange-300" />
-          <span class="text-[13px] text-white">Building {{ planning.suggestWeeks.length }} week{{ planning.suggestWeeks.length > 1 ? 's' : '' }} from your training plan…</span>
+          <span class="text-[13px] text-white">Building {{ training.suggestWeeks.length }} week{{ training.suggestWeeks.length > 1 ? 's' : '' }} from your training plan…</span>
         </template>
 
         <template v-else-if="phase === 'error'">
           <span class="flex-1 text-[13px] text-white">Couldn't build a plan. Try again.</span>
-          <button type="button" class="cursor-pointer text-[13px] text-stone-300 hover:text-white" @click="planning.suggestPhase = 'idle'">Dismiss</button>
+          <button type="button" class="cursor-pointer text-[13px] text-stone-300 hover:text-white" @click="training.suggestPhase = 'idle'">Dismiss</button>
           <button type="button" class="cursor-pointer rounded-lg bg-orange-600 px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-orange-500" @click="runGenerate">Retry</button>
         </template>
 
