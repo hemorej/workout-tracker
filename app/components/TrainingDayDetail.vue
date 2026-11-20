@@ -36,7 +36,7 @@ const heading = computed(() => `${props.day.isToday ? 'Today, ' : ''}${formatDay
 
 // ── Plan editing ─────────────────────────────────────────────────────────────
 
-const buffer = reactive({ name: '', tss: '', minutes: '' })
+const buffer = reactive<{ name: string, tss: string | number, minutes: string | number }>({ name: '', tss: '', minutes: '' })
 watch(plan, (p) => {
   buffer.name = p?.name ?? ''
   buffer.tss = p?.tss != null ? String(p.tss) : ''
@@ -55,7 +55,8 @@ async function write(entry: PlanEntry) {
   }
 }
 
-const toNumber = (s: string) => (s.trim() === '' ? null : Number(s))
+/** Number inputs bound with v-model hand back a number (or '' when empty), not a string. */
+const toNumber = (v: string | number) => (String(v).trim() === '' ? null : Number(v))
 
 /** Saves the field buffers if they differ from the saved plan (blur / Enter). */
 async function saveFields() {

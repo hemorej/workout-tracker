@@ -249,6 +249,9 @@ async function swapPlans(from: string, to: string) {
 // ── Older weeks ──────────────────────────────────────────────────────────────
 
 const sentinel = ref<HTMLElement | null>(null)
+const searchBar = ref<HTMLElement | null>(null)
+/** Height of the pinned search block; the weekday header sticks just below it. */
+const searchBarH = ref(0)
 
 /** Prepends older weeks, then restores the scroll offset so the view doesn't jump. */
 async function loadOlder() {
@@ -259,6 +262,10 @@ async function loadOlder() {
 }
 
 onMounted(() => {
+  const resize = new ResizeObserver(([entry]) => { searchBarH.value = Math.round(entry?.borderBoxSize[0]?.blockSize ?? 0) })
+  if (searchBar.value) resize.observe(searchBar.value)
+  onBeforeUnmount(() => resize.disconnect())
+
   const observer = new IntersectionObserver(([entry]) => { if (entry?.isIntersecting) loadOlder() })
   onBeforeUnmount(() => observer.disconnect())
 
@@ -267,7 +274,7 @@ onMounted(() => {
   requestAnimationFrame(() => {
     const week = searching.value ? null : gridEl.value?.querySelector<HTMLElement>(`[data-week="${training.currentMonday}"]`)
     const sticky = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-sticky-h')) || 0
-    if (week) window.scrollTo({ top: week.getBoundingClientRect().top + window.scrollY - sticky - 44 })
+    if (week) window.scrollTo({ top: week.getBoundingClientRect().top + window.scrollY - sticky - searchBarH.value - 44 })
 
     watch(sentinel, (el, old) => {
       if (old) observer.unobserve(old)
@@ -338,13 +345,15 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5">
+  <div class="flex flex-col gap-3.5" :style="{ '--training-search-h': `${searchBarH}px` }">
     <TrainingMetricsStrip :summary="training.summary" :totals="strip" @open-history="emit('openHistory')" @open-events="emit('openEvents')">
       <template #actions>
         <PlanSuggest />
       </template>
     </TrainingMetricsStrip>
 
+    <!-- Stays pinned under the app header while the weeks scroll -->
+    <div ref="searchBar" class="sticky z-[6] -mx-1 flex flex-col gap-3.5 bg-[#fafaf9] px-1 py-1.5" style="top: var(--app-sticky-h, 0px)">
     <TrainingToolbar class="max-sm:hidden" @add-workout="emit('action', { type: 'add-workout', date: localDateIso() })" />
 
     <!-- Mobile: tap-to-search bar + add -->
@@ -387,6 +396,7 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
         {{ f.label }}<UIcon name="i-heroicons-x-mark" class="size-3.5" />
       </button>
       <button type="button" class="text-[12.5px] text-stone-500 underline hover:text-stone-800" @click="search.clearAll()">Clear all</button>
+    </div>
     </div>
 
     <div v-if="training.isLoading" class="flex justify-center py-16">
@@ -432,7 +442,7 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
         @dragend="endDrag"
       >
         <!-- Sticky day header; its first cell doubles as the older-weeks fallback button -->
-        <div class="sticky z-[5] grid grid-cols-7 gap-1 rounded-t-xl bg-white px-1 pb-2 pt-2.5 sm:grid-cols-[150px_repeat(7,minmax(0,1fr))] sm:gap-1.5 sm:px-2.5" style="top: var(--app-sticky-h, 0px)">
+        <div class="sticky z-[5] grid grid-cols-7 gap-1 rounded-t-xl bg-white px-1 pb-2 pt-2.5 sm:grid-cols-[150px_repeat(7,minmax(0,1fr))] sm:gap-1.5 sm:px-2.5" style="top: calc(var(--app-sticky-h, 0px) + var(--training-search-h, 0px))">
           <button
             v-if="!searching && training.hasOlder"
             type="button"
