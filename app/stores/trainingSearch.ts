@@ -34,6 +34,11 @@ function rangeLabel(name: string, min: number | null, max: number | null, fmt: (
   return min != null ? `${name} ${fmt(min)}+` : `${name} ≤ ${fmt(max!)}`
 }
 
+const rangeModel = (min: Ref<number | null>, max: Ref<number | null>) => computed<FilterRange>({
+  get: () => ({ min: min.value, max: max.value }),
+  set: (r) => { min.value = r.min; max.value = r.max },
+})
+
 const shortDate = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 
 export const useTrainingSearchStore = defineStore('trainingSearch', () => {
@@ -50,6 +55,15 @@ export const useTrainingSearchStore = defineStore('trainingSearch', () => {
   const dateFrom = ref('')
   const dateTo = ref('')
   const types = ref<string[]>([])
+
+  // Range / date filters as single writable values, for the chips and the mobile sheet.
+  const tss = rangeModel(tssMin, tssMax)
+  const duration = rangeModel(durMin, durMax)
+  const distance = rangeModel(distMin, distMax)
+  const dates = computed({
+    get: () => ({ from: dateFrom.value, to: dateTo.value }),
+    set: (r) => { dateFrom.value = r.from; dateTo.value = r.to },
+  })
 
   const results = ref<TrainingSearchResponse | null>(null)
   const isSearching = ref(false)
@@ -162,6 +176,7 @@ export const useTrainingSearchStore = defineStore('trainingSearch', () => {
 
   return {
     q, scope, view, io, tssMin, tssMax, durMin, durMax, distMin, distMax, dateFrom, dateTo, types,
+    tss, duration, distance, dates,
     results, isSearching, error, isActive, hasFilters, urlQuery, activeFilters,
     hydrate, clearFilter, clearAll, runSoon,
   }

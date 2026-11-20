@@ -4,6 +4,9 @@
  * trainingSearch store (which mirrors it to the URL); this only renders it.
  * Grid/List and the scope control show only while a search is in play.
  */
+import {
+  DISTANCE_PRESETS, DURATION_PRESETS, EMPTY_RANGE, IO_OPTIONS, TSS_PRESETS, dateRangeText, datePresets, formatKm, noRange, rangeText, toggleType, typeFilterOptions,
+} from '~/utils/trainingFilters'
 import { DISTANCE_MAX, DURATION_MAX, TSS_MAX, useTrainingSearchStore, type SearchIo, type SearchScope, type SearchView } from '~/stores/trainingSearch'
 
 const emit = defineEmits<{ addWorkout: [] }>()
@@ -24,62 +27,8 @@ const scopes: { value: SearchScope, label: string }[] = [
 
 // ── Chip models ──────────────────────────────────────────────────────────────
 
-interface Range { min: number | null, max: number | null }
-
-const tss = computed<Range>({
-  get: () => ({ min: search.tssMin, max: search.tssMax }),
-  set: (r) => { search.tssMin = r.min; search.tssMax = r.max },
-})
-const duration = computed<Range>({
-  get: () => ({ min: search.durMin, max: search.durMax }),
-  set: (r) => { search.durMin = r.min; search.durMax = r.max },
-})
-const distance = computed<Range>({
-  get: () => ({ min: search.distMin, max: search.distMax }),
-  set: (r) => { search.distMin = r.min; search.distMax = r.max },
-})
-const dates = computed({
-  get: () => ({ from: search.dateFrom, to: search.dateTo }),
-  set: (r) => { search.dateFrom = r.from; search.dateTo = r.to },
-})
-
-const EMPTY_RANGE: Range = { min: null, max: null }
-const noRange = (r: Range) => r.min == null && r.max == null
-
-function rangeText(r: Range, fmt: (n: number) => string) {
-  if (noRange(r)) return 'Any'
-  if (r.min != null && r.max != null) return `${fmt(r.min)} – ${fmt(r.max)}`
-  return r.min != null ? `${fmt(r.min)}+` : `≤ ${fmt(r.max!)}`
-}
-
-const IO_OPTIONS: { value: SearchIo, label: string }[] = [
-  { value: 'all', label: 'Indoor & outdoor' }, { value: 'indoor', label: 'Indoor' }, { value: 'outdoor', label: 'Outdoor' },
-]
-
-const TSS_PRESETS = [{ label: 'Easy < 40', min: null, max: 40 }, { label: '40 – 80', min: 40, max: 80 }, { label: 'Hard 80+', min: 80, max: null }]
-const DURATION_PRESETS = [{ label: 'Under 45m', min: null, max: 45 }, { label: '45m – 1h30', min: 45, max: 90 }, { label: '1h30+', min: 90, max: null }]
-const DISTANCE_PRESETS = [{ label: 'Under 30 km', min: null, max: 30 }, { label: '30 – 60 km', min: 30, max: 60 }, { label: '60 km+', min: 60, max: null }]
-
-const km = (n: number) => `${n} km`
-
-// Relative date ranges, resolved to concrete dates when applied (so the URL stays shareable).
-const DATE_PRESETS = computed(() => {
-  const today = localDateIso()
-  const monday = mondayOf(today)
-  return [
-    { label: 'Any time', from: '', to: '' },
-    { label: 'This week', from: monday, to: addDaysIso(monday, 6) },
-    { label: 'Last 2 weeks', from: addDaysIso(today, -13), to: today },
-    { label: 'Next 2 weeks', from: today, to: addDaysIso(today, 13) },
-  ]
-})
-
-const dateText = (d: { from: string, to: string }) =>
-  DATE_PRESETS.value.find(p => p.from === d.from && p.to === d.to)?.label
-  ?? (d.from && d.to ? `${d.from} – ${d.to}` : d.from ? `From ${d.from}` : `Until ${d.to}`)
-
-const typeOptions = PLAN_ZONES.filter(z => z.value !== 'rest')
-const toggleType = (list: string[], value: string) => (list.includes(value) ? list.filter(v => v !== value) : [...list, value])
+const { tss, duration, distance, dates } = storeToRefs(search)
+const DATE_PRESETS = computed(datePresets)
 </script>
 
 <template>
@@ -147,13 +96,13 @@ const toggleType = (list: string[], value: string) => (list.includes(value) ? li
         </template>
       </FilterChip>
 
-      <FilterChip v-model="distance" icon="i-heroicons-map-pin" title="Distance" :empty="EMPTY_RANGE" :applied="!noRange(distance)" :format="r => rangeText(r, km)">
+      <FilterChip v-model="distance" icon="i-heroicons-map-pin" title="Distance" :empty="EMPTY_RANGE" :applied="!noRange(distance)" :format="r => rangeText(r, formatKm)">
         <template #default="{ draft, set }">
-          <RangeSliders :model-value="draft" :max="DISTANCE_MAX" :step="5" :format="km" :presets="DISTANCE_PRESETS" @update:model-value="set" />
+          <RangeSliders :model-value="draft" :max="DISTANCE_MAX" :step="5" :format="formatKm" :presets="DISTANCE_PRESETS" @update:model-value="set" />
         </template>
       </FilterChip>
 
-      <FilterChip v-model="dates" icon="i-heroicons-calendar-days" title="Date range" :empty="{ from: '', to: '' }" :applied="!!(dates.from || dates.to)" :format="dateText">
+      <FilterChip v-model="dates" icon="i-heroicons-calendar-days" title="Date range" :empty="{ from: '', to: '' }" :applied="!!(dates.from || dates.to)" :format="dateRangeText">
         <template #default="{ draft, set }">
           <div class="flex flex-col gap-1.5">
             <button
@@ -184,7 +133,7 @@ const toggleType = (list: string[], value: string) => (list.includes(value) ? li
         <template #default="{ draft, set }">
           <div class="grid grid-cols-2 gap-1.5">
             <button
-              v-for="z in typeOptions"
+              v-for="z in typeFilterOptions"
               :key="z.value"
               type="button"
               class="flex h-[34px] items-center gap-2 rounded-lg border px-2 text-[13px] font-semibold"
