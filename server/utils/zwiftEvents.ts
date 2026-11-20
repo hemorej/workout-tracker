@@ -1,5 +1,5 @@
 /**
- * "Today's Zwift events" data for the Planning tab dialog: the Climb Portal
+ * "Today's Zwift events" data for the Training tab dialog: the Climb Portal
  * rotation and any nearby TT/crit races.
  *
  * Neither Zwift nor a third party publishes a documented, credential-free

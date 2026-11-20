@@ -106,7 +106,7 @@ export const CoachWorkoutSchema = z.object({
 
 export type CoachWorkout = z.infer<typeof CoachWorkoutSchema>
 
-/** Fuelling-only response — used by the Planning tab's "fuelling guidelines
+/** Fuelling-only response — used by the Training tab's "fuelling guidelines
  *  only" row action, which doesn't need (and shouldn't pay the token cost of)
  *  a full block structure. */
 export const FuellingGuideSchema = z.object({
@@ -389,7 +389,7 @@ export async function generateCoachWorkout(
 
 /**
  * Generate the fuelling guide only, skipping the block structure entirely —
- * used by the Planning tab's "fuelling guidelines only" row action. Same
+ * used by the Training tab's "fuelling guidelines only" row action. Same
  * request shape as `generateCoachWorkout`, just a smaller schema and token
  * budget.
  */
@@ -411,7 +411,7 @@ export async function generateCoachFuellingGuide(
   return withCoachRetries(() => streamStructuredRequest(apiKey, body, FuellingGuideSchema))
 }
 
-/** Valid `planned_workouts.type` values (also the Planning tab's zone badges). */
+/** Valid `planned_workouts.type` values (also the Training tab's zone badges). */
 export const PLAN_DAY_TYPES = ['zone2', 'zone4', 'zone5', 'zone6', 'rest', 'outdoor'] as const
 
 /**

@@ -1,5 +1,5 @@
 /**
- * Training-block position detection for the Planning tab's "Suggest plan".
+ * Training-block position detection for the Training tab's "Suggest plan".
  *
  * Given the weeks *before* the start week (nearest first), work out which slot
  * of the block the start week falls in (0 = Build 1 … blockLength-1 = Recovery):

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Workout-type glyph for the Planning tab. Zones 2/4/5/6 render their number,
+// Workout-type glyph for the Training tab. Zones 2/4/5/6 render their number,
 // rest a moon, outdoor a sun. `class` falls through for sizing/colour (use a
 // `text-*` size for the numerals — the SVG glyphs scale with w-/h-).
 defineProps<{ type: string | null }>()

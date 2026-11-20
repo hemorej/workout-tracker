@@ -14,7 +14,7 @@
  */
 
 import { useCoachStore } from '~/stores/coach'
-import { usePlanningStore } from '~/stores/planning'
+import { useTrainingStore } from '~/stores/training'
 import { useZwiftLibraryStore, type LibraryPendingOpen, type LibraryVersion } from '~/stores/zwiftLibrary'
 import type { ZwoBlock, ZwoMeta, ZwoZoneName } from '#shared/utils/zwo'
 
@@ -92,13 +92,11 @@ const selectedId = ref<number | null>(null)
 const blocks = ref<Block[]>([])
 
 // ── Current week summary (reminder of what's already planned) ──────────────
-// planning.plans is the 4-week grid starting at the current Monday (see
-// stores/planning.ts), so the first 7 entries are this week.
-const planning = usePlanningStore()
-onMounted(() => planning.fetchPlans())
+const training = useTrainingStore()
+onMounted(() => training.fetchInitial())
 
 const currentWeekPlan = computed(() =>
-  planning.plans.slice(0, 7).filter(day => day.plan && (day.plan.name || day.plan.tss || day.plan.durationMinutes)),
+  training.currentWeek.filter(day => day.plan && (day.plan.name || day.plan.tss || day.plan.durationMinutes)),
 )
 
 function weekSummaryDateLabel(dateStr: string) {
@@ -161,7 +159,7 @@ async function saveToPlannedWorkout() {
         // No `type` here: AI-generated/manually-built workouts mix zones, so this
         // save shouldn't classify one — and omitting the key (rather than sending
         // `type: null`) lets the PUT endpoint preserve whatever zone type is
-        // already set for this date (e.g. from the Planning tab).
+        // already set for this date (e.g. from the Training tab).
         tss: totalTSS.value,
         durationMinutes: Math.round(totalDuration.value / 60),
         notes: fuellingNotes.value || null,

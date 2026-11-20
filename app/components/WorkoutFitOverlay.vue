@@ -13,7 +13,7 @@
  * from GET /api/workouts/:id and merges them in before opening this.
  */
 
-import type { WorkoutDetail } from '~/stores/workouts'
+import type { WorkoutDetail } from '#shared/types/training'
 
 const props = defineProps<{
   /** The workout to show stats for. Overlay is visible whenever this is non-null. */

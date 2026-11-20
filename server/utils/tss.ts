@@ -216,48 +216,6 @@ export function computeMetricsSeries(
   return results
 }
 
-/**
- * Computes weekly summary stats for a given ISO week containing `referenceDate`.
- * The week runs Monday–Sunday.
- *
- * @param series        - Full metrics series from computeMetricsSeries()
- * @param referenceDate - Any date in the target week (defaults to today)
- */
-export function computeWeeklyStats(
-  series: DayMetrics[],
-  referenceDate: Date = new Date(),
-): { tssTotal: number; hoursTotal: number; kmTotal: number } {
-  // Find Monday of the reference week
-  const ref = new Date(
-    Date.UTC(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate()),
-  )
-  const dayOfWeek = ref.getUTCDay() // 0 = Sunday
-  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-  const monday = new Date(ref)
-  monday.setUTCDate(ref.getUTCDate() - daysFromMonday)
-
-  const mondayStr = monday.toISOString().slice(0, 10)
-  const sundayStr = new Date(monday.getTime() + 6 * 86400000).toISOString().slice(0, 10)
-
-  let tssTotal = 0
-  let minutesTotal = 0
-  let kmTotal = 0
-
-  for (const day of series) {
-    if (day.date >= mondayStr && day.date <= sundayStr) {
-      tssTotal += day.tss
-      minutesTotal += day.durationMinutes
-      kmTotal += day.distanceKm
-    }
-  }
-
-  return {
-    tssTotal: Math.round(tssTotal),
-    hoursTotal: round(minutesTotal / 60),
-    kmTotal: Math.round(kmTotal),
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

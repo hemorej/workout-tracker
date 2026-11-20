@@ -5,7 +5,7 @@
  *   - users                 — login credentials, CTL/ATL seeds, training plan, weight
  *   - workouts              — one logged workout per user per calendar day (+ FIT-derived JSON)
  *   - power_bests           — per-workout "best effort" durations (see server/utils/powerBests.ts)
- *   - planned_workouts      — one planned session per user per day (Planning tab)
+ *   - planned_workouts      — one planned session per user per day (Training tab)
  *   - power_curve           — a ride's full power curve (all 14 durations); source for History
  *   - wahoo_power_bests     — LEGACY power-curve bests auto-detected from Wahoo rides (read-only now)
  *   - wahoo_tokens          — the single rotating Wahoo OAuth refresh token
@@ -255,17 +255,6 @@ export const workouts = pgTable(
      * date-range filtering and the default newest-first ordering.
      */
     uniqueIndex('workouts_user_id_date_idx').on(table.userId, table.date),
-
-    /**
-     * Composite indexes backing the training-log filter bar's "minimum X"
-     * boundary filters (tss/distance/duration) and the ride-type chip, so
-     * those queries stay index-scans instead of full table scans as the
-     * log grows.
-     */
-    index('workouts_user_id_tss_idx').on(table.userId, table.tss),
-    index('workouts_user_id_distance_km_idx').on(table.userId, table.distanceKm),
-    index('workouts_user_id_duration_minutes_idx').on(table.userId, table.durationMinutes),
-    index('workouts_user_id_ride_type_idx').on(table.userId, table.rideType),
 
     /**
      * CHECK constraint: RPE must be between 1 and 10 when provided.

@@ -2,7 +2,7 @@
  * POST /api/coach/generate-plan
  *
  * Suggests 1–4 weeks of planned workouts (name/type/TSS/duration per day) for
- * the Planning tab's "Suggest plan" action. Nothing is written — the client
+ * the Training tab's "Suggest plan" action. Nothing is written — the client
  * previews the result as a draft and applies it via PUT /api/planned-workouts/batch.
  *
  * Body:
