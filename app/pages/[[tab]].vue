@@ -157,18 +157,49 @@ const showHistoryChart = ref(false)
 const historyLoading = ref(false)
 const historySeries = ref<{ date: string, ctl: number, tsb: number }[]>([])
 
-async function openHistoryChart() {
-  showHistoryChart.value = true
+const HISTORY_WINDOW_KEY = 'sprocket:historyWindowWeeks'
+const historyWindowOptions = [
+  { label: '6 months', value: 26 },
+  { label: '8 weeks', value: 8 },
+  { label: '6 weeks', value: 6 },
+  { label: '4 weeks', value: 4 },
+]
+const historyWeeks = ref(8)
+
+function loadHistoryWeeks() {
+  try {
+    const saved = Number(localStorage.getItem(HISTORY_WINDOW_KEY))
+    if (historyWindowOptions.some(o => o.value === saved)) historyWeeks.value = saved
+  }
+  catch { /* storage unavailable — keep default */ }
+}
+
+async function fetchHistorySeries() {
   historyLoading.value = true
+  const weeks = historyWeeks.value
   try {
     const data = await $fetch<{ series: { date: string, ctl: number, tsb: number }[] }>('/api/metrics/series', {
-      query: { weeks: 8 },
+      query: { weeks },
     })
-    historySeries.value = data.series
+    // Ignore a stale response if the user switched windows mid-flight
+    if (weeks === historyWeeks.value) historySeries.value = data.series
   }
   finally {
-    historyLoading.value = false
+    if (weeks === historyWeeks.value) historyLoading.value = false
   }
+}
+
+async function openHistoryChart() {
+  showHistoryChart.value = true
+  loadHistoryWeeks()
+  await fetchHistorySeries()
+}
+
+function onHistoryWeeksChange(weeks: number) {
+  historyWeeks.value = weeks
+  try { localStorage.setItem(HISTORY_WINDOW_KEY, String(weeks)) }
+  catch { /* ignore */ }
+  fetchHistorySeries()
 }
 
 function closeHistoryChart() {
@@ -928,8 +959,16 @@ onUnmounted(() => stickyBarObserver?.disconnect())
           <div class="flex items-start justify-between mb-6">
             <div>
               <h2 class="text-lg font-semibold text-stone-900">CTL / TSB history</h2>
-              <p class="text-sm text-stone-400 mt-0.5">Last 8 weeks.</p>
+              <p class="text-sm text-stone-400 mt-0.5">Time window</p>
             </div>
+            <select
+              :value="historyWeeks"
+              aria-label="Time window"
+              class="ml-auto text-sm text-stone-700 bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              @change="onHistoryWeeksChange(Number(($event.target as HTMLSelectElement).value))"
+            >
+              <option v-for="o in historyWindowOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </select>
             <button
               class="text-stone-300 hover:text-stone-600 transition-colors ml-4 mt-0.5"
               aria-label="Close"
