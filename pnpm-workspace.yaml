@@ -24,6 +24,7 @@ overrides:
   postcss: '>=8.5.23'
   glob@13: '^14.0.2'
   minimatch@10: '^11.0.1'
+  '@tiptap/y-tiptap': '>=3.1.0'
 
 # Build/dev-time only transitive deps of nuxt > nitropack (listhen dev server,
 # globby file matching); neither ships in .output. Remove once patched upstream.
@@ -32,3 +33,10 @@ auditConfig:
     - GHSA-86w9-cpqp-85rv # node-forge
     - GHSA-vfj7-8cjw-p6xm # braces
     - GHSA-fc5q-39xc-vjpf # picomatch ReDoS (extglobs) — no patched release exists yet (latest 4.0.7); only fed fixed glob patterns by build tooling, never user input. Drop once >=4.0.8 ships.
+
+# drizzle-kit 0.31 (latest stable) still depends on the deprecated
+# @esbuild-kit/* loaders (merged into tsx upstream). Silence the warning until
+# drizzle-kit 1.0 goes stable and drops them.
+allowedDeprecatedVersions:
+  '@esbuild-kit/core-utils': '3.3.2'
+  '@esbuild-kit/esm-loader': '2.6.5'
