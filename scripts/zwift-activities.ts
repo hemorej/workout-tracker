@@ -186,7 +186,15 @@ async function handleFile(name: string): Promise<void> {
 
   const buf = await readSettled(abs)
   if (!buf) {
-    log(`${name}: not readable/settled yet — will retry on the next scan`)
+    // Recent files are rechecked soon instead of waiting on the next fs event or
+    // the 10-min rescan: the final write of a ride may produce no further event.
+    if (withinBackfill(name)) {
+      log(`${name}: not readable/settled yet — rechecking in ${RECHECK_MS / 1000}s`)
+      scheduleCheck(name, RECHECK_MS)
+    }
+    else {
+      log(`${name}: not readable/settled yet — will retry on the next scan`)
+    }
     return
   }
   if (buf.length > MAX_BYTES) {
@@ -246,8 +254,12 @@ async function reconcile(reason: string): Promise<void> {
     log(`first run: marked ${baselined} older file(s) as seen, considering the last ${BACKFILL_DAYS} day(s)`)
   }
 
-  // Anything with no state entry: new, or a previous attempt failed transiently.
-  const pending = names.filter(n => !state.files[n])
+  // Anything with no state entry (new, or a previous attempt failed transiently),
+  // plus recent files last *rejected* mid-ride. Zwift rewrites the dated .fit while
+  // you ride, so a 422 on a partial file is expected; if the fs event for the final
+  // write is then lost/consumed during a deferral, only this rescan can pick the
+  // finished file up. handleFile skips it when the content hash is unchanged.
+  const pending = names.filter(n => !state.files[n] || (state.files[n].outcome === 'rejected' && withinBackfill(n)))
   if (pending.length === 0) {
     log('nothing new')
     return
