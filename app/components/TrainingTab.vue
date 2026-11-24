@@ -470,8 +470,9 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
             v-for="(name, i) in DAY_NAMES"
             :key="name"
             class="text-center text-[10.5px] font-semibold uppercase tracking-[.08em] sm:text-left sm:text-[11px]"
-            :class="i === todayColumn ? 'text-orange-700' : 'text-stone-500'"
+            :class="i === todayColumn ? 'font-bold text-orange-700' : 'text-stone-500'"
           >
+            <span v-if="i === todayColumn" class="mr-1.5 mb-px hidden size-1.5 rounded-full bg-orange-600 align-middle sm:inline-block" aria-hidden="true" />
             <span class="sm:hidden">{{ name[0] }}</span><span class="hidden sm:inline">{{ name }}</span>
           </span>
         </div>
@@ -492,6 +493,7 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
             :drag-date="dragDate"
             :suggest-label="suggestLabel(row.week.monday)"
             :generating="training.suggestPhase === 'generating'"
+            @action="onAction"
           />
           <div v-else class="mx-1 my-1 flex h-9 items-center gap-3 rounded-lg bg-stone-50 px-3 text-xs sm:mx-2.5">
             <span class="font-semibold uppercase tracking-[.08em] text-stone-500">{{ row.weeks === 1 ? formatWeekRange(row.monday) : plural(row.weeks, 'week') }}</span>
