@@ -11,8 +11,30 @@ allowBuilds:
 minimumReleaseAge: 4320
 # Exceptions for packages where we need to react fast (e.g. security
 # patches you've manually verified): add the package name here.
-# minimumReleaseAgeExclude:
-#   - some-package
+# Temporary: nuxt 4.7.0 security fix (GHSA-jxc9-w3j6-pwp2, GHSA-vrh2-cfcx-c3fg,
+# GHSA-h5xj-x893-p5f7) and its fresh deps. Remove once they are 3 days old.
+minimumReleaseAgeExclude:
+  - '@colordx/core'
+  - '@nuxt/cli'
+  - '@nuxt/kit'
+  - '@nuxt/nitro-server'
+  - '@nuxt/nitro-v3-server'
+  - '@nuxt/schema'
+  - '@nuxt/vite-builder'
+  - '@nuxt/vite-server'
+  - '@unhead/bundler'
+  - '@unhead/vue'
+  - '@vercel/nft'
+  - caniuse-lite
+  - devalue
+  - electron-to-chromium
+  - my-bad
+  - nitropack
+  - nuxt
+  - rollup-plugin-visualizer
+  - unhead
+  - unrouting
+  - vite-plugin-checker
 
 overrides:
   '@nuxt/schema': '^4.6.4'
