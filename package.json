@@ -35,7 +35,7 @@
         "drizzle-kit": "^0.31.11",
         "drizzle-orm": "0.45.4",
         "fit-file-parser": "^6.2.10",
-        "nuxt": "^4.6.4",
+        "nuxt": "^4.7.0",
         "nuxt-auth-utils": "^0.6.2",
         "pg": "8.23.1",
         "pinia": "^4.1.0",
