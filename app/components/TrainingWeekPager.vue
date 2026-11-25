@@ -2,7 +2,8 @@
 /**
  * The phone (< sm) Training view: one week at a time. A pager card (‹ › or
  * swipe) with a 7-day strip, the selected day's summary card, and the week's
- * other days as a list. The week and selection are owned by TrainingTab.
+ * other days as a list. Nothing is selected until a day is tapped, so the list
+ * starts with all seven. The week and selection are owned by TrainingTab.
  */
 import type { PlanEntry } from '#shared/types/training'
 
@@ -10,7 +11,7 @@ const props = defineProps<{
   weeks: TrainingWeek[]
   /** Monday of the week shown (v-model:monday). */
   monday: string
-  /** Selected date (v-model:selected); null or outside the week → default. */
+  /** Selected date (v-model:selected); null or outside the week → nothing selected. */
   selected: string | null
   draft?: Record<string, PlanEntry> | null
   /** TSB per date, draft-aware (falls back to each day's own metrics). */
@@ -40,12 +41,7 @@ const isPast = computed(() => !isCurrent.value && !!days.value[6]?.isPast)
 const totals = computed(() => weekTotals(days.value))
 const progress = computed(() => (totals.value.plannedTss ? Math.min(1, totals.value.doneTss / totals.value.plannedTss) : 0))
 
-/** Default selection: today in the current week, else the first non-rest day, else Monday. */
-const selectedDay = computed(() =>
-  days.value.find(d => d.date === props.selected)
-  ?? days.value.find(d => d.isToday)
-  ?? days.value.find(d => dayState(d) !== 'rest')
-  ?? days.value[0])
+const selectedDay = computed(() => days.value.find(d => d.date === props.selected))
 
 const otherDays = computed(() => days.value.filter(d => d.date !== selectedDay.value?.date))
 
@@ -150,7 +146,7 @@ const NAME_CLASS = {
 </script>
 
 <template>
-  <div v-if="week && selectedDay" class="flex flex-col gap-3">
+  <div v-if="week" class="flex flex-col gap-3">
     <span class="sr-only" aria-live="polite">{{ formatWeekRange(monday) }}</span>
 
     <!-- Week pager -->
@@ -201,7 +197,7 @@ const NAME_CLASS = {
           :key="day.date"
           :day="day"
           :weekday="i"
-          :selected="day.date === selectedDay.date"
+          :selected="day.date === selectedDay?.date"
           :current-week="isCurrent"
           @click="emit('update:selected', day.date)"
           @keydown.left.prevent="onArrow(day.date, -1)"
@@ -211,7 +207,7 @@ const NAME_CLASS = {
     </div>
 
     <!-- Selected day -->
-    <div ref="summary" style="scroll-margin-top: calc(var(--app-sticky-h, 0px) + var(--training-search-h, 0px))">
+    <div v-if="selectedDay" ref="summary" style="scroll-margin-top: calc(var(--app-sticky-h, 0px) + var(--training-search-h, 0px))">
       <TrainingDaySummary
         :key="selectedDay.date"
         :day="selectedDay"
@@ -223,9 +219,9 @@ const NAME_CLASS = {
       />
     </div>
 
-    <!-- Rest of the week -->
+    <!-- The week's unselected days -->
     <div class="flex flex-col gap-1.5">
-      <h3 class="px-1 pt-1.5 text-[11px] font-bold uppercase tracking-[.08em] text-stone-600">Rest of the week</h3>
+      <h3 class="px-1 pt-1.5 text-[11px] font-bold uppercase tracking-[.08em] text-stone-600">{{ selectedDay ? 'Rest of the week' : 'All days' }}</h3>
       <ul class="divide-y divide-stone-100 overflow-hidden rounded-xl border border-[#f0eeec] bg-white">
         <li v-for="day in otherDays" :key="day.date">
           <button
