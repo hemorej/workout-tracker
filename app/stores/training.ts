@@ -116,6 +116,8 @@ export const useTrainingStore = defineStore('training', () => {
         query: { from: addDaysIso(first.date, -OLDER_WEEKS * 7), to: addDaysIso(first.date, -1) },
       })
       days.value = [...data.days, ...days.value]
+      // Prepended weeks must not count as preview-appended ones when Discard trims.
+      if (previewBaseLength.value != null) previewBaseLength.value += data.days.length
       hasOlder.value = data.hasOlder
       return true
     }

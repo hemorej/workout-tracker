@@ -2,7 +2,7 @@
  * Training-tab helpers: workout-type (zone) config, day state, week grouping
  * and totals, CTL/TSB heat colours, and display formatting. Auto-imported.
  */
-import type { DayState, TrainingDay } from '#shared/types/training'
+import type { DayState, PlanEntry, TrainingDay } from '#shared/types/training'
 
 // ── Workout types (zones) ────────────────────────────────────────────────────
 
@@ -94,6 +94,38 @@ export function weekTotals(days: TrainingDay[]): WeekTotals {
   return t
 }
 
+/** Days as displayed: the Suggest-plan draft's plan stands in on editable days. Without a draft the same objects pass through. */
+export function withDraft(days: TrainingDay[], draft: Record<string, PlanEntry> | null | undefined) {
+  return draft ? days.map(d => ({ ...d, plan: (!isActualDay(d) && draft[d.date]) || d.plan })) : days
+}
+
+// ── Day display ──────────────────────────────────────────────────────────────
+
+export function dayName(day: TrainingDay) {
+  if (dayState(day) === 'rest') return 'Rest'
+  if (day.ride) return rideLabel(day.ride.name)
+  return day.plan?.name || zoneLabel(day.plan?.type)
+}
+
+export function dayNotes(day: TrainingDay) {
+  return day.ride ? day.ride.notes : day.plan?.notes
+}
+
+/** The ride fell short of the planned TSS by more than 10 %. */
+export function fellShort(day: TrainingDay) {
+  return !!day.ride && day.plan?.tss != null && day.ride.tss < day.plan.tss * 0.9
+}
+
+/** Spoken label of a day cell. `date` is the already formatted date. */
+export function dayAriaLabel(day: TrainingDay, date: string) {
+  const state = dayState(day)
+  const parts = [`${day.isToday ? 'Today, ' : ''}${date}: ${dayName(day)}`]
+  if (day.ride) parts.push(`${day.ride.tss} of ${day.plan?.tss ?? day.ride.tss} TSS`)
+  else if (state !== 'rest' && day.plan?.tss != null) parts.push(`${day.plan.tss} TSS`)
+  parts.push(state)
+  return parts.join(', ')
+}
+
 // ── Formatting ───────────────────────────────────────────────────────────────
 
 export function formatMinutes(minutes: number) {
@@ -123,6 +155,11 @@ export function formatWeekRange(monday: string) {
 /** "Thu 19 Nov" */
 export function formatDayLong(date: string) {
   return utcFormat(date, { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
+}
+
+/** "Wednesday 25 November" */
+export function formatDayFull(date: string) {
+  return utcFormat(date, { weekday: 'long', day: 'numeric', month: 'long' }).replace(',', '')
 }
 
 export function formatSigned(n: number) {
