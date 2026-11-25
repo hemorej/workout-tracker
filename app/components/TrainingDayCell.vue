@@ -5,8 +5,8 @@
  * drag and keyboard handling through attributes/events on this root <button>
  * (found by `data-date`).
  *
- * Desktop: 92px card with name + TSS/duration/TSB. Mobile (< sm): a 64px
- * compact cell with the date, badge and TSS only; details live in the sheet.
+ * A 92px card with name + TSS/duration/TSB. Desktop/tablet only — phones show
+ * TrainingWeekPager instead.
  */
 import type { TrainingDay } from '#shared/types/training'
 
@@ -39,12 +39,8 @@ const dateLabel = computed(() =>
     : String(dayNumber.value),
 )
 
-const name = computed(() => {
-  if (state.value === 'rest') return 'Rest'
-  if (props.day.ride) return rideLabel(props.day.ride.name)
-  return props.day.plan?.name || zoneLabel(props.day.plan?.type)
-})
-const notes = computed(() => props.day.ride ? props.day.ride.notes : props.day.plan?.notes)
+const name = computed(() => dayName(props.day))
+const notes = computed(() => dayNotes(props.day))
 const snippet = computed(() => notesSnippet(notes.value, props.query ?? ''))
 
 const plannedTss = computed(() => props.day.plan?.tss ?? null)
@@ -57,7 +53,7 @@ const tssText = computed(() => {
   }
   return plannedTss.value != null ? String(plannedTss.value) : null
 })
-const fellShort = computed(() => state.value === 'ridden' && plannedTss.value != null && rideTss.value! < plannedTss.value * 0.9)
+const short = computed(() => fellShort(props.day))
 /** Ridden: "1h 28m". Planned: plain minutes ("60m") — it has to share the line with TSS and the TSB chip. */
 const minutesText = computed(() => {
   if (state.value === 'ridden') return formatMinutes(props.day.ride!.durationMinutes)
@@ -76,13 +72,7 @@ const todayName = computed(() => {
   return name.value
 })
 
-const ariaLabel = computed(() => {
-  const parts = [`${today.value ? 'Today, ' : ''}${formatDayLong(props.day.date)}: ${name.value}`]
-  if (state.value === 'ridden') parts.push(`${rideTss.value} of ${plannedTss.value ?? rideTss.value} TSS`)
-  else if (tssText.value) parts.push(`${tssText.value} TSS`)
-  parts.push(state.value)
-  return parts.join(', ')
-})
+const ariaLabel = computed(() => dayAriaLabel(props.day, formatDayLong(props.day.date)))
 </script>
 
 <template>
@@ -93,12 +83,12 @@ const ariaLabel = computed(() => {
     :aria-label="ariaLabel"
     :aria-current="today ? 'date' : undefined"
     :aria-expanded="open"
-    class="cell relative flex h-16 w-full flex-col overflow-hidden text-left outline-none transition-[box-shadow,border-color,opacity] sm:gap-1"
+    class="cell relative flex w-full flex-col overflow-hidden border text-left outline-none transition-[box-shadow,border-color,opacity]"
     :class="[
-      currentWeek ? 'sm:h-[116px]' : 'sm:h-[92px]',
+      currentWeek ? 'h-[116px]' : 'h-[92px]',
       today
-        ? 'z-[1] rounded-[9px] border border-transparent bg-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400 sm:gap-[5px] sm:rounded-[11px] sm:px-2.5 sm:py-[9px] sm:shadow-[0_10px_24px_rgba(28,25,23,.28)]'
-        : 'rounded-[9px] border focus-visible:border-orange-300 focus-visible:shadow-[0_0_0_3px_#ffedd5] sm:py-[7px] sm:pr-2 sm:pl-2.5',
+        ? 'z-[1] gap-[5px] rounded-[11px] border-transparent bg-stone-900 px-2.5 py-[9px] shadow-[0_10px_24px_rgba(28,25,23,.28)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400'
+        : 'gap-1 rounded-[9px] py-[7px] pl-2.5 pr-2 focus-visible:border-orange-300 focus-visible:shadow-[0_0_0_3px_#ffedd5]',
       !today && state === 'ridden' && 'border-[#f0eeec] bg-white shadow-[0_1px_2px_rgba(28,25,23,.04)]',
       !today && state === 'planned' && (currentWeek ? 'border-[1.5px] border-dashed border-stone-300 bg-white' : 'border-[1.5px] border-dashed border-stone-200 bg-[#fcfcfb]'),
       !today && state === 'missed' && 'border-[1.5px] border-dashed border-rose-200',
@@ -110,43 +100,25 @@ const ariaLabel = computed(() => {
       dragging && 'opacity-40',
     ]"
   >
-    <!-- Ridden accent: left edge on desktop, bottom bar on mobile -->
-    <span v-if="state === 'ridden'" class="absolute bottom-0 left-2 right-2 h-[3px] rounded-t bg-orange-600 sm:bottom-2 sm:left-0 sm:right-auto sm:top-2 sm:h-auto sm:w-[3px] sm:rounded-l-none sm:rounded-r" />
+    <!-- Ridden accent (the Today card draws its own) -->
+    <span v-if="state === 'ridden' && !today" class="absolute bottom-2 left-0 top-2 w-[3px] rounded-r bg-orange-600" />
 
     <!-- Top line: date · markers · zone badge -->
-    <span class="flex items-center gap-1 px-1.5 pt-1 sm:p-0" :class="today && 'sm:hidden'">
-      <span
-        v-if="today"
-        class="text-[11px] font-bold text-white tabular"
-      >{{ dayNumber }}</span>
-      <span v-else class="text-[11px] font-semibold tabular text-stone-600 sm:text-xs"><span class="sm:hidden">{{ dayNumber }}</span><span class="hidden sm:inline">{{ dateLabel }}</span></span>
+    <span v-if="!today" class="flex items-center gap-1">
+      <span class="text-xs font-semibold tabular text-stone-600">{{ dateLabel }}</span>
       <span class="flex-1" />
-      <UIcon v-if="notes" name="i-heroicons-bars-3-bottom-left" class="hidden size-3 text-amber-600 sm:block" />
-      <span v-if="hasPowerBest" class="hidden text-[11px] font-bold text-[#3F6212] sm:inline" aria-hidden="true">★</span>
+      <UIcon v-if="notes" name="i-heroicons-bars-3-bottom-left" class="size-3 text-amber-600" />
+      <span v-if="hasPowerBest" class="text-[11px] font-bold text-[#3F6212]" aria-hidden="true">★</span>
       <span
         v-if="state !== 'rest'"
-        class="hidden h-[17px] w-[22px] shrink-0 items-center justify-center rounded border text-[10.5px] font-bold sm:inline-flex"
+        class="inline-flex h-[17px] w-[22px] shrink-0 items-center justify-center rounded border text-[10.5px] font-bold"
         :class="[zoneClass(zone), state === 'missed' && 'opacity-50']"
       ><ZoneIcon :type="zone" class="size-3 text-[10.5px]" /></span>
     </span>
 
-    <!-- Mobile body: badge + TSS (no names) -->
-    <span class="flex flex-1 flex-col items-center justify-center gap-0.5 sm:hidden">
-      <template v-if="state === 'rest'">
-        <UIcon name="i-heroicons-moon" class="size-3.5 text-stone-300" />
-      </template>
-      <template v-else>
-        <span class="inline-flex h-[17px] w-6 items-center justify-center rounded border text-[10.5px] font-bold" :class="[zoneClass(zone), state === 'missed' && 'opacity-50']">
-          <ZoneIcon :type="zone" class="size-3 text-[10.5px]" />
-        </span>
-        <span v-if="tssText" class="text-[11px] font-semibold tabular" :class="[today ? 'text-stone-200' : 'text-stone-700', state === 'missed' && 'text-stone-400 line-through']">{{ rideTss ?? plannedTss }}</span>
-      </template>
-    </span>
-    <span v-if="notes" class="absolute right-1 top-1 size-[5px] rounded-full bg-amber-600 sm:hidden" />
-
-    <!-- Desktop: Today card (dark) -->
+    <!-- Today card (dark) -->
     <template v-if="today">
-      <span class="hidden items-center gap-1 sm:flex">
+      <span class="flex items-center gap-1">
         <span class="text-[11px] font-extrabold uppercase tracking-[.1em] text-orange-400">Today</span>
         <span class="flex-1" />
         <UIcon v-if="notes" name="i-heroicons-bars-3-bottom-left" class="size-3 text-amber-600" />
@@ -158,11 +130,11 @@ const ariaLabel = computed(() => {
         ><ZoneIcon :type="zone" class="size-3 text-[10.5px]" /></span>
       </span>
       <span
-        class="hidden text-[14px] leading-[1.25] sm:line-clamp-2"
+        class="line-clamp-2 text-[14px] leading-[1.25]"
         :class="state === 'rest' ? (day.plan ? 'italic text-stone-300' : 'text-stone-400') : 'font-bold text-white'"
       >{{ todayName }}</span>
-      <span v-if="state !== 'rest'" class="hidden items-center gap-1.5 whitespace-nowrap sm:flex">
-        <span v-if="tssText" class="text-[12px] font-semibold tabular" :class="fellShort ? 'text-amber-300' : 'text-stone-200'">{{ tssText }}</span>
+      <span v-if="state !== 'rest'" class="flex items-center gap-1.5 whitespace-nowrap">
+        <span v-if="tssText" class="text-[12px] font-semibold tabular" :class="short ? 'text-amber-300' : 'text-stone-200'">{{ tssText }}</span>
         <span v-if="minutesText" class="text-[11px] text-stone-400 tabular">{{ minutesText }}</span>
         <span class="flex-1" />
         <span
@@ -171,10 +143,10 @@ const ariaLabel = computed(() => {
           :class="tsb > 0 ? 'bg-[rgba(74,222,128,.16)] text-green-300' : tsb < 0 ? 'bg-[rgba(248,113,113,.18)] text-red-300' : 'bg-white/10 text-stone-300'"
         >{{ tsbText }}</span>
       </span>
-      <span v-if="state === 'ridden'" class="absolute bottom-2 left-0 top-2 hidden w-[3px] rounded-r bg-orange-500 sm:block" />
-      <span v-if="state === 'ridden' && day.ride?.rpe != null" class="mt-auto hidden text-[11px] text-stone-400 sm:block">RPE {{ day.ride.rpe }}</span>
+      <span v-if="state === 'ridden'" class="block absolute bottom-2 left-0 top-2 w-[3px] rounded-r bg-orange-500" />
+      <span v-if="state === 'ridden' && day.ride?.rpe != null" class="block mt-auto text-[11px] text-stone-400">RPE {{ day.ride.rpe }}</span>
       <!-- Actions are spans, not nested <button>s; click.stop keeps them from pinning the hover card -->
-      <span v-if="state === 'planned'" class="mt-auto hidden gap-1 sm:flex">
+      <span v-if="state === 'planned'" class="flex mt-auto gap-1">
         <span
           role="button"
           tabindex="0"
@@ -194,14 +166,14 @@ const ariaLabel = computed(() => {
       <!-- Plan a session: click bubbles so the hover card pins (where planning lives) -->
       <span
         v-else-if="state === 'rest' && !day.plan"
-        class="mt-auto hidden h-[26px] items-center justify-center rounded-[7px] border border-stone-700 text-[12px] font-semibold text-stone-200 sm:flex"
+        class="flex mt-auto h-[26px] items-center justify-center rounded-[7px] border border-stone-700 text-[12px] font-semibold text-stone-200"
       >Plan a session</span>
     </template>
 
-    <!-- Desktop: name -->
+    <!-- Name -->
     <span
       v-if="!today"
-      class="hidden text-[12.5px] leading-[1.3] sm:block"
+      class="text-[12.5px] leading-[1.3]"
       :class="[
         snippet ? 'line-clamp-1' : 'line-clamp-2',
         state === 'ridden' && 'font-semibold text-stone-800',
@@ -210,15 +182,15 @@ const ariaLabel = computed(() => {
         state === 'rest' && 'italic text-stone-400',
       ]"
     ><HighlightedText :text="name" :query="query" /></span>
-    <span v-if="snippet && !today" class="hidden line-clamp-1 text-[11.5px] leading-[1.3] text-stone-600 sm:block"><HighlightedText :text="snippet" :query="query" /></span>
+    <span v-if="snippet && !today" class="line-clamp-1 text-[11.5px] leading-[1.3] text-stone-600"><HighlightedText :text="snippet" :query="query" /></span>
 
-    <!-- Desktop: bottom line -->
-    <span v-if="state !== 'rest' && !today" class="mt-auto hidden items-center gap-1 whitespace-nowrap sm:flex">
+    <!-- Bottom line -->
+    <span v-if="state !== 'rest' && !today" class="flex mt-auto items-center gap-1 whitespace-nowrap">
       <span
         v-if="tssText"
         class="text-xs font-semibold tabular"
         :class="[
-          state === 'missed' ? 'text-stone-400 line-through' : fellShort ? 'text-amber-700' : state === 'planned' ? 'text-stone-500' : 'text-stone-700',
+          state === 'missed' ? 'text-stone-400 line-through' : short ? 'text-amber-700' : state === 'planned' ? 'text-stone-500' : 'text-stone-700',
         ]"
       >{{ tssText }}<template v-if="state === 'planned' && showTssUnit"> TSS</template></span>
       <span v-if="state === 'missed'" class="text-[10.5px] font-bold uppercase tracking-[.06em] text-rose-600">Missed</span>

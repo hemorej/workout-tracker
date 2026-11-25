@@ -3,12 +3,13 @@
  * Training tab — the merged Training log + Planning view. Every calendar day is
  * one cell in a Monday→Sunday week row: the plan until it's ridden, then the log
  * entry. Details and actions live in one day card (hover card on desktop,
- * bottom sheet below `sm`) that TrainingDayDetail renders.
+ * bottom sheet below `sm`) that TrainingDayDetail renders. Below `sm` the grid
+ * is replaced by TrainingWeekPager, one week at a time.
  *
  * Owns: the metrics strip, search toolbar + results (grid / list), the week
- * grid with older-weeks loading, the hover/pin card, drag-to-swap and the note
- * dialog. Flows that live on the page (add/edit ride, FIT upload, picker, coach
- * builder) are emitted as `DayAction`s.
+ * grid with older-weeks loading, the phone pager's state, the hover/pin card,
+ * drag-to-swap and the note dialog. Flows that live on the page (add/edit ride,
+ * FIT upload, picker, coach builder) are emitted as `DayAction`s.
  */
 import type { TrainingDay } from '#shared/types/training'
 import { useTrainingStore } from '~/stores/training'
@@ -75,6 +76,61 @@ const previewing = computed(() => training.suggestPhase === 'generating' || trai
 const draftProjection = computed(() => (training.draft ? training.project(training.draft) : null))
 const metricsFor = (day: TrainingDay) => draftProjection.value?.[day.date] ?? day.metrics
 const suggestLabel = (monday: string) => training.suggestWeeks.find(w => w.monday === monday)?.label ?? null
+
+// ── Phone week pager ─────────────────────────────────────────────────────────
+
+const pagerMonday = ref(training.currentMonday)
+const selectedDate = ref<string | null>(null) // null → the pager picks a default
+
+// Keep the pager on today's week after the initial fetch / day rollover.
+watch(() => training.currentMonday, (m, old) => { if (pagerMonday.value === old) pagerMonday.value = m })
+// Discard / Undo can remove appended weeks from under the pager.
+watch(() => training.days.at(-1)?.date, (last) => {
+  if (last && pagerMonday.value > mondayOf(last)) pagerMonday.value = mondayOf(last)
+})
+watch(() => training.suggestPhase, (phase) => {
+  const first = training.suggestWeeks[0]
+  if (phase !== 'preview' || !first) return
+  pagerMonday.value = first.monday
+  selectedDate.value = null
+})
+
+async function pagerOlder() {
+  const from = pagerMonday.value
+  try {
+    if (await training.loadOlder() && pagerMonday.value === from) pagerMonday.value = addDaysIso(from, -7)
+  }
+  catch {
+    toast.add({ title: 'Could not load older weeks', color: 'error' })
+  }
+}
+
+function pagerNewer() {
+  const next = addDaysIso(pagerMonday.value, 7)
+  training.extendTo(addDaysIso(next, 6)) // appends a blank week if needed (client-side, like Add week)
+  pagerMonday.value = next
+}
+
+/** Points the pager at `date`, loading older weeks first when a search result predates them. */
+async function showInPager(date: string) {
+  try {
+    while (training.days[0] && training.days[0].date > date) {
+      if (!(await training.loadOlder())) return
+    }
+  }
+  catch {
+    toast.add({ title: 'Could not load older weeks', color: 'error' })
+    return
+  }
+  training.extendTo(date)
+  selectedDate.value = date
+  pagerMonday.value = mondayOf(date)
+}
+
+function openSheet(date: string) {
+  openDate.value = date
+  pinned.value = true
+}
 
 // Leaving the tab with an unapplied preview discards it — nothing was saved.
 onBeforeUnmount(() => training.discardDraft())
@@ -272,13 +328,13 @@ onMounted(() => {
   if (searchBar.value) resize.observe(searchBar.value)
   onBeforeUnmount(() => resize.disconnect())
 
-  const observer = new IntersectionObserver(([entry]) => { if (entry?.isIntersecting) loadOlder() })
+  const observer = new IntersectionObserver(([entry]) => { if (entry?.isIntersecting && !isMobile.value) loadOlder() })
   onBeforeUnmount(() => observer.disconnect())
 
   // Current week just under the sticky header (the page publishes its height after children mount).
   // Older weeks are only observed afterwards, so the initial position doesn't trigger a load.
   requestAnimationFrame(() => {
-    const week = searching.value ? null : gridEl.value?.querySelector<HTMLElement>(`[data-week="${training.currentMonday}"]`)
+    const week = searching.value || isMobile.value ? null : gridEl.value?.querySelector<HTMLElement>(`[data-week="${training.currentMonday}"]`)
     const sticky = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-sticky-h')) || 0
     if (week) window.scrollTo({ top: week.getBoundingClientRect().top + window.scrollY - sticky - searchBarH.value - 44 })
 
@@ -442,7 +498,7 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
       <div
         v-else
         ref="gridEl"
-        class="rounded-xl border border-[#f0eeec] bg-white"
+        class="rounded-xl border border-[#f0eeec] bg-white max-sm:hidden"
         :class="previewing && 'pointer-events-none select-none'"
         @pointerover="onPointerOver"
         @pointerout="onPointerOut"
@@ -455,25 +511,25 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
         @dragend="endDrag"
       >
         <!-- Sticky day header; its first cell doubles as the older-weeks fallback button -->
-        <div class="sticky z-[5] grid grid-cols-7 gap-1 rounded-t-xl bg-white px-1 pb-2 pt-2.5 sm:grid-cols-[150px_repeat(7,minmax(0,1fr))] sm:gap-1.5 sm:px-2.5" style="top: calc(var(--app-sticky-h, 0px) + var(--training-search-h, 0px))">
+        <div class="sticky z-[5] grid grid-cols-[150px_repeat(7,minmax(0,1fr))] gap-1.5 rounded-t-xl bg-white px-2.5 pb-2 pt-2.5" style="top: calc(var(--app-sticky-h, 0px) + var(--training-search-h, 0px))">
           <button
             v-if="!searching && training.hasOlder"
             type="button"
-            class="col-span-7 pb-1 pl-1.5 text-left text-xs font-medium text-stone-500 hover:text-stone-800 disabled:opacity-60 sm:col-span-1 sm:pb-0"
+            class="pl-1.5 text-left text-xs font-medium text-stone-500 hover:text-stone-800 disabled:opacity-60"
             :disabled="training.isLoadingOlder"
             @click.stop="loadOlder"
           >
             ↑ Older weeks
           </button>
-          <span v-else class="hidden sm:block" />
+          <span v-else />
           <span
             v-for="(name, i) in DAY_NAMES"
             :key="name"
-            class="text-center text-[10.5px] font-semibold uppercase tracking-[.08em] sm:text-left sm:text-[11px]"
+            class="text-left text-[11px] font-semibold uppercase tracking-[.08em]"
             :class="i === todayColumn ? 'font-bold text-orange-700' : 'text-stone-500'"
           >
-            <span v-if="i === todayColumn" class="mr-1.5 mb-px hidden size-1.5 rounded-full bg-orange-600 align-middle sm:inline-block" aria-hidden="true" />
-            <span class="sm:hidden">{{ name[0] }}</span><span class="hidden sm:inline">{{ name }}</span>
+            <span v-if="i === todayColumn" class="mb-px mr-1.5 inline-block size-1.5 rounded-full bg-orange-600 align-middle" aria-hidden="true" />
+            {{ name }}
           </span>
         </div>
 
@@ -495,14 +551,34 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
             :generating="training.suggestPhase === 'generating'"
             @action="onAction"
           />
-          <div v-else class="mx-1 my-1 flex h-9 items-center gap-3 rounded-lg bg-stone-50 px-3 text-xs sm:mx-2.5">
+          <div v-else class="mx-2.5 my-1 flex h-9 items-center gap-3 rounded-lg bg-stone-50 px-3 text-xs">
             <span class="font-semibold uppercase tracking-[.08em] text-stone-500">{{ row.weeks === 1 ? formatWeekRange(row.monday) : plural(row.weeks, 'week') }}</span>
             <span class="text-stone-400">No matches</span>
           </div>
         </template>
       </div>
 
-      <div v-if="!searching && !training.isLoading && training.days.length" class="flex justify-center">
+      <!-- Phone: week pager -->
+      <TrainingWeekPager
+        v-if="!searching"
+        v-model:monday="pagerMonday"
+        v-model:selected="selectedDate"
+        class="sm:hidden"
+        :weeks="weeks"
+        :draft="training.draft"
+        :tsb-by-date="draftProjection"
+        :suggest-label="suggestLabel"
+        :has-older="training.hasOlder"
+        :loading-older="training.isLoadingOlder"
+        :fuelling-loading-date="fuellingDate"
+        :readonly="previewing"
+        @older="pagerOlder"
+        @newer="pagerNewer"
+        @details="date => { selectedDate = date; openSheet(date) }"
+        @action="onAction"
+      />
+
+      <div v-if="!searching && !training.isLoading && training.days.length" class="flex justify-center max-sm:hidden">
         <button
           type="button"
           class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-600 transition-colors hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600"
@@ -544,7 +620,7 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
     <TrainingSearchOverlay
       v-if="searchOverlay"
       :days="listDays"
-      @select="d => { openDate = d; pinned = true }"
+      @select="d => { openSheet(d); showInPager(d) }"
       @close="searchOverlay = false"
     />
 
