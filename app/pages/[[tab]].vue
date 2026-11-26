@@ -651,14 +651,26 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydownTabShortcut))
 // Exposes the pinned header+tab-nav bar's height as a CSS var so other sticky
 // elements further down the page (e.g. the Training grid's day header) can offset below it.
 
+/** Phones: how many px the header shrinks when collapsed (the tab bar tucks away entirely). */
+const HEADER_SHRINK = 8
+
 const stickyBar = ref<HTMLElement | null>(null)
+const tabNav = ref<HTMLElement | null>(null)
 let stickyBarObserver: ResizeObserver | undefined
 
+// Training tab on phones: the bars above the week row collapse while scrolling
+// down and expand again on the way back up (see useScrollCollapse). `--collapse`
+// (0..1) drives the transforms below and the sticky offsets in TrainingTab.
+const { collapse } = useScrollCollapse(() => activeTab.value === 'training')
+
 function updateStickyBarHeight() {
-  if (stickyBar.value) {
-    document.documentElement.style.setProperty('--app-sticky-h', `${stickyBar.value.offsetHeight}px`)
-  }
+  if (!stickyBar.value) return
+  // The bar keeps its layout height while collapsing (it slides via transforms),
+  // so publish the height that is actually visible for the bars pinned below it.
+  const hidden = collapse.value * ((tabNav.value?.offsetHeight ?? 0) + HEADER_SHRINK)
+  document.documentElement.style.setProperty('--app-sticky-h', `${stickyBar.value.offsetHeight - hidden}px`)
 }
+watch(collapse, updateStickyBarHeight)
 
 onMounted(() => {
   updateStickyBarHeight()
@@ -690,11 +702,25 @@ onUnmounted(() => stickyBarObserver?.disconnect())
     </div>
 
     <!-- ── Header + tab nav — pinned together to the top on scroll ──── -->
-    <div ref="stickyBar" class="sticky top-0 z-10">
+    <!-- Phones, Training tab: while scrolling down the wrapper slides up by
+         HEADER_SHRINK and the tab nav tucks under the header (`--collapse`, 0..1).
+         The wrapper only passes clicks through its transparent gap. -->
+    <div
+      ref="stickyBar"
+      class="sticky top-0 z-10 max-sm:pointer-events-none"
+      :style="{ top: `calc(var(--collapse, 0) * -${HEADER_SHRINK}px)` }"
+    >
       <!-- Header — minimal, borderless top bar -->
-      <header class="bg-white border-b border-stone-100">
-        <div class="mx-auto px-6 py-4 flex items-center justify-between" :class="contentWidth">
-          <span class="flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-stone-900">
+      <header class="relative z-10 bg-white border-b border-stone-100 max-sm:pointer-events-auto">
+        <div
+          class="mx-auto px-6 py-4 flex items-center justify-between"
+          :class="contentWidth"
+          :style="{ transform: `translateY(calc(var(--collapse, 0) * ${HEADER_SHRINK / 2}px))` }"
+        >
+          <span
+            class="flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-stone-900"
+            style="transform: scale(calc(1 - var(--collapse, 0) * 0.12)); transform-origin: left center"
+          >
             <BikeLogo :size="26" class="shrink-0 text-orange-600" />
             Sprocket
           </span>
@@ -707,6 +733,7 @@ onUnmounted(() => stickyBarObserver?.disconnect())
             </button>
             <button
               class="text-sm text-stone-400 hover:text-stone-700 transition-colors"
+              style="transform: scale(calc(1 - var(--collapse, 0) * 0.1)); transform-origin: right center"
               @click="auth.logout"
             >
               Sign out
@@ -716,7 +743,11 @@ onUnmounted(() => stickyBarObserver?.disconnect())
       </header>
 
       <!-- Tab navigation — full-width justified bar -->
-      <nav class="grid bg-white border-b border-stone-100 max-lg:grid-cols-2 lg:grid-cols-3">
+      <nav
+        ref="tabNav"
+        class="grid bg-white border-b border-stone-100 max-lg:grid-cols-2 lg:grid-cols-3 max-sm:pointer-events-auto"
+        style="transform: translateY(calc(var(--collapse, 0) * -100%)); opacity: calc(1 - var(--collapse, 0) * 1.5)"
+      >
         <button
           v-for="(tab, i) in tabs"
           :key="tab.id"

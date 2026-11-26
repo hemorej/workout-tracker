@@ -315,6 +315,12 @@ const searchBar = ref<HTMLElement | null>(null)
 /** Height of the pinned search block; the weekday header sticks just below it. */
 const searchBarH = ref(0)
 
+// Phones: scrolling down (useScrollCollapse, 0..1) swaps the pinned metrics + search block for a slim
+// one-line metrics bar; scrolling up swaps it back. Past this point the block is hidden (it keeps its
+// layout height, so nothing shifts).
+const collapse = useScrollCollapseValue()
+const chromeCollapsed = computed(() => collapse.value >= 0.35)
+
 /** Prepends older weeks, then restores the scroll offset so the view doesn't jump. */
 async function loadOlder() {
   const before = document.documentElement.scrollHeight
@@ -414,10 +420,33 @@ const isEmpty = computed(() => !training.isLoading && !training.error && trainin
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5" :style="{ '--training-search-h': `${searchBarH}px` }">
+  <!-- `--training-search-h` is what the pinned block occupies below the app header: its full height, or the slim bar (~40px) once collapsed. -->
+  <div
+    class="flex flex-col gap-3.5"
+    :style="{ '--training-search-h': `calc(${searchBarH}px * (1 - var(--collapse, 0)) + 40px * var(--collapse, 0))` }"
+  >
 
-    <!-- Metrics strip + search stay pinned under the app header while the weeks scroll -->
-    <div ref="searchBar" class="sticky z-[6] -mx-1 flex flex-col gap-3.5 bg-[#fafaf9] px-1 py-1.5" style="top: var(--app-sticky-h, 0px)">
+    <!-- Phones: slim stand-in for the metrics card, fading in as the block below fades out.
+         A zero-height sticky wrapper, so it adds nothing to the layout (-mb cancels the flex gap). -->
+    <div class="sticky z-[7] -mb-3.5 h-0 sm:hidden" style="top: calc(var(--app-sticky-h, 0px) + 6px)">
+      <TrainingMetricsCompact
+        class="absolute inset-x-0 top-0"
+        :class="!chromeCollapsed && 'invisible'"
+        style="opacity: calc((var(--collapse, 0) - 0.3) * 3)"
+        :summary="training.summary"
+        :totals="strip"
+        @open-history="emit('openHistory')"
+      />
+    </div>
+
+    <!-- Metrics strip + search stay pinned under the app header while the weeks scroll.
+         Phones: fades out (and is hidden) while collapsed, see above. -->
+    <div
+      ref="searchBar"
+      class="sticky z-[6] -mx-1 flex flex-col gap-3.5 bg-[#fafaf9] px-1 py-1.5"
+      :class="chromeCollapsed && 'invisible'"
+      style="top: var(--app-sticky-h, 0px); opacity: calc(1 - var(--collapse, 0) * 3)"
+    >
     <TrainingMetricsStrip :summary="training.summary" :totals="strip" @open-history="emit('openHistory')" @open-events="emit('openEvents')">
       <template #actions>
         <PlanSuggest />

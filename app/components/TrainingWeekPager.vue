@@ -3,7 +3,7 @@
  * The phone (< sm) Training view: one week at a time. A pager card (‹ › or
  * swipe) with a 7-day strip, the selected day's summary card, and the week's
  * other days as a list. Nothing is selected until a day is tapped, so the list
- * starts with all seven. The week and selection are owned by TrainingTab.
+ * starts with all seven; tapping outside the card closes it again. The week and selection are owned by TrainingTab.
  */
 import type { PlanEntry } from '#shared/types/training'
 
@@ -135,6 +135,22 @@ async function pick(date: string) {
   summary.value?.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' })
 }
 
+/**
+ * A click outside the open card closes it. The strip and the list pick their own
+ * day, and dialogs, sheets and menus (portalled outside the app root) act on
+ * the card, so none of those count.
+ */
+function onOutsideClick(e: MouseEvent) {
+  // No offsetParent: no card is open, or the pager is hidden (sm+).
+  if (!summary.value?.offsetParent) return
+  const target = e.target as Element
+  if (summary.value.contains(target) || target.closest('[data-day-picker], [role="dialog"]')) return
+  if (target.closest('#__nuxt') || target === document.body || target === document.documentElement) emit('update:selected', null)
+}
+// Capture phase: runs while the target is still in the DOM.
+onMounted(() => document.addEventListener('click', onOutsideClick, true))
+onBeforeUnmount(() => document.removeEventListener('click', onOutsideClick, true))
+
 const shortDate = (date: string) => formatDayLong(date).split(' ').slice(0, 2).join(' ')
 const rowTss = (d: TrainingWeek['days'][number]) => (dayState(d) === 'rest' ? null : d.ride?.tss ?? d.plan?.tss ?? null)
 const NAME_CLASS = {
@@ -191,7 +207,7 @@ const NAME_CLASS = {
         <span class="block h-full bg-orange-600" :style="{ width: `${progress * 100}%` }" />
       </span>
 
-      <div ref="strip" class="grid grid-cols-7 gap-1">
+      <div ref="strip" class="grid grid-cols-7 gap-1" data-day-picker>
         <TrainingStripCell
           v-for="(day, i) in days"
           :key="day.date"
@@ -199,7 +215,7 @@ const NAME_CLASS = {
           :weekday="i"
           :selected="day.date === selectedDay?.date"
           :current-week="isCurrent"
-          @click="emit('update:selected', day.date)"
+          @click="emit('update:selected', day.date === selected ? null : day.date)"
           @keydown.left.prevent="onArrow(day.date, -1)"
           @keydown.right.prevent="onArrow(day.date, 1)"
         />
@@ -222,7 +238,7 @@ const NAME_CLASS = {
     <!-- The week's unselected days -->
     <div class="flex flex-col gap-1.5">
       <h3 class="px-1 pt-1.5 text-[11px] font-bold uppercase tracking-[.08em] text-stone-600">{{ selectedDay ? 'Rest of the week' : 'All days' }}</h3>
-      <ul class="divide-y divide-stone-100 overflow-hidden rounded-xl border border-[#f0eeec] bg-white">
+      <ul data-day-picker class="divide-y divide-stone-100 overflow-hidden rounded-xl border border-[#f0eeec] bg-white">
         <li v-for="day in otherDays" :key="day.date">
           <button
             type="button"
