@@ -1,0 +1,54 @@
+name: Semgrep
+
+# Advisory code scan alongside CodeQL default setup: reports only findings
+# introduced by the PR, in the job summary. Not a required check.
+on:
+  pull_request:
+
+concurrency:
+  group: semgrep-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    container:
+      image: semgrep/semgrep:1.187.0@sha256:0c8dfa7aa1ca8c50233ec9110e8cd88d139dedd603d56507493f74c6f4b3e062
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Without --error, findings exit 0; continue-on-error covers tool failures.
+      - name: Semgrep scan
+        id: scan
+        continue-on-error: true
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          semgrep scan \
+            --config p/default \
+            --metrics=off \
+            --baseline-commit "$BASE_SHA" \
+            --text --output "$RUNNER_TEMP/semgrep.txt"
+          cat "$RUNNER_TEMP/semgrep.txt"
+          {
+            echo "## Semgrep: new findings in this PR"
+            echo '~~~~'
+            if [ -s "$RUNNER_TEMP/semgrep.txt" ]; then
+              head -c 900000 "$RUNNER_TEMP/semgrep.txt"
+            else
+              echo "No new findings."
+            fi
+            echo
+            echo '~~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Flag a scan that did not complete
+        if: steps.scan.outcome == 'failure'
+        run: echo "::warning::Semgrep scan did not complete; see the scan step log."

@@ -1,0 +1,19 @@
+version: "1.0"
+
+# Major version must match the qodana-action version in
+# .github/workflows/qodana.yml.
+linter: jetbrains/qodana-js:2026.3
+
+profile:
+  name: qodana.recommended
+
+# Generated or vendored files.
+exclude:
+  - name: All
+    paths:
+      - .nuxt
+      - .output
+      - drizzle
+      - pnpm-lock.yaml
+
+# No failureConditions on purpose: findings are advisory during the evaluation.
