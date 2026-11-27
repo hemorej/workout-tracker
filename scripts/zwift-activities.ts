@@ -20,7 +20,8 @@
  *   RECONCILE_MINUTES       — periodic full-scan interval, default 10
  *
  * Only files named like Zwift's own `YYYY-MM-DD-HH-MM-SS.fit` are considered
- * (this skips `inProgressActivity.fit`). That name is LOCAL time and is where
+ * (this skips `inProgressActivity.fit`), and only once the FIT header shows the
+ * ride is finished (see isFinalized). That name is LOCAL time and is where
  * the ride's calendar day comes from — the FIT has UTC timestamps only.
  *
  * A file is uploaded once: the state file records what was sent (by content
@@ -57,11 +58,7 @@ const MAX_BYTES = 8_000_000 // server cap
 // The server may spend up to ~40 s waiting for Strava to receive the ride.
 const REQUEST_TIMEOUT_MS = 120_000
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000]
-// Zwift rewrites the dated .fit repeatedly *during* a ride (without records yet),
-// each time looking "settled" — uploading those just earns a 422 per rewrite.
-// While inProgressActivity.fit is being written, the ride isn't finished: wait.
-const ACTIVE_MS = 3 * 60_000
-const RECHECK_MS = 60_000
+const RECHECK_MS = 60_000 // when to look again at a recent file that isn't ready
 const NAME_RE = /^(\d{4}-\d{2}-\d{2})-\d{2}-\d{2}-\d{2}\.fit$/
 
 if (!SERVER || !TOKEN) {
@@ -162,43 +159,50 @@ async function readSettled(abs: string): Promise<Buffer | null> {
   }
 }
 
-/** True while Zwift is mid-ride (its live scratch file was touched in the last ACTIVE_MS). */
-async function rideInProgress(): Promise<boolean> {
-  try {
-    return Date.now() - (await stat(join(ROOT, 'inProgressActivity.fit'))).mtimeMs < ACTIVE_MS
+/**
+ * Zwift rewrites the dated .fit throughout a ride with a data size of 0 in the
+ * header, and fills it in only when the ride is finished. A finished file is
+ * exactly header + data + 2-byte CRC long.
+ */
+function isFinalized(buf: Buffer): boolean {
+  if (buf.length < 14) return false
+  const dataSize = buf.readUInt32LE(4)
+  return dataSize > 0 && buf.readUInt8(0) + dataSize + 2 === buf.length
+}
+
+/**
+ * Recent files are rechecked soon instead of waiting on the next fs event or
+ * the 10-min rescan: the final write of a ride may produce no further event.
+ * No state entry is written, so the rescan picks the file up too.
+ */
+function defer(name: string, reason: string): void {
+  // --once must exit: a pending timer would keep the process alive.
+  if (!ONCE && withinBackfill(name)) {
+    log(`${name}: ${reason} — rechecking in ${RECHECK_MS / 1000}s`)
+    scheduleCheck(name, RECHECK_MS)
   }
-  catch {
-    return false
+  else {
+    log(`${name}: ${reason} — will retry on the next scan`)
   }
 }
 
 async function handleFile(name: string): Promise<void> {
   const m = NAME_RE.exec(name)
   if (!m) return
-  if (await rideInProgress()) {
-    // Left without a state entry, so the periodic reconcile also picks it up.
-    log(`${name}: ride still in progress — deferring`)
-    scheduleCheck(name, RECHECK_MS)
-    return
-  }
   const rideDate = m[1]!
   const abs = join(ROOT, name)
 
   const buf = await readSettled(abs)
   if (!buf) {
-    // Recent files are rechecked soon instead of waiting on the next fs event or
-    // the 10-min rescan: the final write of a ride may produce no further event.
-    if (withinBackfill(name)) {
-      log(`${name}: not readable/settled yet — rechecking in ${RECHECK_MS / 1000}s`)
-      scheduleCheck(name, RECHECK_MS)
-    }
-    else {
-      log(`${name}: not readable/settled yet — will retry on the next scan`)
-    }
+    defer(name, 'not readable/settled yet')
     return
   }
   if (buf.length > MAX_BYTES) {
     log(`${name}: ${buf.length} bytes exceeds the ${MAX_BYTES} cap — skipped`)
+    return
+  }
+  if (!isFinalized(buf)) {
+    defer(name, 'ride not finished')
     return
   }
   const hash = sha256Hex(buf)
@@ -254,11 +258,9 @@ async function reconcile(reason: string): Promise<void> {
     log(`first run: marked ${baselined} older file(s) as seen, considering the last ${BACKFILL_DAYS} day(s)`)
   }
 
-  // Anything with no state entry (new, or a previous attempt failed transiently),
-  // plus recent files last *rejected* mid-ride. Zwift rewrites the dated .fit while
-  // you ride, so a 422 on a partial file is expected; if the fs event for the final
-  // write is then lost/consumed during a deferral, only this rescan can pick the
-  // finished file up. handleFile skips it when the content hash is unchanged.
+  // Anything with no state entry (new, unfinished, or a previous attempt failed
+  // transiently), plus recently rejected files, in case they have changed since.
+  // handleFile skips a file whose content hash is unchanged.
   const pending = names.filter(n => !state.files[n] || (state.files[n].outcome === 'rejected' && withinBackfill(n)))
   if (pending.length === 0) {
     log('nothing new')

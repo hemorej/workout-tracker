@@ -2,7 +2,7 @@
 
 A personal cycling training tracker built on the modern Nuxt 4 + Vue 3.5 + TypeScript stack.
 
-Track your daily sessions, visualise fitness and fatigue over time, and understand your "form" at a glance using industry-standard training load metrics. Also includes: a structured workout builder that exports Zwift `.zwo` files, a 4-week planner with live CTL/TSB projections, a single-user "mark planned workout as completed" flow that pulls the ride title from Strava and the real power/TSS numbers from a parsed FIT file (via Wahoo's Cloud API or manual upload), an AI coach that turns a written training plan into a structured workout (or a multi-week plan suggestion), a Wahoo webhook that auto-logs finished outdoor rides, a local daemon that auto-logs finished Zwift rides from their FIT files, a Strava-segment tracker, and a Zwift workout library that mirrors your local `.zwo` folder.
+Track your daily sessions, visualise fitness and fatigue over time, and understand your "form" at a glance using industry-standard training load metrics. Also includes: a structured workout builder that exports Zwift `.zwo` files, a weekly training grid that merges plan and log, with search and live CTL/TSB projections, a single-user "mark planned workout as completed" flow that pulls the ride title from Strava and the real power/TSS numbers from a parsed FIT file (via Wahoo's Cloud API or manual upload), an AI coach that turns a written training plan into a structured workout (or a multi-week plan suggestion), a Wahoo webhook that auto-logs finished outdoor rides, a local daemon that auto-logs finished Zwift rides from their FIT files, a Strava-segment tracker, and a Zwift workout library that mirrors your local `.zwo` folder.
 
 ---
 
@@ -31,19 +31,23 @@ sprocket/
 ├── app/                        ← Nuxt 4 source directory
 │   ├── app.vue                 ← Root component (UApp wrapper)
 │   ├── pages/
-│   │   ├── [[tab]].vue         ← Dashboard shell + Training log tab; routes /, /planning, /builder, /history (protected)
+│   │   ├── [[tab]].vue         ← Dashboard shell; routes /, /builder, /history (protected; /planning and /log redirect to /)
 │   │   ├── login.vue           ← Login page (registration disabled — no signup form)
 │   │   ├── overlay/[activityId].vue ← Photo-overlay poster generator (Strava route + photo → PNG, drawn to <canvas>)
 │   │   └── [...slug].vue       ← Catch-all 404
 │   ├── components/
-│   │   ├── PlanningTab.vue / PlanSuggest.vue ← 4+ week planning grid; multi-week "Suggest plan" preview/apply/undo
+│   │   ├── TrainingTab.vue / PlanSuggest.vue ← Merged plan + log week grid; multi-week "Suggest plan" preview/apply/undo
+│   │   ├── TrainingWeekRow / TrainingDayCell / TrainingDayDetail.vue ← Desktop week row, day cell, day card
+│   │   ├── TrainingWeekPager / TrainingStripCell / TrainingDaySummary.vue ← Phone one-week-at-a-time view
+│   │   ├── TrainingToolbar / TrainingSearchList / TrainingSearchOverlay / TrainingFilterSheet.vue ← Search + filters
+│   │   ├── FilterChip / RangeSliders / HighlightedText.vue ← Search UI building blocks
+│   │   ├── TrainingMetricsStrip / TrainingMetricsCompact / TrainingNoteDialog.vue ← Headline metrics; day note editor
 │   │   ├── WorkoutBuilderTab.vue ← Structured workout builder, exports Zwift .zwo files
-│   │   ├── ZwiftLibraryPanel.vue ← Builder slide-over: browse/preview the mirrored Zwift workouts
+│   │   ├── ZwiftLibraryPanel.vue ← Builder dialog: browse/preview the mirrored Zwift workouts
 │   │   ├── WorkoutTimeline.vue ← Shared zone-coloured timeline (builder, library preview, thumbnails)
 │   │   ├── HistoryTab.vue / HistorySegmentsPanel.vue ← Aggregated history + power bests; starred-segment top-5 efforts
-│   │   ├── TodaysEventsDialog.vue ← Planning tab: today's Zwift climbs + races
-│   │   ├── MetricsSummary.vue / MetricsHistoryChart.vue ← Weekly stats + CTL/TSB cards; inline-SVG CTL/TSB chart
-│   │   ├── WorkoutCard.vue     ← Single day row (workout or rest)
+│   │   ├── TodaysEventsDialog.vue ← Training tab: today's Zwift climbs + races
+│   │   ├── MetricsHistoryChart.vue ← Inline-SVG CTL/TSB chart
 │   │   ├── WorkoutFitOverlay.vue ← "Brief ride stats" popup (power, time-in-zone, laps) for workouts with FIT data
 │   │   ├── AddWorkoutModal.vue ← Log/edit workout form; prefilled by the completed-workout picker
 │   │   ├── UserSettingsModal.vue ← Edit weight + training plan
@@ -51,20 +55,22 @@ sprocket/
 │   │   └── Flame / Mountain / Intervals / FreeRide / TextEvent / ZoneIcon.vue ← Custom glyphs Heroicons lacks
 │   ├── stores/
 │   │   ├── auth.ts             ← Login, logout actions
-│   │   ├── workouts.ts         ← Day list, weekly stats, pagination, log filters
-│   │   ├── planning.ts         ← Planned workouts, live CTL/TSB projection, Suggest-plan draft
+│   │   ├── training.ts         ← Day list, plan/ride writes, live CTL/TSB projection, Suggest-plan draft
+│   │   ├── trainingSearch.ts   ← Search query, filters (mirrored to the URL) and results
 │   │   ├── coach.ts            ← Read-once hand-off of an AI-generated workout to the builder
 │   │   └── zwiftLibrary.ts     ← Read-once hand-off of a library workout to the builder
 │   ├── utils/
+│   │   ├── training.ts / trainingFilters.ts ← Training-tab day/week helpers; filter presets
 │   │   ├── trend.ts            ← Shared ▲/▼ trend-arrow helper
 │   │   └── blockDetect.ts      ← Training-block position detection for Suggest plan
+│   ├── composables/useScrollCollapse.ts ← Collapses the phone header on scroll
 │   └── middleware/
 │       ├── auth.ts             ← Redirects guests → /login
 │       └── guest.ts            ← Redirects logged-in users → /
 │
 ├── server/
 │   ├── api/                    ← See the API reference below
-│   │   ├── auth/ · workouts/ · planned-workouts/ · history/ · metrics/ · users/ · ftp/
+│   │   ├── auth/ · training/ · workouts/ · planned-workouts/ · history/ · metrics/ · users/ · ftp/
 │   │   ├── coach/              ← AI coach: generate, generate-plan, block-progression
 │   │   ├── strava/ · wahoo/ · fit/ ← Completed-workout picker sources; Wahoo webhook (public, secret-authed)
 │   │   ├── segments/           ← Tracked Strava segments (reconcile is public, secret-authed)
@@ -77,23 +83,26 @@ sprocket/
 │       ├── tss.ts              ← CTL / ATL / TSB formula engine
 │       ├── metricsCache.ts     ← In-process series cache (TTL + write invalidation)
 │       ├── fit.ts / fitWorkout.ts / fitStorage.ts ← FIT parsing (NP, TSS, bests, zones, laps); FIT→workout shaping; raw FIT persistence
-│       ├── ftp.ts / powerBests.ts ← FTP-as-of lookups; "best effort" filtering against trailing-8-week / all-time bests
+│       ├── ftp.ts / powerBests.ts ← FTP-as-of lookups; power-curve storage and PR rows
 │       ├── strava.ts / wahoo.ts ← Refresh-token exchange + activity/FIT fetching (single-user OAuth)
 │       ├── wahooWebhook.ts / webhookUser.ts ← Webhook types + constant-time secret compare; sole-user resolver
 │       ├── stravaSegments.ts / zwiftEvents.ts / zwiftEventsCache.ts ← Segment sync helpers; Zwift events scraping + cache
 │       ├── zwiftSync.ts / zwiftLibrary.ts ← Sync-daemon receiver logic; library/draft shaping
+│       ├── trainingDays.ts     ← Per-day view model (plan + ride + metrics) for /api/training/*
+│       ├── ingestFitRide.ts / rideName.ts / zwiftActivity.ts ← Raw FIT → logged workout; ride titles; activity-upload auth
 │       ├── anthropic.ts        ← Anthropic client (streamed, retried, structured output) + coach schemas
 │       ├── polyline.ts         ← Google-encoded polyline decoder
 │       └── logger.ts           ← getLogger(domain), tslog structured logging
 │
 ├── shared/
-│   ├── types/session.d.ts      ← UserSession type augmentation for nuxt-auth-utils
-│   └── utils/zwo.ts (+ .test.ts) ← .zwo parse/serialize/TSS-estimate; shared by server, builder and scripts
+│   ├── types/                  ← session.d.ts (UserSession augmentation), training.ts (Training tab + API types)
+│   └── utils/                  ← zwo, rideMatch, powerBestRules, exactIds (+ tests), dates
 ├── scripts/
 │   ├── reset-password.ts       ← CLI utility to reset a user's password (AdonisJS Scrypt)
 │   ├── zwift-sync.ts           ← Local daemon: Zwift Workouts folder → server (launchd agent in infra/)
 │   ├── zwift-activities.ts     ← Local daemon: Zwift Activities folder → server, logs finished rides (launchd agent in infra/)
 │   ├── backfill-*.ts, gen-*-sql.ts ← One-off historical backfills / recovery SQL generators, kept for reference
+│   ├── fix-segment-effort-ids.ts ← One-off cleanup of segment-effort ids stored with lost precision
 │   └── check-new-publishers.mjs ← CI supply-chain check for newly published dependency versions
 ├── infra/                      ← Forge deploy script, nginx/supervisor/psql configs, zwift-sync / zwift-activities launchd plists
 ├── drizzle/                    ← Auto-generated migration SQL files
@@ -184,6 +193,9 @@ ANTHROPIC_API_KEY=
 
 # Optional — app log verbosity (silly|trace|debug|info|warn|error|fatal), default info
 LOG_LEVEL=info
+
+# Optional — Sentry error reporting; unset disables it
+SENTRY_DSN=
 ```
 
 ### 4. Create the database
@@ -275,7 +287,11 @@ UPDATE users SET initial_ctl = 44, initial_atl = 44 WHERE email = 'you@example.c
 | `duration` | text | One of the 14 standard durations (5sec … 1h) |
 | `watts` | integer | Best power in watts for this duration |
 
-One row per duration per workout. Unique index on `(workout_id, duration)`. A parsed FIT file yields all 14 candidates, but only durations that beat the trailing-8-week max (falling back to all-time) are stored as that workout's best efforts.
+One row per duration per workout, unique on `(workout_id, duration)`. Holds only the durations that were PRs when the ride was logged (strictly above the max over the 8 weeks before it); these drive the workout badges.
+
+### `power_curve`
+
+Every ride's full power curve (all 14 durations), with the same columns and unique index as `power_bests`. It is the data source for History.
 
 ### `planned_workouts`
 
@@ -301,7 +317,7 @@ Server-side mirror of the local Zwift `.zwo` folder (written only by the sync da
 
 ### `wahoo_power_bests` / `wahoo_tokens`
 
-`wahoo_power_bests` records power-curve bests auto-detected from rides seen via the Wahoo API (keyed on the Wahoo activity id), merged into the History tab alongside `power_bests`. `wahoo_tokens` holds the single connected account's rotating OAuth refresh token — Wahoo issues a new one on every refresh, so it must be persisted rather than read from `.env` after the first exchange (see `server/utils/wahoo.ts`).
+`wahoo_power_bests` is legacy: nothing writes it any more, but History still reads it so older bests aren't lost. `wahoo_tokens` holds the single connected account's rotating OAuth refresh token — Wahoo issues a new one on every refresh, so it must be persisted rather than read from `.env` after the first exchange (see `server/utils/wahoo.ts`).
 
 ---
 
@@ -360,12 +376,12 @@ All routes require a valid session cookie except `/api/auth/login`, `/api/auth/r
 | POST | `/api/auth/register` | Create account + auto-login *(currently disabled — returns 403)* |
 | POST | `/api/auth/login` | Login with email + password |
 | POST | `/api/auth/logout` | Clear session cookie |
-| GET | `/api/workouts?page=1&limit=14` | Paginated day list with metrics; optional filters `name`, `type` (`all`\|`zwift`\|`outdoor`), `minTss`, `minDistance`, `minDuration`, `dateFrom`, `dateTo` (filtered mode lists logged workouts only) |
+| GET | `/api/training/days?from=&to=` | Whole Monday–Sunday weeks of plan + ride + CTL/ATL/TSB, plus summary |
+| GET | `/api/training/search` | Search rides and plans (`q`, `scope`, `io`, `tss`, `dur`, `dist`, `date`, `types`) |
 | POST | `/api/workouts` | Log a new workout |
-| GET | `/api/workouts/:id` | One workout's FIT-derived `fitData` + `laps` (omitted from the list) |
+| GET | `/api/workouts/:id` | One workout's FIT-derived `fitData` + `laps` (omitted from the day payloads) |
 | PATCH | `/api/workouts/:id` | Edit a logged workout (full replace of the editable columns) |
 | DELETE | `/api/workouts/:id` | Delete a workout |
-| GET | `/api/planned-workouts` | Planning grid (4+ weeks) with projected CTL/TSB |
 | PUT | `/api/planned-workouts` | Upsert one planned workout (only the fields sent are overwritten) |
 | PUT | `/api/planned-workouts/batch` | Transactional multi-upsert/delete (Suggest plan Apply / Undo) |
 | DELETE | `/api/planned-workouts/:date` | Delete a planned workout by date |
@@ -391,16 +407,15 @@ All routes require a valid session cookie except `/api/auth/login`, `/api/auth/r
 | POST | `/api/zwift/sync` · GET `/api/zwift/sync/manifest` | Sync daemon receiver + hash manifest — **public**, Bearer-token auth (`NUXT_ZWIFT_SYNC_TOKEN`) |
 | POST | `/api/zwift/activity` | Activity-upload daemon receiver (raw FIT body + `X-Ride-Date`) — **public**, Bearer-token auth (`NUXT_ZWIFT_ACTIVITY_TOKEN`) |
 
-### GET /api/workouts response shape
+### GET /api/training/days response shape
 
 ```json
 {
   "days": [
     {
       "date": "2026-05-25",
-      "isRestDay": false,
-      "metrics": { "ctl": 65.3, "atl": 72.1, "tsb": -6.8 },
-      "workout": {
+      "plan": { "id": 1, "name": "Long ride", "type": "zone2", "tss": 120, "durationMinutes": 180, "notes": null },
+      "ride": {
         "id": 42,
         "name": "Morning Ride",
         "durationMinutes": 60,
@@ -411,52 +426,24 @@ All routes require a valid session cookie except `/api/auth/login`, `/api/auth/r
         "ftpWatts": null,
         "rideType": "outdoor",
         "hasFitData": true,
-        "stravaActivityId": 123456789,
+        "stravaActivityId": "123456789",
         "powerBests": [{ "duration": "20min", "watts": 245 }]
-      }
-    },
-    {
-      "date": "2026-05-24",
-      "isRestDay": true,
-      "metrics": { "ctl": 64.8, "atl": 70.2, "tsb": -5.4 },
-      "workout": null
+      },
+      "metrics": { "ctl": 65.3, "atl": 72.1, "tsb": -6.8 },
+      "isToday": false,
+      "isPast": true
     }
   ],
-  "weeklyStats": { "tssTotal": 420, "hoursTotal": 8.5, "kmTotal": 190 },
-  "todayMetrics": { "ctl": 65.3, "atl": 72.1, "tsb": -6.8 },
-  "yesterdayMetrics": { "ctl": 64.8, "atl": 70.2, "tsb": -5.4 },
-  "pagination": { "page": 1, "limit": 14, "totalDays": 90, "totalPages": 7 }
+  "summary": {
+    "today": { "ctl": 65.3, "atl": 72.1, "tsb": -6.8 },
+    "weekAgo": { "ctl": 63.1, "atl": 68.4, "tsb": -5.3 },
+    "ctlRange": { "min": 41.2, "max": 70.5 }
+  },
+  "hasOlder": true
 }
 ```
 
-### GET /api/planned-workouts response shape
-
-```json
-{
-  "plans": [
-    {
-      "date": "2026-06-23",
-      "isPast": true,
-      "actual": { "tss": 118, "durationMinutes": 175 },
-      "plan": { "id": 1, "name": "Long ride", "type": "zone2", "tss": 120, "durationMinutes": 180, "notes": null },
-      "projectedCtl": 62.4,
-      "projectedTsb": -8.1
-    },
-    {
-      "date": "2026-06-28",
-      "isPast": false,
-      "actual": null,
-      "plan": null,
-      "projectedCtl": 61.8,
-      "projectedTsb": -5.3
-    }
-  ],
-  "currentCtl": 61.2,
-  "currentAtl": 68.5
-}
-```
-
-At least 28 entries are returned (4 weeks starting from the current Monday), extended to whole weeks to cover any later planned day. Past days carry their actual historical CTL/TSB (and `actual` logged totals); future days carry projected values computed from planned TSS.
+Without `from`, the window is last week, the current week and the next two, extended through the last planned week. A `from`/`to` range covers at most 53 weeks. Days with a ride, and past days, carry actual CTL/ATL/TSB; today (until ridden) and future days are projected from planned TSS. `GET /api/training/search` returns `{ days, matches, truncated }`. Types are in `shared/types/training.ts`.
 
 ---
 
@@ -721,7 +708,7 @@ pnpm dev             # Start dev server with hot reload (also starts PostgreSQL 
 pnpm stop            # Stop the brew PostgreSQL service
 pnpm build           # Build for production
 pnpm start           # Run the production build (.output/server/index.mjs)
-pnpm test            # Unit tests: .zwo parser + ride/Strava matching (node:test, no test dependency)
+pnpm test            # Unit tests: .zwo parser, ride matching, PR rule, exact ids (node:test, no test dependency)
 pnpm zwift-sync      # Local Zwift workouts-folder sync daemon (--once, --dry-run, --force-deletes)
 pnpm zwift-activities # Local Zwift activities-folder upload daemon (--once, --dry-run, --baseline)
 
@@ -733,20 +720,20 @@ pnpm reset-password  # Reset a user's password (edit EMAIL/NEW_PASSWORD in the s
 
 ---
 
-## Planning feature
+## Training tab
 
-The Planning tab shows a rolling grid of at least 4 weeks (current week + 3 ahead, with an "Add week" action) where you can sketch out upcoming training.
+One Monday–Sunday week grid shows each day's plan until it is ridden, then the log entry. Phones get a one-week-at-a-time pager.
 
-- **Zone badge** — click to cycle through Z2 → Z4 → Z5 → Z6 → REST → OUTDOOR → (none). Color-coded for quick scanning.
-- **Inline editing** — workout name, TSS, duration and a per-day note save on blur or Enter. No save button.
-- **Live projections** — CTL and TSB update as you type, before a field is saved, so you can see the impact of planned load in real time.
-- **Past days** — shown dimmed and non-editable; display the logged workout's actual TSS/duration and historical CTL/TSB.
-- **Weekly TSS totals** — each week header shows logged TSS plus the planned total.
-- **AI row actions** — build a complete workout for the day (hands off to the Workout builder) or generate just a fuelling guide into the day's note.
+- **Day card** — hover or tap a day to edit its plan (name, zone, TSS, duration, note) or act on its ride. Plan edits save on blur.
+- **Rearranging** — drag one planned day onto another to swap them; "Add week" appends blank weeks.
+- **Live projections** — CTL and TSB are recomputed locally from planned TSS, without waiting for a reload.
+- **Past and ridden days** — plans are read-only; the logged ride shows actual TSS, duration and historical metrics.
+- **Search** — text and filters over the whole history, mirrored to the URL, with grid or list results.
+- **AI actions** — build a complete workout for a day (hands off to the Workout builder) or generate a fuelling guide into the day's note.
 - **Suggest plan** — generate 1–4 weeks as a preview overlay (block position detected from `w1:`-style names or weekly TSS), then Apply (with an overwrite prompt) or Undo.
 - **Today's events** — a link opens today's Zwift climb-portal rotation and upcoming TT/crit races.
 
-Planned workouts are stored in the `planned_workouts` table and are independent of actual logged workouts.
+Planned workouts are stored in the `planned_workouts` table, separately from logged workouts.
 
 ---
 
@@ -770,7 +757,7 @@ This codebase is intentionally annotated to be a learning reference. A few patte
 
 **Server-side metrics with in-process cache** (`server/utils/tss.ts`, `server/utils/metricsCache.ts`) — CTL/ATL/TSB are computed from the full workout history and cached per user in a module-level Map. The cache is invalidated on every workout write (create/edit/delete and the Wahoo webhook upsert) and has a 5-minute TTL as a safety net to roll forward across midnight. For multi-instance deployments, replace the Map with a shared store such as Redis.
 
-**Live projections without a round-trip** (`PlanningTab.vue`) — The planning grid recomputes projected CTL/TSB locally using the same EMA formula as the server. Draft TSS values (not yet saved) are included in the computation, so the numbers update as you type.
+**Live projections without a round-trip** (`app/stores/training.ts`) — The store recomputes projected CTL/TSB locally using the same EMA constants as the server, including Suggest-plan draft values that aren't saved yet.
 
 **Structured workout builder** (`WorkoutBuilderTab.vue`) — Composes warmup/cooldown ramps, steady-power blocks, on/off intervals, free rides and text cues on a zone-colored timeline, then exports a Zwift `.zwo` file (parsed/serialized by `shared/utils/zwo.ts`, which treats its input as untrusted). State is local to the component; the only things crossing in are the AI-coach hand-off (`coach` store) and library workouts (`zwiftLibrary` store), whose edits persist only as server-side drafts.
 
