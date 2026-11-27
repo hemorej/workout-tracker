@@ -9,7 +9,7 @@ everything specific to this app. Facts as of 2026-10-23.
 | | |
 |---|---|
 | Domain | `sprocket.jerome-arfouche.ca` (`www.` → apex, port 80 → https) |
-| Stack | Nuxt 4 / Nitro (`node server/index.mjs`) behind nginx, PostgreSQL (`sprocketdb`) |
+| Stack | Nuxt 4 / Nitro (`node --import ./server/sentry.server.config.mjs server/index.mjs`) behind nginx, PostgreSQL (`sprocketdb`) |
 | Process | supervisor program `daemon-912439`, `user=forge`, **port 8000**, log `/home/forge/.forge/daemon-912439.log` |
 | Site root | `/home/forge/sprocket.jerome-arfouche.ca/current/` → `releases/<id>/`, 4 releases kept (Forge setting); nginx serves `current/.output/public` and proxies the rest to `0.0.0.0:8000` |
 | Forge site id | `3264841` |
@@ -51,11 +51,12 @@ Nothing from the volume is used. Changing a variable in `.env` needs
 ## Deploy
 
 1. Push to `main` → `deploy` job in `.github/workflows/ci.yml` (after `checks`, environment `production`) calls
-   the Forge deploy-trigger URL (secret `FORGE_DEPLOY_URL`).
+   the Forge deploy-trigger URL (secret `FORGE_DEPLOY_URL`), waits for that deployment to finish via the Forge API
+   (secrets `FORGE_API_TOKEN`, `FORGE_ORG`, `FORGE_SERVER_ID`, `FORGE_SITE_ID`) and checks that the site answers.
 2. `forge_deploy.sh`: `$CREATE_RELEASE()`, strip the token from the remote URL,
    `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm build`, **`pnpm db:migrate`**, delete `node_modules`
    and `.nuxt`, `$ACTIVATE_RELEASE()`, `sudo supervisorctl restart daemon-912439:daemon-912439_00`, then a
-   non-fatal `pnpm store prune` (the pnpm store is shared by every site on the box).
+   non-fatal, at most weekly `pnpm store prune` (the pnpm store is shared by every site on the box).
 
 `forge` may run `supervisorctl restart|start|stop|status|update` without a password (`util/infra/droplet.md`).
 
