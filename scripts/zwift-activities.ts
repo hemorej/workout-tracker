@@ -176,7 +176,8 @@ function isFinalized(buf: Buffer): boolean {
  * No state entry is written, so the rescan picks the file up too.
  */
 function defer(name: string, reason: string): void {
-  if (withinBackfill(name)) {
+  // --once must exit: a pending timer would keep the process alive.
+  if (!ONCE && withinBackfill(name)) {
     log(`${name}: ${reason} — rechecking in ${RECHECK_MS / 1000}s`)
     scheduleCheck(name, RECHECK_MS)
   }
