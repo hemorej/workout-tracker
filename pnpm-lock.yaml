@@ -7,14 +7,8 @@ settings:
 overrides:
   '@nuxt/schema': ^4.6.4
   '@nuxt/devtools': '-'
-  undici: '>=8.10.2'
   esbuild: '>=0.28.1'
-  node-forge: '>=1.4.1'
-  tar: '>=7.5.21'
-  postcss: '>=8.5.23'
-  glob@13: ^14.0.2
   minimatch@10: ^11.0.1
-  '@tiptap/y-tiptap': '>=3.1.0'
 
 importers:
 
@@ -1645,7 +1639,7 @@ packages:
     peerDependencies:
       '@tiptap/core': 3.32.0
       '@tiptap/pm': 3.32.0
-      '@tiptap/y-tiptap': '>=3.1.0'
+      '@tiptap/y-tiptap': ^3.0.7
       yjs: ^13
 
   '@tiptap/extension-document@3.32.0':
@@ -1668,7 +1662,7 @@ packages:
       '@tiptap/extension-collaboration': 3.32.0
       '@tiptap/extension-node-range': 3.32.0
       '@tiptap/pm': 3.32.0
-      '@tiptap/y-tiptap': '>=3.1.0'
+      '@tiptap/y-tiptap': ^3.0.7
 
   '@tiptap/extension-dropcursor@3.32.0':
     resolution: {integrity: sha512-t4Ug8hFLt30dwwYvrh63BVUt6N1Yg5PVI3tMllhCmN3Q68oD47v4MB/i5nGfzIsQqMyXUOetwHJWcZ4MoLTx4Q==}
@@ -2168,7 +2162,7 @@ packages:
     engines: {node: ^10 || ^12 || >=14}
     hasBin: true
     peerDependencies:
-      postcss: '>=8.5.23'
+      postcss: ^8.1.0
 
   b4a@1.9.0:
     resolution: {integrity: sha512-dpfcF9fDNR6++cthXR67iyhgqWy9CBouAvIWhIntzBG6cvK/cnIPiZQjBwi/ZqjjBEDGfoNDtmB0kTjroOJ3pQ==}
@@ -2389,7 +2383,7 @@ packages:
     resolution: {integrity: sha512-JS914Th2NRk2979JHJvbE3UjPtLmyXtPnr23NNul9BOQwEt9r/A2aM1STrKtKHAPc3XRaUDwMoqkXnjEpgHkAw==}
     engines: {node: ^22.22.3 || ^24.15.0 || >=26.0}
     peerDependencies:
-      postcss: '>=8.5.23'
+      postcss: ^8.5.29
 
   csstype@3.2.4:
     resolution: {integrity: sha512-PoKaoPzQapnEoqUSnHx1u6W6ku8CVEgKsnpmmzU3m1nwkidpPBQ8V/Zq2+bWNrsOKoKLwTGdbx6xF7BXP1zLVQ==}
@@ -2766,7 +2760,7 @@ packages:
     resolution: {integrity: sha512-mCeB9tcB2qeDJYVp/f55ZUQMOkOaZn4MFDlsCsy8Vggsju47egnH1+qzWwderp3BuX2EyezhdsjNX64df6M5mg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     peerDependencies:
-      postcss: '>=8.5.23'
+      postcss: ^8.4.31
     peerDependenciesMeta:
       postcss:
         optional: true
@@ -3502,7 +3496,7 @@ packages:
     resolution: {integrity: sha512-DjOpy9au57PK8MXPrjDbGIVjO6VN4CGy4ADzPGi1vEJ0XOpJ/MxoCB5FRgQ3Hnv58oobpBZtERS/qwQVT3WPWQ==}
     engines: {node: ^22.22.3 || ^24.15 || >=26.0}
     peerDependencies:
-      postcss: '>=8.5.23'
+      postcss: ^8.5.30
 
   postcss-value-parser@4.2.0:
     resolution: {integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==}
