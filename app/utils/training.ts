@@ -79,8 +79,8 @@ export interface WeekTotals {
 }
 
 /**
- * Done = logged rides. Planned TSS and minutes = the logged value once ridden, else the plan
- * (so a missed day still counts).
+ * Done = logged rides. Planned TSS and minutes = the logged value once ridden, nothing for a
+ * missed day, else the plan.
  */
 export function weekTotals(days: TrainingDay[]): WeekTotals {
   const t: WeekTotals = { doneTss: 0, plannedTss: 0, doneMinutes: 0, plannedMinutes: 0, km: 0 }
@@ -90,7 +90,7 @@ export function weekTotals(days: TrainingDay[]): WeekTotals {
       t.doneMinutes += d.ride.durationMinutes
       t.km += d.ride.distanceKm ?? 0
     }
-    const plan = d.plan?.type === 'rest' ? null : d.plan
+    const plan = dayState(d) === 'planned' ? d.plan : null
     t.plannedTss += d.ride?.tss ?? plan?.tss ?? 0
     t.plannedMinutes += d.ride?.durationMinutes ?? plan?.durationMinutes ?? 0
   }
